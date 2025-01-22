@@ -1,6 +1,5 @@
 from flask import Flask, Response
 import subprocess
-import threading
 
 HOST = '0.0.0.0'
 PORT = 5009
@@ -10,13 +9,20 @@ app = Flask(__name__)
 def generate_frames():
     cmd = [
         'libcamera-vid',
-        '-t', '0',           # Run indefinitely
-        '--width', '1280',
-        '--height', '720',
+        '-t', '0',
+        '--width', '1920',
+        '--height', '1080',
         '--framerate', '30',
         '--codec', 'mjpeg',
-        '--inline',          # Output MJPEG
-        '--output', '-'      # Output to stdout
+        '--inline',
+        '--quality', '85',
+        '--brightness', '0.1',
+        '--contrast', '1.4',
+        '--sharpness', '1.5',
+        '--saturation', '1.2',
+        '--awb', 'auto',
+        '--denoise', 'cdn_off',
+        '--output', '-'
     ]
     
     process = subprocess.Popen(cmd, stdout=subprocess.PIPE)
