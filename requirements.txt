@@ -1,3 +1,8 @@
-RPi.GPIO>=0.7.0; platform_machine == 'armv7l' or platform_machine == 'aarch64'
-fake-rpi>=0.7.0
+# General dependencies
+flask==3.0.0
 numpy==2.2.2
+fake-rpi>=0.7.0
+
+# Raspberry Pi specific dependencies
+picamera==1.13; platform_machine == 'armv7l' or platform_machine == 'aarch64'
+RPi.GPIO>=0.7.0; platform_machine == 'armv7l' or platform_machine == 'aarch64'
