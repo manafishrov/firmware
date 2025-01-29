@@ -9,4 +9,4 @@ skip-string-normalization = true
 target-version = ['py38']
 
 [project.scripts]
-cyberfish-firmware = 'src:main'
+cyberfish = 'src:main'
