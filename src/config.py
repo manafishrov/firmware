@@ -2,6 +2,11 @@ import configparser
 import os
 import logging
 
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
+
 def load_config():
     '''Load and return configuration from config.ini'''
     config = configparser.ConfigParser()
