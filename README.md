@@ -2,13 +2,21 @@
 
 ## Raspberry Pi Setup
 
+### Flash SD Card
+
+Connect the SD card to your computer and make sure you have the latest version of [Raspberry Pi Imager](https://www.raspberrypi.com/software/) installed.
+
+Choose the Raspberry Pi OS Lite image and flash it to the SD card.
+
+Make sure to have SSH enabled on the Pi and hostname so you can SSH into it the first time for the networking setup. We kept the default raspberrypi hostname and pi as the username.
+
+### Setup Networking
+
 Connect to the Pi via Ethernet cable. Then SSH into it:
 
 ```bash
 ssh pi@raspberrypi.local
 ```
-
-### Setup Networking
 
 #### Install Required Packages
 
@@ -18,7 +26,8 @@ Enter the Raspberry Pi configuration tool:
 sudo raspi-config
 ```
 
-Now you need to connect the pi to the internet temporarily.
+Now you need to connect the pi to the internet temporarily in the raspi-config.
+System Options > Wireless Lan > then enter your wifi credentials.
 
 After that install these packages:
 
@@ -41,8 +50,6 @@ Add the following lines:
 ```
 interface eth0
 static ip_address=10.69.69.69/24
-static routers=10.69.69.1
-static domain_name_servers=8.8.8.8 8.8.4.4
 ```
 
 #### Configure DHCP Server
@@ -57,6 +64,7 @@ Add these lines:
 
 ```
 interface=eth0
+bind-interfaces
 dhcp-range=10.69.69.1,10.69.69.50,12h
 ```
 
