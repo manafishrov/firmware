@@ -22,7 +22,7 @@ class CameraStream:
             '--framerate', '30',
             '--codec', 'h264',
             '--listen',
-            '-o', f'udp://{self.ip_address}:{self.port}'
+            '-o', f'tcp://{self.ip_address}:{self.port}'
         ]
 
         try:
