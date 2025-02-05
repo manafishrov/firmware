@@ -2,8 +2,8 @@ import numpy as np
 import pigpio
 import time
 
-def init_pwm():
-    pi = pigpio.pi()   
+# Connect to the pigpio daemon (what does this mean????)
+pi = pigpio.pi()   
 
 def get_direction_vector():
     #Uses input to make a direction vector containing [forward, side, up, pitch, yaw, roll
@@ -94,8 +94,17 @@ def linear_ramping(thrust_vector, previous_thrust_vector, ramp_rate):
 
     return new_thrust_vector
 
+def set_esc_speed(esc_pin, speed):
+    # Speed is between -1 and 1, duty cycle vary 5% to 10%
+    pi.set_servo_pulsewidth(esc_pin, 1500 + 500*speed)
+
+
 def send_pwm_values(thrust_vector):
-    # TODO, Send the PWM values to the thrusters
+    ESC_PINS = [17, 18, 27, 22, 23, 24]
+    #TODO: SOMETHING IS WRONG HERE, FIX IT
+    for i in range(len(thrust_vector)):
+        set_esc_speed(ESC_PINS[i], thrust_vector[i])
+
     print(thrust_vector)
 
     pass
