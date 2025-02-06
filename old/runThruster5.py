@@ -2,6 +2,7 @@ import RPi.GPIO as GPIO
 import time
 import socket
 
+
 # INTERNET CONFIGURATION
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 s.bind(('0.0.0.0', 12345))

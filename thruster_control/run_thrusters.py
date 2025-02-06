@@ -1,13 +1,35 @@
 import numpy as np
-import pigpio
+#import RPi.GPIO as GPIO
+import socket
+import json
 import time
 
-# Connect to the pigpio daemon (what does this mean????)
-pi = pigpio.pi()   
+# CONFIG VARIABLES
+ESC_PINS = [27, 15, 25, 8, 7, 1]  #27 and 15 for single ESCs, 25, 8, 7, 1 for 4x ESC
 
-def get_direction_vector():
-    #Uses input to make a direction vector containing [forward, side, up, pitch, yaw, roll
-    return np.array([1, 0, 0, 0, 0, 0]) 
+def setup_thrusters():
+    pwms = []
+    for pin in ESC_PINS:
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(pin, GPIO.OUT)
+        pwm = GPIO.PWM(pin, 50)
+        pwm.start(7.5)
+        pwms.append(pwm)
+    return pwms
+
+def setup_connection():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.bind(('0.0.0.0', 12345))
+    print("Socket is set up")
+    return s
+
+def get_direction_vector(s):
+    #Uses input to make a direction vector containing [forward, side, up, pitch, yaw, roll]
+    data, addr = s.recvfrom(1024)
+    direction_vector = json.loads(data.decode())
+    #Returns first 6 values as one array, last as a single value, the last value is quit value
+    return np.array(direction_vector[:6]), direction_vector[6]
+
 
 def tuning_correction(direction_vector):
     correction_matrix = np.array([[1, 0, 0, 0, 0, 0],
@@ -65,7 +87,6 @@ def get_thrust_allocation_matrix():
 
     return thrustAllocationMatrix
 
-    
 def thrust_allocation(input_vector, thrustAllocationMatrix):
     
     thrust_vector = thrustAllocationMatrix @ input_vector
@@ -94,32 +115,41 @@ def linear_ramping(thrust_vector, previous_thrust_vector, ramp_rate):
 
     return new_thrust_vector
 
-def set_esc_speed(esc_pin, speed):
-    # Speed is between -1 and 1, duty cycle vary 5% to 10%
-    pi.set_servo_pulsewidth(esc_pin, 1500 + 500*speed)
+def set_esc_speed(pwm, speed):
 
+    pwm.ChangeDutyCycle(speed*2.5 + 7.5)
 
-def send_pwm_values(thrust_vector):
-    ESC_PINS = [17, 18, 27, 22, 23, 24]
+def send_pwm_values(thrust_vector, pwms):
     #TODO: SOMETHING IS WRONG HERE, FIX IT
     for i in range(len(thrust_vector)):
-        set_esc_speed(ESC_PINS[i], thrust_vector[i])
+        set_esc_speed(pwms[i], thrust_vector[i])
 
     print(thrust_vector)
 
     pass
 
+def cleanup(pwms):
+    for pwm in pwms:
+        pwm.stop()
+    GPIO.cleanup()
 
+def print_thrust_vector(thrust_vector):
+    print(f"Thrust vector: {thrust_vector}")
 
 
 
 previous_thrust_vector = np.array([0, 0, 0, 0, 0, 0])
-for i in range(100):
-    direction_vector = get_direction_vector()
+s = setup_connection()
+thrustAllocationMatrix = get_thrust_allocation_matrix()
+
+while True:
+    direction_vector, quit_flag = get_direction_vector(s)
+
+    if quit_flag == 1:
+        print("Quit signal received. Exiting.")
+        break
     
     direction_vector = tuning_correction(direction_vector)
-    
-    thrustAllocationMatrix = get_thrust_allocation_matrix()
     
     thrust_vector = thrust_allocation(direction_vector, thrustAllocationMatrix)
     
@@ -128,8 +158,9 @@ for i in range(100):
     thrust_vector = linear_ramping(thrust_vector, previous_thrust_vector, 0.1)
     previous_thrust_vector = thrust_vector
 
-    send_pwm_values(thrust_vector)
-    time.sleep(0.02) # 50 Hz
+    #send_pwm_values(thrust_vector)
+    print_thrust_vector(thrust_vector)
+    #time.sleep(0.02) # 50 Hz
 
 
 
