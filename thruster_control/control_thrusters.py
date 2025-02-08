@@ -18,15 +18,17 @@ def get_control_vector():
 # SETUP CONNECTION
 sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
+
+
 print("Starting control loop. Press 'esc' to quit.")
 while True:
     control_vector = get_control_vector()
     
     message = json.dumps(control_vector).encode('utf-8')
     
-    sock.sendto(message, ("127.0.0.1", 12345))  #CHANGE IP HERE
+    sock.sendto(message, ("192.168.2.12", 12345))
     
-    #print(f"Sent: {control_vector}")
+    print(f"Sent: {control_vector}")
     
     if control_vector[6] == 1:
         print("Quit signal received. Exiting.")

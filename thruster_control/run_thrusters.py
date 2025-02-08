@@ -141,10 +141,13 @@ previous_thrust_vector = np.array([0, 0, 0, 0, 0, 0])
 s = setup_connection()
 pwms = setup_thrusters()
 thrustAllocationMatrix = get_thrust_allocation_matrix()
+print("Starting control loop. Press 'esc' to quit.")
 
 while True:
+    print("Waiting for input")
     direction_vector, quit_flag = get_direction_vector(s)
-
+    print("Received input")
+    
     if quit_flag == 1:
         print("Quit signal received. Exiting.")
         break
