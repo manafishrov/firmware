@@ -24,7 +24,7 @@ while True:
     
     message = json.dumps(control_vector).encode('utf-8')
     
-    sock.sendto(message, ("127.0.0.1", 12345))
+    sock.sendto(message, ("127.0.0.1", 12345))  #CHANGE IP HERE
     
     #print(f"Sent: {control_vector}")
     

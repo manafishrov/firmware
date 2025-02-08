@@ -1,5 +1,5 @@
 import numpy as np
-#import RPi.GPIO as GPIO
+import RPi.GPIO as GPIO
 import socket
 import json
 import time
@@ -9,8 +9,9 @@ ESC_PINS = [27, 15, 25, 8, 7, 1]  #27 and 15 for single ESCs, 25, 8, 7, 1 for 4x
 
 def setup_thrusters():
     pwms = []
+    GPIO.setmode(GPIO.BCM)
+
     for pin in ESC_PINS:
-        GPIO.setmode(GPIO.BCM)
         GPIO.setup(pin, GPIO.OUT)
         pwm = GPIO.PWM(pin, 50)
         pwm.start(7.5)
@@ -116,11 +117,9 @@ def linear_ramping(thrust_vector, previous_thrust_vector, ramp_rate):
     return new_thrust_vector
 
 def set_esc_speed(pwm, speed):
-
     pwm.ChangeDutyCycle(speed*2.5 + 7.5)
 
 def send_pwm_values(thrust_vector, pwms):
-    #TODO: SOMETHING IS WRONG HERE, FIX IT
     for i in range(len(thrust_vector)):
         set_esc_speed(pwms[i], thrust_vector[i])
 
@@ -140,6 +139,7 @@ def print_thrust_vector(thrust_vector):
 
 previous_thrust_vector = np.array([0, 0, 0, 0, 0, 0])
 s = setup_connection()
+pwms = setup_thrusters()
 thrustAllocationMatrix = get_thrust_allocation_matrix()
 
 while True:
@@ -155,12 +155,14 @@ while True:
     
     thrust_vector = normalize_thrust_vector(thrust_vector)
     
-    thrust_vector = linear_ramping(thrust_vector, previous_thrust_vector, 0.1)
+    thrust_vector = linear_ramping(thrust_vector, previous_thrust_vector, 0.05)
     previous_thrust_vector = thrust_vector
 
-    #send_pwm_values(thrust_vector)
+    send_pwm_values(thrust_vector, pwms)
     print_thrust_vector(thrust_vector)
-    #time.sleep(0.02) # 50 Hz
+
+cleanup(pwms)
+
 
 
 
