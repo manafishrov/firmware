@@ -14,6 +14,7 @@ class CameraStream:
             return
 
         command = [
+            'sudo',
             'libcamera-vid',
             '-t', '0',
             '--inline',
