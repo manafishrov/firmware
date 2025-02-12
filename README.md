@@ -23,6 +23,9 @@ Connect to the Pi via Ethernet cable. Then SSH into it via the terminal:
 ssh pi@cyberfish.local
 ```
 
+> [!WARNING]  
+> The cyberfish may disconnect at random times when connected via its hostname. This will be fixed after setting up a static IP address.
+
 #### Install Required Packages
 
 Enter the Raspberry Pi configuration tool:
