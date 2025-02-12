@@ -181,7 +181,7 @@ The Pi should already have Python3 installed. You can check the version by runni
 python3 --version
 ```
 
-### Test Camera
+### Camera
 
 Test camera on the Raspberry Pi by running:
 
@@ -203,6 +203,43 @@ Move the image to your computer:
 ```bash
 scp pi@cyberfish.local:test.jpg .
 ```
+
+### Basic camera streaming
+
+For basic camera streaming run the following command on the Pi to stream over TCP:
+
+```bash
+sudo libcamera-vid -t 0 --width 1280 --height 720 --framerate 30 --inline --listen -o tcp://10.10.10.11:6900
+```
+
+And watch the stream on your computer with:
+
+```bash
+ffplay tcp://10.10.10.10:6900
+```
+
+This requires `ffmpeg` to be installed on your computer.
+
+### Optimized streaming
+
+For optimized streaming with low latency over UDP we are using gstreamer which needs to be installed on both platforms. This type of stream is more compatible with being embedded into the Tauri app.
+Run this on the Pi:
+
+```bash
+sudo libcamera-vid -t 0 --width 1280 --height 720 --framerate 30 --codec h264 --bitrate 4000000 -o - | \
+gst-launch-1.0 -v fdsrc ! h264parse ! rtph264pay config-interval=1 pt=96 ! \
+udpsink host=10.10.10.11 port=6900 sync=false async=false qos=false
+```
+
+And to watch the stream on your computer:
+
+```bash
+gst-launch-1.0 -v udpsrc port=6900 caps="application/x-rtp, payload=96" ! \
+rtph264depay ! queue max-size-buffers=1 leaky=downstream ! avdec_h264 ! \
+videoconvert ! autovideosink sync=false
+```
+
+From my testing the latency is very low and the stream is very smooth, but some frames may get dropped.
 
 ## License
 
