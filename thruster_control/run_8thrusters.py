@@ -5,7 +5,7 @@ import json
 import time
 
 # CONFIG VARIABLES
-ESC_PINS = [27, 15, 25, 8, 7, 1]  #27 and 15 for single ESCs, 25, 8, 7, 1 for 4x ESC
+ESC_PINS = [26, 19, 13, 6, 25, 8, 7, 1]  #26, 19, 13, 6, for ESC1, 25, 8, 7, 1 for ESC2
 
 def setup_thrusters():
     pwms = []
@@ -33,60 +33,28 @@ def get_direction_vector(s):
 
 
 def tuning_correction(direction_vector):
-    correction_matrix = np.array([[1, 0, 0, 0, 0, 0],
-                                  [0, 1, 0, 0, 0, 0],
-                                  [0, 0, 1, 0, 0, 0],
-                                  [0, 0, 0, 1, 0, 0],
-                                  [0, 0, 0, 0, 1, 0],
-                                  [0, 0, 0, 0, 0, 1]])
+    correction_matrix = np.array([
+        [1, 0, 0, 0, 0, 0],
+        [0, 1, 0, 0, 0, 0],
+        [0, 0, 1, 0, 0, 0],
+        [0, 0, 0, 1, 0, 0],
+        [0, 0, 0, 0, 1, 0],
+        [0, 0, 0, 0, 0, 1]
+    ])
       
     return direction_vector @ correction_matrix
 
 def get_thrust_allocation_matrix():
 
-    # Thruster positions in [x, y, z, pitch, yaw] format
-    thrusterPositionMatrix = np.array([[80, 125, -5, (1/3)*np.pi, (1/2)*np.pi], # Right front
-                                    [80, -125, -5, (1/3)*np.pi, -(1/2)*np.pi], # Left front
-                                    [0, 120, 30, 0, 0], # Right mid
-                                    [0, -120, 30, 0, 0], # Left mid
-                                    [-80, 125, -5, (1/3)*np.pi, -(1/2)*np.pi], # Right rear
-                                    [-80, -125, -5, (1/3)*np.pi, (1/2)*np.pi]]) # Left rear
-
-    centerOfDrag = np.array([0, 0, 0])
-
-    # Creates a new matrix where the positions are relative to the center of drag
-    for i in range(thrusterPositionMatrix.shape[0]):
-        thrusterPositionMatrix[i, 0] -= centerOfDrag[0]
-        thrusterPositionMatrix[i, 1] -= centerOfDrag[1]
-        thrusterPositionMatrix[i, 2] -= centerOfDrag[2]
-
-    # Creates force actuation matrix with trigenometry
-    pitch = thrusterPositionMatrix[:, 3]
-    yaw = thrusterPositionMatrix[:, 4]
-    forceActuationMatrix = np.column_stack((np.cos(pitch) * np.cos(yaw), 
-                                            np.cos(pitch) * np.sin(yaw), 
-                                            np.sin(pitch)))
-
-    # Creates moment actuation matrix using moment arm
-    momentActuationMatrix = np.zeros((6, 3))
-    for i in range(thrusterPositionMatrix.shape[0]):
-        x = thrusterPositionMatrix[i, 0]
-        y = thrusterPositionMatrix[i, 1]
-        z = thrusterPositionMatrix[i, 2]
-        F_x = forceActuationMatrix[i, 0]
-        F_y = forceActuationMatrix[i, 1]
-        F_z = forceActuationMatrix[i, 2]
-        momentActuationMatrix[i] = [-z*F_x + x*F_z, 
-                                    -y*F_x - x*F_y, 
-                                    -y*F_z]
-
-    # Combines force and moment actuation matrices into a 6x6 matrix
-    actuationMatrix = np.column_stack((forceActuationMatrix, momentActuationMatrix))
-
-    # Thrust allocation matrix is the inverse of the transposed actuation matrix, f = A^T*u
-    thrustAllocationMatrix = np.linalg.pinv(actuationMatrix.T)
-
-    return thrustAllocationMatrix
+    return np.array([
+        [1, 1, 0, 0, 1, 0],
+        [1, -1, 0, 0, -1, 0],
+        [0, 0, 1, -1, 0, 1],
+        [0, 0, 1, -1, 0, -1],
+        [0, 0, 1, 1, 0, 1],
+        [0, 0, 1, 1, 0, -1],
+        [-1, 1, 0, 0, -1, 0],
+        [-1, -1, 0, 0, 1, 0]])
 
 def thrust_allocation(input_vector, thrustAllocationMatrix):
     
@@ -137,19 +105,19 @@ def print_thrust_vector(thrust_vector):
 
 
 
-previous_thrust_vector = np.array([0, 0, 0, 0, 0, 0])
+previous_thrust_vector = np.array([0, 0, 0, 0, 0, 0, 0, 0])
 s = setup_connection()
 pwms = setup_thrusters()
 thrustAllocationMatrix = get_thrust_allocation_matrix()
 print("Starting control loop. Press 'esc' to quit.")
 
 while True:
-    print("Waiting for input")
+    print("Waiting for input ... ", end="")
     direction_vector, quit_flag = get_direction_vector(s)
-    print("Received input")
+    print(f"Received input: {direction_vector}")
     
     if quit_flag == 1:
-        print("Quit signal received. Exiting.")
+        print("QUIT SIGNAL RECEIVED. EXITING.")
         break
     
     direction_vector = tuning_correction(direction_vector)
