@@ -80,14 +80,14 @@ You need to tell your computer how to connect to the Pi without disrupting your 
 
 ##### Windows
 
-1. Open Network & Internet Settings
-2. Click "Change adapter options"
-3. Right-click your Ethernet connection and select "Properties"
-4. Select "Internet Protocol Version 4 (TCP/IPv4)" and click "Properties"
-5. Select "Use the following IP address" and enter:
+1. Open "View Network Connections"
+   - You can find this by searching for "View Network Connections" in the Start menu
+2. Right-click your Ethernet connection and select "Properties"
+3. Select "Internet Protocol Version 4 (TCP/IPv4)" and click "Properties"
+4. Select "Use the following IP address" and enter:
    - IP Address: 10.10.10.11
    - Subnet Mask: 255.255.255.0
-6. Click "OK" to save
+5. Click "OK" to save
 
 ##### Linux
 
