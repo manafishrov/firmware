@@ -6,16 +6,21 @@
 
 Connect the SD card to your computer and make sure you have the latest version of [Raspberry Pi Imager](https://www.raspberrypi.com/software/) installed.
 
-Choose the Raspberry Pi OS Lite image and flash it to the SD card.
+When choosing operating system, select "Raspberry Pi OS (other)" > "Raspberry Pi OS Lite (64-bit)".
+When asked to edit the config file, select "Yes".
 
-Make sure to have SSH enabled on the Pi and hostname so you can SSH into it the first time for the networking setup. We kept the default raspberrypi hostname and pi as the username.
+- Set hostname to `cyberfish.local`
+- Set username to `pi`
+- Set password to `cyberfish`
+
+Make sure to enable SSH with password authentication.
 
 ### Setup Networking
 
-Connect to the Pi via Ethernet cable. Then SSH into it:
+Connect to the Pi via Ethernet cable. Then SSH into it via the terminal:
 
 ```bash
-ssh pi@raspberrypi.local
+ssh pi@cyberfish.local
 ```
 
 #### Install Required Packages
@@ -34,7 +39,6 @@ After that install these packages:
 ```bash
 sudo apt update
 sudo apt install dhcpcd5
-sudo apt install dnsmasq
 ```
 
 #### Set the Pi's Static IP
@@ -49,56 +53,137 @@ Add the following lines:
 
 ```
 interface eth0
-static ip_address=10.69.69.69/24
+static ip_address=10.10.10.10/24
 ```
 
-#### Configure DHCP Server
-
-Edit the `dnsmasq` configuration file:
-
-```bash
-sudo vi /etc/dnsmasq.conf
-```
-
-Add these lines:
-
-```
-interface=eth0
-bind-interfaces
-dhcp-range=10.69.69.1,10.69.69.50,12h
-```
-
-#### Restart Networking Services**
+Then restart the service and the Pi:
 
 ```bash
 sudo systemctl restart dhcpcd
-sudo systemctl restart dnsmasq
+sudo reboot now
 ```
 
-Now, when you plug your Mac/PC into the Raspberry Pi via Ethernet, it **automatically gets an IP in the `10.69.69.x` range**.
+#### Configure Your Mac/PC's Ethernet Connection
 
-You can now use the Pi's IP address to SSH into it:
+You need to tell your computer how to connect to the Pi without disrupting your regular internet connection.
+
+##### macOS
+
+1. Open System Settings > Network
+2. Select your Ethernet connection
+3. Click "Details..."
+4. Under "Configure IPv4", select "Manually"
+5. Set the following:
+   - IP Address: 10.10.10.11
+   - Subnet Mask: 255.255.255.0
+6. Click "OK" and "Apply"
+
+##### Windows
+
+1. Open Network & Internet Settings
+2. Click "Change adapter options"
+3. Right-click your Ethernet connection and select "Properties"
+4. Select "Internet Protocol Version 4 (TCP/IPv4)" and click "Properties"
+5. Select "Use the following IP address" and enter:
+   - IP Address: 10.10.10.11
+   - Subnet Mask: 255.255.255.0
+6. Click "OK" to save
+
+##### Linux
+
+1. For Ubuntu/Debian GUI:
+   - Open Settings > Network
+   - Click the gear icon next to your Ethernet connection
+   - Go to IPv4 tab
+   - Select "Manual"
+   - Add Address: 10.10.10.11
+   - Netmask: 255.255.255.0
+   - Click "Apply"
+
+2. For command line:
+
+   ```bash
+   sudo ip addr add 10.10.10.11/24 dev eth0
+   ```
+
+   Replace `eth0` with your Ethernet interface name if different.
+
+### Verify that everything is working
+
+First SSH into the Pi:
 
 ```bash
-ssh pi@10.69.69.69
+ssh pi@cyberfish.local
 ```
 
-And it should now be possible to connect to it via the app after installing the firmware.
+Verify that the Pi has the correct IP address by running:
+
+```bash
+ip addr show eth0
+```
+
+It should show the IP address `10.10.10.10/24`. The result may look something like this:
+
+```bash
+pi@cyberfish:~ $ ip addr show eth0
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP group default qlen 1000
+    link/ether b8:27:eb:9a:7f:1c brd ff:ff:ff:ff:ff:ff
+    inet 10.10.10.10/24 brd 10.10.10.255 scope global noprefixroute eth0
+       valid_lft forever preferred_lft forever
+    inet6 fe80::b158:f2c2:d954:b37b/64 scope link noprefixroute
+       valid_lft forever preferred_lft forever
+```
+
+Next go ahead and disconnect from the Pi and ping it from your computer to make sure your computer is setup correctly and can find the pi:
+
+```bash
+ping 10.10.10.10
+```
+
+Your result should look something like this if everything is setup correctly:
+
+```bash
+❯ ping 10.10.10.10
+PING 10.10.10.10 (10.10.10.10): 56 data bytes
+64 bytes from 10.10.10.10: icmp_seq=0 ttl=64 time=0.953 ms
+64 bytes from 10.10.10.10: icmp_seq=1 ttl=64 time=1.048 ms
+64 bytes from 10.10.10.10: icmp_seq=2 ttl=64 time=1.141 ms
+64 bytes from 10.10.10.10: icmp_seq=3 ttl=64 time=1.080 ms
+64 bytes from 10.10.10.10: icmp_seq=4 ttl=64 time=1.001 ms
+^C
+--- 10.10.10.10 ping statistics ---
+5 packets transmitted, 5 packets received, 0.0% packet loss
+round-trip min/avg/max/stddev = 0.953/1.045/1.141/0.065 ms
+```
+
+If packets are being lost something is wrong with your setup.
+
+Now you can SSH and conect to the Pi using the static IP address:
+
+```bash
+ssh pi@10.10.10.10
+```
 
 ## Development setup
 
-Make sure to have python setup and preferably use a virtual environment.
-
-Install the required packages using the following command:
+The Pi should already have Python3 installed. You can check the version by running:
 
 ```bash
-pip install -r requirements.txt
+python3 --version
 ```
+
+### Test Camera
 
 Test camera on the Raspberry Pi by taking a picture:
 
 ```bash
 libcamera-jpeg -o test.jpg
+```
+
+Move the image to your computer:
+
+```bash
+scp pi@cyberfish.local:test.jpg .
 ```
 
 ## License
