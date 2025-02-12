@@ -113,7 +113,13 @@ You need to tell your computer how to connect to the Pi without disrupting your 
 
 ### Verify that everything is working
 
-First SSH into the Pi:
+First try to SSH into the Pi:
+
+```bash
+ssh pi@10.10.10.10
+```
+
+If it works you are all good. If not SSH in with the hostname and you can verify what is wrong.
 
 ```bash
 ssh pi@cyberfish.local
@@ -177,11 +183,20 @@ python3 --version
 
 ### Test Camera
 
-Test camera on the Raspberry Pi by taking a picture:
+Test camera on the Raspberry Pi by running:
 
 ```bash
-libcamera-jpeg -o test.jpg
+sudo libcamera-hello
 ```
+
+To take a picture with the camera, run:
+
+```bash
+sudo libcamera-jpeg -o test.jpg
+```
+
+> [!IMPORTANT]  
+> You have to run the command as root with `sudo` because the camera requires root access.
 
 Move the image to your computer:
 
