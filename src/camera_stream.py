@@ -46,22 +46,20 @@ class CameraStream:
         ]
 
         try:
-            # Start libcamera process
             self.camera_process = subprocess.Popen(
                 libcamera_cmd,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE
             )
 
-            # Pipe the output to GStreamer
             self.gst_process = subprocess.Popen(
                 gst_cmd,
                 stdin=self.camera_process.stdout,
                 stderr=subprocess.PIPE
             )
 
-            # Allow camera_process to receive a SIGPIPE if gst_process exits
-            self.camera_process.stdout.close()
+            if self.camera_process.stdout:
+                self.camera_process.stdout.close()
 
             logging.info(f"Stream started successfully. Connect to {self.ip_address}:{self.port}")
         except Exception as e:
