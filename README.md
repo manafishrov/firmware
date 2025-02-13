@@ -54,8 +54,6 @@ Edit the `dhcpcd.conf` file:
 sudo vi /etc/dhcpcd.conf
 ```
 
-MICHAEL HJELP, DEN FILEN FINNES IKKE PÅ MIN PI :((((
-
 Add the following lines:
 
 ```
