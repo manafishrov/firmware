@@ -7,13 +7,14 @@
 Connect the SD card to your computer and make sure you have the latest version of [Raspberry Pi Imager](https://www.raspberrypi.com/software/) installed.
 
 When choosing operating system, select "Raspberry Pi OS (other)" > "Raspberry Pi OS Lite (64-bit)".
-When asked to edit the config file, select "Yes".
+When asked "Would you like to apply OS customization settings?", select "Edit settings".
+
 
 - Set hostname to `cyberfish.local`
 - Set username to `pi`
 - Set password to `cyberfish`
 
-Make sure to enable SSH with password authentication.
+Go to "Services" in the top bar and enable SSH with password authentication.
 
 ### Setup Networking
 
@@ -52,6 +53,8 @@ Edit the `dhcpcd.conf` file:
 ```bash
 sudo vi /etc/dhcpcd.conf
 ```
+
+MICHAEL HJELP, DEN FILEN FINNES IKKE PÅ MIN PI :((((
 
 Add the following lines:
 
