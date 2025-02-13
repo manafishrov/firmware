@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebRTC Stream Test</title>
+</head>
+<body>
+    <video id="videoStream" autoplay playsinline style="width: 100%;"></video>
+    <button onclick="startStream()">Start Stream</button>
+
+    <script>
+        async function startStream() {
+            const pc = new RTCPeerConnection();
+            
+            pc.ontrack = (event) => {
+                if (event.track.kind === 'video') {
+                    document.getElementById('videoStream').srcObject = event.streams[0];
+                }
+            };
+
+            const offer = await pc.createOffer({
+                offerToReceiveVideo: true
+            });
+            await pc.setLocalDescription(offer);
+
+            const response = await fetch(`http://10.10.10.10:6900/offer`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    sdp: pc.localDescription.sdp,
+                    type: pc.localDescription.type
+                })
+            });
+
+            const answer = await response.json();
+            await pc.setRemoteDescription(answer);
+        }
+    </script>
+</body>
+</html>
