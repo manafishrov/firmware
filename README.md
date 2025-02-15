@@ -43,6 +43,7 @@ After that install these packages:
 ```bash
 sudo apt update
 sudo apt install dhcpcd5
+sudo apt install python3-numpy
 sudo apt install python3-gi python3-gst-1.0 gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly
 ```
 

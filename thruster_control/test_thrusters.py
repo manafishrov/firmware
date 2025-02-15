@@ -23,8 +23,8 @@ def automatic_test(pin):
     pwm = GPIO.PWM(pin, 50)  # 50Hz PWM signal
     pwm.start(7.5)
     
-    print("Setting duty cycle to 7.5% and waiting for 5 seconds...")
-    time.sleep(5)
+    print("Setting duty cycle to 7.5% and waiting for 30 seconds...")
+    time.sleep(30)
     
     print("Ramping up from 7.5% to 9%...")
     ramp_pwm(pwm, 7.5, 9.0)

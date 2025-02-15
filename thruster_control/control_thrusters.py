@@ -26,7 +26,7 @@ while True:
     
     message = json.dumps(control_vector).encode('utf-8')
     
-    sock.sendto(message, ("192.168.2.12", 12345))
+    sock.sendto(message, ("10.10.10.10", 12345))
     
     print(f"Sent: {control_vector}")
     
