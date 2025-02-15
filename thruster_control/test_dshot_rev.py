@@ -78,13 +78,9 @@ def main():
     print("Stopping motor for 2 seconds...")
     send_zero_throttle(2000)
 
-    # Phase 2: Spin in reversed direction
-    print("Sending 3D mode + spin-direction=1...")
-    lib.motorImplementationSet3dModeAndSpinDirection(MotorPinsArray, motorMax, 1, 1) #Last argument is the spin direction
-
-    print("Phase 2: Spinning motor  at 15% throttle for 3 seconds, spin-direction = 1...")
+    print("Phase 2: Spinning motor  at -15% throttle for 3 seconds, spin-direction = -1...")
     for i in range(3000):
-        send_throttle(0.15)
+        send_throttle(-0.15)
         time.sleep(0.001)
 
     print("Finalizing / closing library...")
