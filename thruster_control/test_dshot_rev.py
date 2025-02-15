@@ -45,14 +45,13 @@ MotorPinsArray = (ctypes.c_int * motorMax)(*motorPins)
 
 # -------------------------------------------------
 # Helper functions
-def send_throttle(throttle_value, duration_ms):
+def send_throttle(throttle_value):
     """
-    Send a positive throttle (0.0 <= throttle_value <= 1.0) repeatedly for duration_ms ms.
+    Send a positive throttle (0.0 <= throttle_value <= 1.0).
     """
     arr = (ctypes.c_double * motorMax)(*([throttle_value] * motorMax))
-    for _ in range(duration_ms):
-        lib.motorImplementationSendThrottles(MotorPinsArray, motorMax, arr)
-        time.sleep(0.001)
+    lib.motorImplementationSendThrottles(MotorPinsArray, motorMax, arr)
+
 
 def send_zero_throttle(duration_ms):
     """Send 0 throttle for duration_ms ms."""
@@ -67,29 +66,26 @@ def main():
     lib.motorImplementationInitialize(MotorPinsArray, motorMax)
     print("ESC should be armed now (after beeps).")
 
-    # Phase 1: Spin in normal direction (non-3D mode).
-    print("Phase 1: Spinning motor in non-3D mode at 15% throttle for 3 seconds...")
-    send_throttle(0.15, 3000)
+    # Phase 1: Spin in normal direction
+    print("Sending 3D mode + spin-direction=0...")
+    lib.motorImplementationSet3dModeAndSpinDirection(MotorPinsArray, motorMax, 1, 0) #Last argument is the spin direction
+
+    print("Phase 1: Spinning motor  at 15% throttle for 3 seconds, spin-direction = 0...")
+    for i in range(3000):
+        send_throttle(0.15)
+        time.sleep(0.001)
+
     print("Stopping motor for 2 seconds...")
     send_zero_throttle(2000)
 
-    # Phase 2: Switch to 3D mode, but use the "normal" spin command (flag=0) instead of reversed=1.
-    # Some ESCs interpret the flags the opposite way.
-    print("Phase 2: Enabling 3D mode, using spin-direction flag=0 (swapped).")
-    send_zero_throttle(3000)  # re-arm with zero throttle for 3 seconds
+    # Phase 2: Spin in reversed direction
+    print("Sending 3D mode + spin-direction=1...")
+    lib.motorImplementationSet3dModeAndSpinDirection(MotorPinsArray, motorMax, 1, 1) #Last argument is the spin direction
 
-    print("Sending 3D mode + spin-direction=0 repeatedly...")
-    for _ in range(10):
-        lib.motorImplementationSet3dModeAndSpinDirection(MotorPinsArray, motorMax, 1, 0)
-        time.sleep(0.05)
-
-    # Now try spinning at a higher throttle in '3D mode' for 3 seconds
-    # If 0.5 is too low, try 0.6 or 0.7
-    print("Spinning at 50% throttle for 3 seconds (in swapped 3D mode)...")
-    send_throttle(0.5, 3000)
-
-    print("Stopping motor...")
-    send_zero_throttle(2000)
+    print("Phase 2: Spinning motor  at 15% throttle for 3 seconds, spin-direction = 1...")
+    for i in range(3000):
+        send_throttle(0.15)
+        time.sleep(0.001)
 
     print("Finalizing / closing library...")
     lib.motorImplementationFinalize(MotorPinsArray, motorMax)
