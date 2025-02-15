@@ -1,10 +1,10 @@
 import ctypes
 import time
 
-# 1) Load the shared library (adjust the path if necessary)
+# Load the shared library (adjust the path if necessary)
 lib = ctypes.CDLL("./libmotor-dshot.so")
 
-# 2) Set up the function signatures.
+# Set up the function signatures (no header file needed)
 lib.motorImplementationInitialize.argtypes = [
     ctypes.POINTER(ctypes.c_int),  # motorPins[]
     ctypes.c_int                   # motorMax
@@ -24,40 +24,37 @@ lib.motorImplementationFinalize.argtypes = [
 ]
 lib.motorImplementationFinalize.restype = None
 
-# 3) Setup for one motor on GPIO 19 (using BCM numbering)
+# Use GPIO pin 19 (using BCM numbering)
 motorPins = [19]
 motorMax = len(motorPins)
 MotorPinsArray = (ctypes.c_int * motorMax)(*motorPins)
 
-# Initialize ESC (this sends "motor stop" frames for about 5 seconds)
+# --------------------------------------------------------------------
+# 1. Initialize the ESC (this sends a "motor stop" command for ~5 seconds)
 lib.motorImplementationInitialize(MotorPinsArray, motorMax)
-print("ESC Initialized on pin 19.")
+print("Initializing ESC / Arming, waiting 5 seconds...")
 
-# Wait a moment after initialization if needed
-time.sleep(2)
-
-# Create a throttle array for one motor.
-# For example, 15% throttle (0.15)
-throttleValue = 0.15
-throttleArray = (ctypes.c_double * motorMax)(*([throttleValue] * motorMax))
-
-# Send throttle commands continuously for 5 seconds.
-print("Spinning motor at 50% throttle for 5 seconds...")
-end_time = time.time() + 5  # run for 5 seconds
-while time.time() < end_time:
-    lib.motorImplementationSendThrottles(MotorPinsArray, motorMax, throttleArray)
-    # A short sleep (e.g., 1ms) helps mimic the C code loop and avoid hogging the CPU.
+# Arming phase: send 0 throttle repeatedly for 5 seconds
+zero_throttle = (ctypes.c_double * motorMax)(*([0.0] * motorMax))
+for _ in range(5000):  # 5000 iterations x 1ms ≈ 5 seconds
+    lib.motorImplementationSendThrottles(MotorPinsArray, motorMax, zero_throttle)
     time.sleep(0.001)
 
-# Now stop the motor by sending 0 throttle continuously for a short period.
-stopThrottle = 0.0
-stopArray = (ctypes.c_double * motorMax)(*([stopThrottle] * motorMax))
+# --------------------------------------------------------------------
+# 2. Spin phase: send 15% throttle continuously for 5 seconds
+print("Spinning motor at 15% throttle for 5 seconds...")
+spin_throttle = (ctypes.c_double * motorMax)(*([0.15] * motorMax))
+for _ in range(5000):  # 5 seconds worth of commands
+    lib.motorImplementationSendThrottles(MotorPinsArray, motorMax, spin_throttle)
+    time.sleep(0.001)
+
+# --------------------------------------------------------------------
+# 3. Stop the motor: send 0 throttle several times
 print("Stopping motor...")
-# Send stop command a few times
 for _ in range(100):
-    lib.motorImplementationSendThrottles(MotorPinsArray, motorMax, stopArray)
+    lib.motorImplementationSendThrottles(MotorPinsArray, motorMax, zero_throttle)
     time.sleep(0.001)
 
-# Finalize and clean up.
+# Finalize and clean up
 lib.motorImplementationFinalize(MotorPinsArray, motorMax)
 print("Finalized and closed the library.")
