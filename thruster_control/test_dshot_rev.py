@@ -65,6 +65,7 @@ def main():
     print("Initializing (arming) ESC with 0 throttle for ~5 seconds...")
     lib.motorImplementationInitialize(MotorPinsArray, motorMax)
     print("ESC should be armed now (after beeps).")
+    send_zero_throttle(5000)
 
     # Phase 1: Spin in normal direction
     print("Sending 3D mode + spin-direction=0...")
@@ -78,7 +79,7 @@ def main():
     print("Stopping motor for 2 seconds...")
     send_zero_throttle(2000)
 
-    print("Phase 2: Spinning motor  at -15% throttle for 3 seconds, spin-direction = -1...")
+    print("Phase 2: Spinning motor  at -15% throttle for 3 seconds, spin-direction = 0...")
     for i in range(3000):
         send_throttle(-0.15)
         time.sleep(0.001)
