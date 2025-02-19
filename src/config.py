@@ -20,8 +20,5 @@ def load_config():
 def get_ip_address():
     return load_config()['network']['ip_address']
 
-def get_camera_port():
-    return load_config()['network']['camera_stream_port']
-
 def get_motor_port():
     return load_config()['network']['motor_control_port']

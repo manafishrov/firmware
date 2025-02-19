@@ -71,7 +71,7 @@ sudo reboot now
 
 You need to tell your computer how to connect to the Pi without disrupting your regular internet connection.
 
-##### macOS
+##### MacOS
 
 1. Open System Settings > Network
 2. Select your Ethernet connection
@@ -245,3 +245,13 @@ From my testing the latency is very low and the stream is very smooth, but some 
 ## License
 
 This project is licensed under the GNU Affero General Public License v3.0 or later - see the [LICENSE](LICENSE) file for details.
+
+```bash
+wget https://github.com/bluenviron/mediamtx/releases/download/v1.11.3/mediamtx_v1.11.3_linux_arm64v8.tar.gz
+tar -xvf mediamtx_v1.11.3_linux_arm64v8.tar.gz
+sudo mv mediamtx /usr/local/bin/
+sudo mkdir /etc/mediamtx
+sudo mv mediamtx.yml /etc/mediamtx/
+rm -rf mediamtx_v1.11.3_linux_arm64v8.tar.gz LICENSE
+mediamtx --version
+```

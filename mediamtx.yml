@@ -1,0 +1,17 @@
+rtsp: no
+rtmp: no
+hls: no
+srt: no
+webrtc: yes
+paths:
+  cam:
+    source: rpiCamera
+    sourceOnDemand: yes
+    sourceOnDemandStartTimeout: 1s
+    sourceOnDemandCloseAfter: 1s
+    rpiCameraWidth: 1280
+    rpiCameraHeight: 720
+    rpiCameraFPS: 30
+    rpiCameraDenoise: cdn_fast
+    rpiCameraAfSpeed: fast
+    rpiCameraBitrate: 2000000
