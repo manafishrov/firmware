@@ -34,15 +34,14 @@ Enter the Raspberry Pi configuration tool:
 sudo raspi-config
 ```
 
-Now you need to connect the pi to the internet temporarily in the raspi-config.
+Now you need to connect the Pi to the internet temporarily in the raspi-config.
 System Options > Wireless Lan > then enter your wifi credentials.
 
-After that install these packages:
+After that install the dhcpcd5 package:
 
 ```bash
 sudo apt update
 sudo apt install dhcpcd5
-sudo apt install python3-numpy python3-av=10.* python3-aiortc python3-aiohttp python3-aiohttp-cors
 ```
 
 #### Set the Pi's Static IP
@@ -112,7 +111,7 @@ You need to tell your computer how to connect to the Pi without disrupting your 
 
    Replace `eth0` with your Ethernet interface name if different.
 
-### Verify that everything is working
+#### Verify that network is working
 
 First try to SSH into the Pi:
 
@@ -120,7 +119,7 @@ First try to SSH into the Pi:
 ssh pi@10.10.10.10
 ```
 
-If it works you are all good. If not SSH in with the hostname and you can verify what is wrong.
+If it works you are all good. If it doesn't work, you need to SSH in with the hostname to find out what's wrong:
 
 ```bash
 ssh pi@cyberfish.local
@@ -144,7 +143,7 @@ pi@cyberfish:~ $ ip addr show eth0
        valid_lft forever preferred_lft forever
 ```
 
-Next go ahead and disconnect from the Pi and ping it from your computer to make sure your computer is setup correctly and can find the pi:
+Next go ahead and disconnect from the Pi and ping it from your computer to make sure your computer is setup correctly and can find the Pi:
 
 ```bash
 ping 10.10.10.10
@@ -168,21 +167,7 @@ round-trip min/avg/max/stddev = 0.953/1.045/1.141/0.065 ms
 
 If packets are being lost something is wrong with your setup.
 
-Now you can SSH and conect to the Pi using the static IP address:
-
-```bash
-ssh pi@10.10.10.10
-```
-
-## Development setup
-
-The Pi should already have python installed. You can check the version by running:
-
-```bash
-python --version
-```
-
-### Camera
+#### Test Camera
 
 Test camera on the Raspberry Pi by running:
 
@@ -197,17 +182,15 @@ sudo libcamera-jpeg -o test.jpg
 ```
 
 > [!IMPORTANT]  
-> You have to run the command as root with `sudo` because the camera requires root access.
+> You have to run the commands as root with `sudo` because the camera requires root access.
 
-Move the image to your computer:
+Use this command on your computer to copy the image from the Pi:
 
 ```bash
-scp pi@cyberfish.local:test.jpg .
+scp pi@10.10.10.10:test.jpg .
 ```
 
-### Basic camera streaming
-
-For basic camera streaming run the following command on the Pi to stream over TCP:
+To test basic camera streaming run the following command on the Pi to stream over TCP:
 
 ```bash
 sudo libcamera-vid -t 0 --width 1280 --height 720 --framerate 30 --inline --listen -o tcp://10.10.10.11:6900
@@ -221,36 +204,130 @@ ffplay tcp://10.10.10.10:6900
 
 This requires `ffmpeg` to be installed on your computer.
 
-### Optimized streaming
+### Setup motor control
 
-For optimized streaming with low latency over UDP we are using gstreamer which needs to be installed on both platforms. This type of stream is more compatible with being embedded into the Tauri app.
-Run this on the Pi:
-
-```bash
-sudo libcamera-vid -t 0 --width 1280 --height 720 --framerate 30 --codec h264 --bitrate 4000000 -o - | \
-gst-launch-1.0 -v fdsrc ! h264parse ! rtph264pay config-interval=1 pt=96 ! \
-udpsink host=10.10.10.11 port=6900 sync=false async=false qos=false
-```
-
-And to watch the stream on your computer:
+The Pi should already have python installed. You can check the version by running:
 
 ```bash
-gst-launch-1.0 -v udpsrc port=6900 caps="application/x-rtp, payload=96" ! \
-rtph264depay ! queue max-size-buffers=1 leaky=downstream ! avdec_h264 ! \
-videoconvert ! autovideosink sync=false
+python --version
 ```
 
-From my testing the latency is very low and the stream is very smooth, but some frames may get dropped.
+#### Install packages
+
+Make sure the Pi is connected to a Network and install numpy:
+
+```bash
+sudo apt install python3-numpy
+```
+
+TODO: Write instructions for setting up motor control (This probably involves moving over the files)
+
+### Setup streaming
+
+#### Install MediaMTX
+
+First download MediaMTX:
+
+```bash
+wget https://github.com/bluenviron/mediamtx/releases/download/v1.11.3/mediamtx_v1.11.3_linux_arm64v8.tar.gz
+```
+
+Unpack the file and move the binary to the bin directory:
+
+```bash
+tar -xvf mediamtx_v1.11.3_linux_arm64v8.tar.gz
+
+# Move to bin
+sudo mv mediamtx /usr/local/bin/
+```
+
+Delete the files that are not needed:
+
+```bash
+rm -rf mediamtx_v1.11.3_linux_arm64v8.tar.gz LICENSE mediamtx.yml
+```
+
+#### Setup configuration
+
+Next we need to setup the configuration file for MediaMTX. We are gonna copy the mediamtx.yml file from this repository to the correct location.
+
+First copy the file to the Pi by running this on your computer:
+
+```bash
+scp mediamtx.yml pi@10.10.10.10:~/
+```
+
+Create the directory for the configuration file on the Pi and move it to the correct location:
+
+```bash
+sudo mkdir /etc/mediamtx
+
+# Move the file to the correct location on the Pi
+mv mediamtx.yml /etc/mediamtx/
+```
+
+The stream is setup so it will automatically start when connected to from the app and shut down when disconnected.
+
+#### Run MediaMTX service in the background
+
+Now we need to make sure the MediaMTX service is always running in the background when the Pi is turned on.
+
+Create a systemd service file to run MediaMTX on startup:
+
+```bash
+sudo vi /etc/systemd/system/mediamtx.service
+```
+
+Add the following content to the file:
+
+```ini
+[Unit]
+Description=MediaMTX RTSP Server
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/mediamtx
+Restart=always
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Enable and start the service:
+
+```bash
+# Reload the systemd daemon
+sudo systemctl daemon-reload
+
+# Enable the service on startup
+sudo systemctl enable mediamtx
+
+# Start the service now
+sudo systemctl start mediamtx
+```
+
+You can check the status of the service with:
+
+```bash
+sudo systemctl status mediamtx
+```
+
+#### Test the stream
+
+To test the stream just open this URL in your browser:
+[http://10.10.10.10:8889/cam](http://10.10.10.10:8889/cam)
+
+> [!IMPORTANT]  
+> You need to be connected to the Pi to access the stream.
 
 ## License
 
 This project is licensed under the GNU Affero General Public License v3.0 or later - see the [LICENSE](LICENSE) file for details.
 
 ```bash
-wget https://github.com/bluenviron/mediamtx/releases/download/v1.11.3/mediamtx_v1.11.3_linux_arm64v8.tar.gz
-tar -xvf mediamtx_v1.11.3_linux_arm64v8.tar.gz
-sudo mv mediamtx /usr/local/bin/
-sudo mkdir /etc/mediamtx
 sudo mv mediamtx.yml /etc/mediamtx/
 rm -rf mediamtx_v1.11.3_linux_arm64v8.tar.gz LICENSE
 mediamtx --version
