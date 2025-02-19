@@ -42,7 +42,7 @@ After that install these packages:
 ```bash
 sudo apt update
 sudo apt install dhcpcd5
-sudo apt install python3-av=10.* python3-aiortc python3-aiohttp python3-aiohttp-cors
+sudo apt install python3-numpy python3-av=10.* python3-aiortc python3-aiohttp python3-aiohttp-cors
 ```
 
 #### Set the Pi's Static IP
