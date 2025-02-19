@@ -13,9 +13,7 @@ When asked to apply OS customisation settings, select "EDIT SETTINGS".
 - Set username to `pi`
 - Set password to `cyberfish`
 
-Then proceed to flash the SD card.
-
-Make sure to enable SSH with password authentication.
+Go to "Services" in the top bar and enable SSH with password authentication.
 
 ### Setup Networking
 

@@ -3,20 +3,10 @@ import RPi.GPIO as GPIO
 import socket
 import json
 import time
+import dshot_thrust_control as dshot
 
 # CONFIG VARIABLES
 ESC_PINS = [26, 19, 13, 6, 25, 8, 7, 1]  #26, 19, 13, 6, for ESC1, 25, 8, 7, 1 for ESC2
-
-def setup_thrusters():
-    pwms = []
-    GPIO.setmode(GPIO.BCM)
-
-    for pin in ESC_PINS:
-        GPIO.setup(pin, GPIO.OUT)
-        pwm = GPIO.PWM(pin, 50)
-        pwm.start(7.5)
-        pwms.append(pwm)
-    return pwms
 
 def setup_connection():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -84,22 +74,6 @@ def linear_ramping(thrust_vector, previous_thrust_vector, ramp_rate):
 
     return new_thrust_vector
 
-def set_esc_speed(pwm, speed):
-    pwm.ChangeDutyCycle(speed*2.5 + 7.5)
-
-def send_pwm_values(thrust_vector, pwms):
-    for i in range(len(thrust_vector)):
-        set_esc_speed(pwms[i], thrust_vector[i])
-
-    print(thrust_vector)
-
-    pass
-
-def cleanup(pwms):
-    for pwm in pwms:
-        pwm.stop()
-    GPIO.cleanup()
-
 def print_thrust_vector(thrust_vector):
     print(f"Thrust vector: {thrust_vector}")
 
@@ -107,7 +81,7 @@ def print_thrust_vector(thrust_vector):
 
 previous_thrust_vector = np.array([0, 0, 0, 0, 0, 0, 0, 0])
 s = setup_connection()
-pwms = setup_thrusters()
+dshot.setup_thrusters(ESC_PINS)
 thrustAllocationMatrix = get_thrust_allocation_matrix()
 print("Starting control loop. Press 'esc' to quit.")
 
@@ -129,10 +103,10 @@ while True:
     thrust_vector = linear_ramping(thrust_vector, previous_thrust_vector, 0.05)
     previous_thrust_vector = thrust_vector
 
-    send_pwm_values(thrust_vector, pwms)
+    dshot.send_thrust_values(thrust_vector)
     print_thrust_vector(thrust_vector)
 
-cleanup(pwms)
+dshot.cleanup_thrusters()
 
 
 
