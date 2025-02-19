@@ -7,11 +7,13 @@
 Connect the SD card to your computer and make sure you have the latest version of [Raspberry Pi Imager](https://www.raspberrypi.com/software/) installed.
 
 When choosing operating system, select "Raspberry Pi OS (other)" > "Raspberry Pi OS Lite (64-bit)".
-When asked to edit the config file, select "Yes".
+When asked to apply OS customisation settings, select "EDIT SETTINGS".
 
 - Set hostname to `cyberfish.local`
 - Set username to `pi`
 - Set password to `cyberfish`
+
+Then proceed to flash the SD card.
 
 Make sure to enable SSH with password authentication.
 
@@ -42,7 +44,7 @@ After that install these packages:
 ```bash
 sudo apt update
 sudo apt install dhcpcd5
-sudo apt install python3-gi python3-gst-1.0 gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly
+sudo apt install python3-av=10.* python3-aiortc python3-aiohttp python3-aiohttp-cors
 ```
 
 #### Set the Pi's Static IP
@@ -176,10 +178,10 @@ ssh pi@10.10.10.10
 
 ## Development setup
 
-The Pi should already have Python3 installed. You can check the version by running:
+The Pi should already have python installed. You can check the version by running:
 
 ```bash
-python3 --version
+python --version
 ```
 
 ### Camera
