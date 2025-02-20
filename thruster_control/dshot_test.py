@@ -215,7 +215,7 @@ def test_propeller(pin):
     lib.motorImplementationSet3dModeAndSpinDirection(MotorPinsArray, motorMax, 1, 0)
 
     # Define the throttle sequence.
-    throttle_sequence = [0, 0.2, 0.4, 0.6, 0.8, 1, 0, -0.2, -0.4, -0.6, -0.8, -1]
+    throttle_sequence = [0, 0.2, 0.4, 0.6, 0.8, 1, 0]
     
     for throttle in throttle_sequence:
         print(f"\nCurrent throttle: {throttle}")
