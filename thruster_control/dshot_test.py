@@ -218,7 +218,7 @@ def test_propeller(pin):
     throttle_sequence = [0, 0.2, 0.4, 0.6, 0.8, 1, 0, -0.2, -0.4, -0.6, -0.8, -1]
     
     for throttle in throttle_sequence:
-        print(f"\nSetting throttle to {throttle} for 10 seconds...")
+        print(f"\nCurrent throttle: {throttle}")
         end_time = time.time() + 10
         while time.time() < end_time:
             send_throttle(MotorPinsArray, motorMax, throttle)
