@@ -101,7 +101,7 @@ def automatic_test(pin):
 
     print("Initializing (arming) ESC with 0 throttle for ~5 seconds...")
     lib.motorImplementationInitialize(MotorPinsArray, motorMax)
-    send_zero_throttle(MotorPinsArray, motorMax, 10000)
+    send_zero_throttle(MotorPinsArray, motorMax, 5000)
     print("ESC armed (after beeps).")
 
     print("Setting 3D mode with spin-direction=0...")
@@ -190,6 +190,45 @@ def manual_test(pin):
         lib.motorImplementationFinalize(MotorPinsArray, motorMax)
         print(f"Manual test on motor at GPIO pin {pin} completed.\n")
 
+def test_propeller(pin):
+    """
+    Test Propeller mode:
+      - Initialize (arm) the ESC with 0 throttle for ~5 sec.
+      - Set 3D mode.
+      - For each throttle level in the sequence:
+            0, 0.2, 0.4, 0.6, 0.8, 1, 0, -0.2, -0.4, -0.6, -0.8, -1,
+        continuously send the throttle command for 10 seconds.
+      - Print informative messages for each level.
+      - Finally, send 0 throttle for 2 sec and finalize.
+    """
+    print(f"\nStarting propeller test on motor at GPIO pin {pin} (DShot mode)...")
+    motorPins = [pin]
+    motorMax = len(motorPins)
+    MotorPinsArray = (ctypes.c_int * motorMax)(*motorPins)
+
+    print("Initializing (arming) ESC with 0 throttle for ~5 seconds...")
+    lib.motorImplementationInitialize(MotorPinsArray, motorMax)
+    send_zero_throttle(MotorPinsArray, motorMax, 5000)
+    print("ESC armed (after beeps).")
+
+    print("Setting 3D mode with spin-direction=0...")
+    lib.motorImplementationSet3dModeAndSpinDirection(MotorPinsArray, motorMax, 1, 0)
+
+    # Define the throttle sequence.
+    throttle_sequence = [0, 0.2, 0.4, 0.6, 0.8, 1, 0]
+    
+    for throttle in throttle_sequence:
+        print(f"\nCurrent throttle: {throttle}")
+        end_time = time.time() + 10
+        while time.time() < end_time:
+            send_throttle(MotorPinsArray, motorMax, throttle)
+            time.sleep(0.001)
+    
+    print("\nPropeller test complete. Stopping motor for 2 seconds...")
+    send_zero_throttle(MotorPinsArray, motorMax, 2000)
+    lib.motorImplementationFinalize(MotorPinsArray, motorMax)
+    print(f"Propeller test on motor at GPIO pin {pin} completed.\n")
+
 # -------------------------------------------------
 # 4. Main program loop
 
@@ -204,13 +243,15 @@ def main():
             print("Invalid GPIO pin number. Please enter an integer.")
             continue
 
-        mode = input("Select test mode - automatic (a) or manual (m): ").lower()
+        mode = input("Select test mode - automatic (a), manual (m), or propeller test (t): ").lower()
         if mode == 'a':
             automatic_test(pin)
         elif mode == 'm':
             manual_test(pin)
+        elif mode == 't':
+            test_propeller(pin)
         else:
-            print("Invalid selection. Please choose 'a' for automatic or 'm' for manual.")
+            print("Invalid selection. Please choose 'a' for automatic, 'm' for manual, or 't' for propeller test.")
     print("Exiting program.")
 
 if __name__ == '__main__':
