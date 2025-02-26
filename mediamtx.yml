@@ -3,6 +3,7 @@ rtmp: no
 hls: no
 srt: no
 webrtc: yes
+webrtcPort: 8889
 paths:
   cam:
     source: rpiCamera
