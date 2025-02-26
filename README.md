@@ -254,7 +254,7 @@ Next we need to setup the configuration file for MediaMTX. We are gonna copy the
 First copy the file to the Pi by running this on your computer:
 
 ```bash
-scp mediamtx.yml pi@10.10.10.10:~/
+scp camera_stream/mediamtx.yml pi@10.10.10.10:~/
 ```
 
 Create the directory for the configuration file on the Pi and move it to the correct location:
