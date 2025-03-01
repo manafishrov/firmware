@@ -41,7 +41,7 @@ After that install the dhcpcd5 package:
 
 ```bash
 sudo apt update
-sudo apt install dhcpcd5
+sudo apt install -y dhcpcd5
 ```
 
 #### Set the Pi's Static IP
@@ -217,7 +217,7 @@ python --version
 Make sure the Pi is connected to a Network and install numpy:
 
 ```bash
-sudo apt install python3-numpy
+sudo apt install python3-numpy python3-websockets
 ```
 
 TODO: Write instructions for setting up motor control (This probably involves moving over the files)
@@ -247,6 +247,12 @@ Delete the files that are not needed:
 rm -rf mediamtx_v1.11.3_linux_arm64v8.tar.gz LICENSE mediamtx.yml
 ```
 
+Check that MediaMTX is installed:
+
+```bash
+mediamtx --version
+```
+
 #### Setup configuration
 
 Next we need to setup the configuration file for MediaMTX. We are gonna copy the mediamtx.yml file from this repository to the correct location.
@@ -263,7 +269,7 @@ Create the directory for the configuration file on the Pi and move it to the cor
 sudo mkdir /etc/mediamtx
 
 # Move the file to the correct location on the Pi
-mv mediamtx.yml /etc/mediamtx/
+sudo mv mediamtx.yml /etc/mediamtx/
 ```
 
 The stream is setup so it will automatically start when connected to from the app and shut down when disconnected.
@@ -282,7 +288,7 @@ Add the following content to the file:
 
 ```ini
 [Unit]
-Description=MediaMTX RTSP Server
+Description=MediaMTX
 After=network.target
 
 [Service]
@@ -326,9 +332,3 @@ To test the stream just open this URL in your browser:
 ## License
 
 This project is licensed under the GNU Affero General Public License v3.0 or later - see the [LICENSE](LICENSE) file for details.
-
-```bash
-sudo mv mediamtx.yml /etc/mediamtx/
-rm -rf mediamtx_v1.11.3_linux_arm64v8.tar.gz LICENSE
-mediamtx --version
-```
