@@ -217,7 +217,7 @@ python --version
 Make sure the Pi is connected to a Network and install numpy:
 
 ```bash
-sudo apt install python3-numpy python3-websockets
+sudo apt install -y python3-numpy python3-websockets
 ```
 
 TODO: Write instructions for setting up motor control (This probably involves moving over the files)
