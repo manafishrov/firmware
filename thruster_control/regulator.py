@@ -31,6 +31,9 @@ def PID(state, previous_state, state_integral, desired_state, dt):
     return Kp * error + Ki * state_integral + Kd * derivative
 
 
+def regulate():
+    #This function should get the user input for pitch and roll, then return the actuation directions with the help of PID
+    pass
 
 
 
