@@ -226,6 +226,8 @@ Move over the `device_controls` files to the Pi by running this on your computer
 scp -r device_controls/* pi@10.10.10.10:~/
 ```
 
+Just rerun the above command to move over new files to the Pi when you make changes to them (everything has to be kept in the device_controls directory).
+
 Then run the python script to start the device controls:
 
 ```bash
