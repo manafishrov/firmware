@@ -220,7 +220,19 @@ Make sure the Pi is connected to a Network and install dependencies:
 sudo apt install -y python3-numpy python3-websockets
 ```
 
-TODO: Write instructions for setting up motor control (This probably involves moving over the files)
+Move over the `device_controls` files to the Pi by running this on your computer:
+
+```bash
+scp -r device_controls/* pi@10.10.10.10:~/
+```
+
+Then run the python script to start the device controls:
+
+```bash
+python main.py
+```
+
+TODO: Setup systemd service for device controls to run on startup.
 
 ### Setup streaming
 
