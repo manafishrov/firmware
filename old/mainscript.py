@@ -26,6 +26,9 @@ while True:
         print("QUIT SIGNAL RECEIVED. EXITING.")
         break
     
+    wetsensor_status = wetsensor.get_wetsensor_status()
+    communication.send_wetsensor_status(s, wetsensor_status)
+
     direction_vector = thrusters.tuning_correction(direction_vector)
     
     thrust_vector = thrusters.thrust_allocation(direction_vector, thrustAllocationMatrix)
@@ -42,6 +45,37 @@ while True:
     time.sleep(1)
 
 dshot.cleanup_thrusters()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

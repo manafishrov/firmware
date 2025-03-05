@@ -87,6 +87,7 @@ async def handle_client(websocket):
         status_task.cancel()
 
 async def main():
+    # INITIALIZING WEBSOCKET SERVER
     try:
         ip_address = get_ip_address()
         port = int(get_device_controls_port())
@@ -98,7 +99,6 @@ async def main():
         )
 
         await server.wait_closed()
-
     except Exception as e:
         logging.error(f"Server error: {e}")
 
