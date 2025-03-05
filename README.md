@@ -204,7 +204,7 @@ ffplay tcp://10.10.10.10:6900
 
 This requires `ffmpeg` to be installed on your computer.
 
-### Setup motor control
+### Setup device controls
 
 The Pi should already have python installed. You can check the version by running:
 
@@ -214,7 +214,7 @@ python --version
 
 #### Install packages
 
-Make sure the Pi is connected to a Network and install numpy:
+Make sure the Pi is connected to a Network and install dependencies:
 
 ```bash
 sudo apt install -y python3-numpy python3-websockets
