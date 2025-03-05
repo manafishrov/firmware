@@ -1,5 +1,4 @@
 import asyncio
-import json
 import websockets
 
 async def handle_client(websocket):
@@ -19,19 +18,8 @@ async def handle_client(websocket):
 
     try:
         heartbeat_task = asyncio.create_task(send_heartbeat())
-        
         async for message in websocket:
-            print(f"Received message: {message}")
-            try:
-                if message == "EMERGENCY_STOP":
-                    print("Emergency stop received!")
-                else:
-                    data = json.loads(message)
-                    if any(abs(x) > 0.0 for x in data):
-                        print(f"Received non-zero input: {data}")
-            except json.JSONDecodeError:
-                print(f"Failed to parse message: {message}")
-                
+            print(f"Received raw message: {message}")
     except websockets.exceptions.ConnectionClosed:
         print("Client disconnected")
     finally:
