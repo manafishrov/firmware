@@ -22,3 +22,6 @@ def get_ip_address():
 
 def get_device_controls_port():
     return load_config()['network']['device_controls_port']
+
+def get_thruster_magnitude():
+    return int(load_config()['thrusters']['magnitude'])

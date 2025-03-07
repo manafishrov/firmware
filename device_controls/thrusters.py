@@ -1,5 +1,6 @@
 import numpy as np
 import dshot_thrust_control as dshot
+from config import get_thruster_magnitude
 
 def tuning_correction(direction_vector):
     correction_matrix = np.array([
@@ -52,6 +53,10 @@ def linear_ramping(thrust_vector, previous_thrust_vector, ramp_rate):
 
     return new_thrust_vector
 
+def adjust_magnitude(thrust_vector, magnitude):
+    thrust_vector = thrust_vector * magnitude
+    return thrust_vector
+
 def print_thrust_vector(thrust_vector):
     print(f"Thrust vector: {thrust_vector}")
 
@@ -65,6 +70,8 @@ def run_thrusters(direction_vector):
     thrust_vector = linear_ramping(thrust_vector, previous_thrust_vector, 0.1)
 
     previous_thrust_vector = thrust_vector
+
+    thrust_vector = adjust_magnitude(thrust_vector, float(get_thruster_magnitude()))
 
     dshot.send_thrust_values(thrust_vector)
 
