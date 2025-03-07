@@ -5,6 +5,10 @@ import websockets
 import logging
 from config import get_ip_address, get_device_controls_port
 
+# User made packages
+import wetsensor
+import thrusters
+
 water_sensor_status = False
 
 async def handle_client(websocket):
@@ -30,7 +34,9 @@ async def handle_client(websocket):
     async def send_status_updates():
         # THIS IS WHERE WE NEED TO PUT THE CODE TO READ THE WATER SENSOR
         # Preferably we import from another file.
-        global water_sensor_status
+        global water_sensor_status 
+        water_sensor_status = wetsensor.check_sensor()
+
         counter = 0
         while True:
             try:
@@ -71,6 +77,8 @@ async def handle_client(websocket):
                     if isinstance(payload, list) and len(payload) == 6:
                         # HERE WE GET THE INPUT ARRAY FROM THE APP
                         # Call motor control function here
+                        thrusters.run_thrusters(payload)
+
                         logging.info(f"Received control input: {payload}")
                     else:
                         logging.warning(f"Invalid control input format: {payload}")
@@ -86,7 +94,10 @@ async def handle_client(websocket):
         heartbeat_task.cancel()
         status_task.cancel()
 
-async def main():
+async def main(): 
+    # INITIALIZING THRUSTERS
+    thrusters.initialize_thrusters()
+
     # INITIALIZING WEBSOCKET SERVER
     try:
         ip_address = get_ip_address()

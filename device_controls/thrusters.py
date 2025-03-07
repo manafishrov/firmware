@@ -1,4 +1,5 @@
 import numpy as np
+import dshot_thrust_control as dshot
 
 def tuning_correction(direction_vector):
     correction_matrix = np.array([
@@ -53,3 +54,25 @@ def linear_ramping(thrust_vector, previous_thrust_vector, ramp_rate):
 
 def print_thrust_vector(thrust_vector):
     print(f"Thrust vector: {thrust_vector}")
+
+def run_thrusters(direction_vector):
+    direction_vector = tuning_correction(direction_vector)
+    
+    thrust_vector = thrust_allocation(direction_vector, thrustAllocationMatrix)
+    
+    thrust_vector = normalize_thrust_vector(thrust_vector)
+    
+    thrust_vector = linear_ramping(thrust_vector, previous_thrust_vector, 0.1)
+
+    previous_thrust_vector = thrust_vector
+
+    dshot.send_thrust_values(thrust_vector)
+
+
+def initialize_thrusters():
+    dshot.initialize_thrusters()
+    print("Thruster initialization complete!")
+
+# Initialization processes
+previous_thrust_vector = np.array([0, 0, 0, 0, 0, 0, 0, 0])
+thrustAllocationMatrix = get_thrust_allocation_matrix()

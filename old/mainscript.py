@@ -3,10 +3,10 @@ import socket
 import json
 import time
 
-from thruster_control import thrusters
+from device_controls import thrusters
 from thruster_control import communication
-from thruster_control import dshot_thrust_control as dshot
-from thruster_control import wetsensor
+from device_controls import dshot_thrust_control as dshot
+from device_controls import wetsensor
 
 
 # CONFIG VARIABLES
