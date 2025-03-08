@@ -60,8 +60,14 @@ def adjust_magnitude(thrust_vector, magnitude):
 def print_thrust_vector(thrust_vector):
     print(f"Thrust vector: {thrust_vector}")
 
-def run_thrusters(direction_vector):
+def run_thrusters(direction_vector, PID_enabled=False):
+    global previous_thrust_vector
+
     direction_vector = tuning_correction(direction_vector)
+
+    if PID_enabled:
+        #direction_vector = PID_controller(direction_vector)
+        pass
     
     thrust_vector = thrust_allocation(direction_vector, thrustAllocationMatrix)
     
