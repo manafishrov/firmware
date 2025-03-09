@@ -57,6 +57,11 @@ def adjust_magnitude(thrust_vector, magnitude):
     thrust_vector = thrust_vector * magnitude
     return thrust_vector
 
+def correct_spin_direction(thrust_vector):
+    spin_directions = np.array([1, -1, -1, 1, -1, -1, -1, -1])
+    thrust_vector = thrust_vector * spin_directions
+    return thrust_vector
+
 def print_thrust_vector(thrust_vector):
     print(f"Thrust vector: {thrust_vector}")
 
@@ -77,13 +82,16 @@ def run_thrusters(direction_vector, PID_enabled=False):
 
     previous_thrust_vector = thrust_vector
 
-    thrust_vector = adjust_magnitude(thrust_vector, float(get_thruster_magnitude()))
+    #thrust_vector = adjust_magnitude(thrust_vector, float(get_thruster_magnitude()))
+    thrust_vector = adjust_magnitude(thrust_vector, 0.3)
+    
+    thrust_vector = correct_spin_direction(thrust_vector)
 
     dshot.send_thrust_values(thrust_vector)
 
 
 def initialize_thrusters():
-    dshot.initialize_thrusters()
+    dshot.setup_thrusters([6, 19, 13, 26, 7, 8, 25, 1])
     print("Thruster initialization complete!")
 
 # Initialization processes
