@@ -35,13 +35,12 @@ async def handle_client(websocket):
         # THIS IS WHERE WE NEED TO PUT THE CODE TO READ THE WATER SENSOR
         # Preferably we import from another file.
         global water_sensor_status 
-        water_sensor_status = wetsensor.check_sensor(15)
 
         counter = 0
         while True:
             try:
-                if counter % 10 == 0:
-                    water_sensor_status = not water_sensor_status
+                if counter % 1 == 0:
+                    water_sensor_status = water_sensor_status = wetsensor.check_sensor(15)
                     status_msg = {
                         "message_type": "Status",
                         "payload": {
@@ -79,7 +78,7 @@ async def handle_client(websocket):
                         # Call motor control function here
                         thrusters.run_thrusters(payload)
 
-                        logging.info(f"Received control input: {payload}")
+                        #logging.info(f"Received control input: {payload}")
                     else:
                         logging.warning(f"Invalid control input format: {payload}")
                 else:
@@ -97,6 +96,7 @@ async def handle_client(websocket):
 async def main(): 
     # INITIALIZING THRUSTERS
     thrusters.initialize_thrusters()
+    wetsensor.setup_sensor()
 
     # INITIALIZING WEBSOCKET SERVER
     try:
