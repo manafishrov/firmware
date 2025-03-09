@@ -40,7 +40,7 @@ async def handle_client(websocket):
         while True:
             try:
                 if counter % 1 == 0:
-                    water_sensor_status = water_sensor_status = wetsensor.check_sensor(15)
+                    water_sensor_status = wetsensor.check_sensor(15)
                     status_msg = {
                         "message_type": "Status",
                         "payload": {
