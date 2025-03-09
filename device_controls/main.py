@@ -35,7 +35,7 @@ async def handle_client(websocket):
         # THIS IS WHERE WE NEED TO PUT THE CODE TO READ THE WATER SENSOR
         # Preferably we import from another file.
         global water_sensor_status 
-        water_sensor_status = wetsensor.check_sensor()
+        water_sensor_status = wetsensor.check_sensor(15)
 
         counter = 0
         while True:
