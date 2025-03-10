@@ -96,6 +96,8 @@ async def handle_client(websocket):
 async def main(): 
     # INITIALIZING THRUSTERS
     thrusters.initialize_thrusters()
+    print("10 second wait for thrusters to initialize starting now...")
+    time.sleep(10)
     wetsensor.setup_sensor()
 
     # INITIALIZING WEBSOCKET SERVER
