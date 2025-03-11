@@ -6,7 +6,7 @@
 
 Connect the SD card to your computer and make sure you have the latest version of [Raspberry Pi Imager](https://www.raspberrypi.com/software/) installed.
 
-When choosing operating system, select "Raspberry Pi OS (other)" > "Raspberry Pi OS Lite (64-bit)".
+When choosing operating system, select "Raspberry Pi OS (other)" > "Raspberry Pi OS Lite (32-bit)". (We need to use 32-bit for DSHOT to work)
 When asked to apply OS customisation settings, select "EDIT SETTINGS".
 
 - Set hostname to `cyberfish.local`
@@ -212,20 +212,65 @@ The Pi should already have python installed. You can check the version by runnin
 python --version
 ```
 
-#### Install packages
+#### Install python packages
 
 Make sure the Pi is connected to a Network and install dependencies:
 
 ```bash
-sudo apt install -y python3-numpy python3-websockets
+sudo apt install -y python3-dev python3-setuptools python3-numpy python3-websockets
 ```
 
-#### Flash firmware
+#### Build and install the DSHOT package
+
+The motor-dshot-smi.c, rpi_dma_utils.c, and rpi_dma_utils.h files have already been downloaded from the [Marian-Vittek/raspberry-pi-dshot-smi](https://github.com/Marian-Vittek/raspberry-pi-dshot-smi/tree/mai) repository into the dshot directory using:
+
+```bash
+wget -P dshot https://raw.githubusercontent.com/Marian-Vittek/raspberry-pi-dshot-smi/main/motor-dshot-smi.c
+wget -P dshot https://raw.githubusercontent.com/Marian-Vittek/raspberry-pi-dshot-smi/main/rpi_dma_utils.c
+wget -P dshot https://raw.githubusercontent.com/Marian-Vittek/raspberry-pi-dshot-smi/main/rpi_dma_utils.h
+```
+
+If there are any updates to the files in the repository, you can download them again using the above commands, but most likely they are fine.
+The dshotmodule.c file is a custom python wrapper for the library and the setup.py is for building the python package.
+
+Next, move over the `dshot` directory to the Pi by running this on your computer:
+
+```bash
+scp -r dshot/* pi@10.10.10.10:~/dshot
+```
+
+Enter the dshot directory on the Pi:
+
+```bash
+cd dshot
+```
+
+Then build the python package:
+
+```bash
+sudo python setup.py build_ext --inplace
+```
+
+Install the package to the system:
+
+```bash
+sudo python setup.py install
+```
+
+And delete the dshot directory on the Pi:
+
+```bash
+sudo rm -rf ~/dshot
+```
+
+This will make it possible to use the `dshot` module in your python code by running `import dshot`. To look at how the python API looks, you can look at the `dshotmodule.c` file.
+
+#### Flash device controls firmware
 
 Move over the `device_controls` files to the Pi by running this on your computer:
 
 ```bash
-scp -r device_controls/* pi@10.10.10.10:~/
+scp -r device_controls/* pi@10.10.10.10:~/device_controls
 ```
 
 Just rerun the above command to move over new files to the Pi when you make changes to them (everything has to be kept in the device_controls directory).
@@ -233,16 +278,74 @@ Just rerun the above command to move over new files to the Pi when you make chan
 Then run the python script to start the device controls:
 
 ```bash
-python main.py
+python device_controls/main.py
 ```
 
-TODO: Setup systemd service for device controls to run on startup.
+#### Run device controls on startup and in the background
+
+Create a systemd service file to run the device controls files on startup:
+
+```bash
+sudo vi /etc/systemd/system/device-controls.service
+```
+
+Add the following content to the file:
+
+```ini
+[Unit]
+Description=Device Controls
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /home/pi/firmware/main.py
+WorkingDirectory=/home/pi/firmware
+Restart=always
+RestartSec=3
+User=root
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Reload the systemd daemon
+
+```bash
+sudo systemctl daemon-reload
+```
+
+To start and stop the service during development:
+
+```bash
+sudo systemctl start device-controls
+
+sudo systemctl stop device-controls
+```
+
+Run this to get continuous logs from the service during testing:
+
+```bash
+sudo journalctl -u device-controls -f
+```
+
+You can check the status of the service with:
+
+```bash
+sudo systemctl status device-controls
+```
+
+Enable the service to run automatically on startup using:
+
+```bash
+sudo systemctl enable device-controls
+```
 
 ### Setup streaming
 
 #### Install MediaMTX
 
-First download MediaMTX:
+First download MediaMTX on the Pi:
 
 ```bash
 wget https://github.com/bluenviron/mediamtx/releases/download/v1.11.3/mediamtx_v1.11.3_linux_arm64v8.tar.gz
