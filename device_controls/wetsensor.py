@@ -5,11 +5,9 @@ def setup_sensor():
     # Use BCM pin numbering
     GPIO.setmode(GPIO.BCM)
 
-    pin = int(input("Enter the GPIO pin for the wet sensor (15 default): "))
     # Set up the pin as input (no internal pull-up/down resistor)
-    GPIO.setup(pin, GPIO.IN)
+    GPIO.setup(15, GPIO.IN)
 
-    return pin
 
 def check_sensor(pin):
     # Read the sensor state: HIGH means wet (moisture detected), LOW means dry
