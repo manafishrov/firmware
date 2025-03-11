@@ -76,10 +76,8 @@ def run_thrusters(direction_vector, PID_enabled=False):
     
     thrust_vector = thrust_allocation(direction_vector, thrustAllocationMatrix)
     
-    thrust_vector = normalize_thrust_vector(thrust_vector)
+    thrust_vector = normalize_thrust_vector(thrust_vector) #TODO: This has to change to allow larger values from regulator
     
-    thrust_vector = linear_ramping(thrust_vector, previous_thrust_vector, 0.1)
-
     previous_thrust_vector = thrust_vector
 
     #thrust_vector = adjust_magnitude(thrust_vector, float(get_thruster_magnitude()))
