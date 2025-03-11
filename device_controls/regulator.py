@@ -1,40 +1,117 @@
 import numpy as np
+import time
 
-pitch = 0
-roll = 0
+import imu
 
-estimated_state = np.array([pitch, roll])
-state_integral = 0
+# Variables owned by this script
+desired_pitch = 0
+desired_roll = 0
 
-# This method is similar to a luenberger observer, but somewhat different because i use 
-def update_estimated_state(previous_state, gyro_measure, accel_measure, dt):
-    estimate = previous_state + gyro_measure * dt
+previous_pitch = 0
+previous_roll = 0
 
-    estimate_error = accel_measure - estimate
+current_dt_pitch = 0
+current_dt_roll = 0
 
-    L = 0.1
-    estimate = estimate - L * estimate_error * dt
+integral_value_pitch = 0
+integral_value_roll = 0
 
-    return estimate
+last_called_time = 0
 
+# TUNING PARAMETERS
+Kp = 0.1
+Ki = 0.1
+Kd = 0.1
 
+turn_speed = 0.1
+EMA_lambda = 0.8
 
-def PID(state, previous_state, state_integral, desired_state, dt):
-    Kp = 0.1
-    Ki = 0.1
-    Kd = 0.1
+def PID(current_value, desired_value, integral_value, derivative_value):
+    error = desired_value - current_value
+    return Kp * error + Ki * integral_value + Kd * derivative_value
 
-    error = desired_state - state
-    state_integral += error * dt
-    derivative = (state - previous_state) / dt
+def update_desired_pitch_roll(pitch_change, roll_change, delta_t):
+    # To completely finish this function, i need to know the range of the pitch and roll values from the IMU
+    global desired_pitch, desired_roll
+    pass
 
-    return Kp * error + Ki * state_integral + Kd * derivative
 
 
 def regulate_pitch_yaw(direction_vector):
-    #This function should get the user input for pitch and roll, then return the actuation directions with the help of PID
+    global current_dt_pitch, current_dt_roll, previous_pitch, previous_roll, integral_value_pitch, integral_value_roll, last_called_time
+
+    # Update time
+    delta_t = time.time() - last_called_time
+    last_called_time = time.time()
+
+    # Get current pitch and roll values from the IMU
+    current_pitch, current_roll = imu.get_imu_data()
+
+    # Update desired pitch and roll values
+    desired_pitch_change = direction_vector[0]
+    desired_roll_change = direction_vector[1]
+    update_desired_pitch_roll(desired_pitch_change, desired_roll_change)
+
+    # Update integral values
+    integral_value_pitch += (current_pitch - desired_pitch) * delta_t
+    integral_value_roll += (current_roll - desired_roll) * delta_t
+
+    # Calculate derivative values using exponential moving average
+    current_dt_pitch = EMA_lambda * current_dt_pitch + (1-EMA_lambda)*(current_pitch-previous_pitch)/delta_t
+    current_dt_roll = EMA_lambda * current_dt_roll + (1-EMA_lambda)*(current_roll-previous_roll)/delta_t
+
+    # Calculate actuation for pitch and roll using PID
+    pitch_actuation = PID(current_pitch, desired_pitch, integral_value_pitch, current_dt_pitch)
+    roll_actuation = PID(current_roll, desired_roll, integral_value_roll, current_dt_roll)
+
+    # Update previous pitch and roll values
+    previous_pitch = current_pitch
+    previous_roll = current_roll
+
+    # Put the actuation values into the direction vector
+    direction_vector[0] = pitch_actuation
+    direction_vector[1] = roll_actuation
+
+    return direction_vector
+
+
+# A function similar to the previous one, but insted of getting user input it regulates to an absolute specified value.
+# Good for tuning parameters or resetting ROV position to neutral.  
+def regulate_to_absolute(direction_vector, target_pitch, target_roll):
+    global current_dt_pitch, current_dt_roll, previous_pitch, previous_roll, integral_value_pitch, integral_value_roll, last_called_time
+
+    # Update time
+    delta_t = time.time() - last_called_time
+    last_called_time = time.time()
+
+    # Get current pitch and roll values from the IMU
+    current_pitch, current_roll = imu.get_imu_data()
+
+    # Update integral values
+    integral_value_pitch += (current_pitch - target_pitch) * delta_t
+    integral_value_roll += (current_roll - target_roll) * delta_t
+
+    # Calculate derivative values using exponential moving average
+    current_dt_pitch = EMA_lambda * current_dt_pitch + (1-EMA_lambda)*(current_pitch-previous_pitch)/delta_t
+    current_dt_roll = EMA_lambda * current_dt_roll + (1-EMA_lambda)*(current_roll-previous_roll)/delta_t
+
+    # Calculate actuation for pitch and roll using PID
+    pitch_actuation = PID(current_pitch, target_pitch, integral_value_pitch, current_dt_pitch)
+    roll_actuation = PID(current_roll, target_roll, integral_value_roll, current_dt_roll)
+
+    # Update previous pitch and roll values
+    previous_pitch = current_pitch
+    previous_roll = current_roll
+
+    # Put the actuation values into the direction vector
+    direction_vector[0] = pitch_actuation
+    direction_vector[1] = roll_actuation
+
+    return direction_vector
+
+
     
-    pass
+    
 
 
 
