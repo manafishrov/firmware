@@ -220,6 +220,8 @@ Make sure the Pi is connected to a Network and install dependencies:
 sudo apt install -y python3-numpy python3-websockets
 ```
 
+#### Flash firmware
+
 Move over the `device_controls` files to the Pi by running this on your computer:
 
 ```bash
