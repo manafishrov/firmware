@@ -1,6 +1,5 @@
 import numpy as np
 import dshot_thrust_control as dshot
-from config import get_thruster_magnitude
 
 import regulator
 

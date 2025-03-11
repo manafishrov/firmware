@@ -4,7 +4,7 @@ import numpy as np
 
 #Variables owned by this script
 sensor = None
-last_measurement_time = 0
+last_measurement_time = time.time()
 current_pitch = 0
 current_roll = 0
 
@@ -12,9 +12,12 @@ current_roll = 0
 alpha = 0.98
 
 def init_sensor():
-    global sensor
+    global sensor, last_measurement_time
     sensor = pybmi2.BMI270()
     sensor.set_power_mode(accel=True, gyro=True)
+
+    last_measurement_time = time.time()
+    
 
 
 def get_imu_data():
@@ -43,6 +46,13 @@ def get_imu_data():
     return current_pitch, current_roll
     
 
+def log_imu_data(filename):
+    # Adds current pitch, current roll, and last measurment time to a file
+    global current_pitch, current_roll, last_measurement_time
+    with open(filename, "a") as f:
+        f.write(f"{current_pitch}, {current_roll}, {last_measurement_time}\n")
+
+        
 
     
 

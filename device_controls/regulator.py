@@ -16,7 +16,7 @@ current_dt_roll = 0
 integral_value_pitch = 0
 integral_value_roll = 0
 
-last_called_time = 0
+last_called_time = time.time()
 
 # TUNING PARAMETERS
 Kp = 0.1
@@ -28,7 +28,7 @@ EMA_lambda = 0.8
 
 def PID(current_value, desired_value, integral_value, derivative_value):
     error = desired_value - current_value
-    return Kp * error + Ki * integral_value + Kd * derivative_value
+    return Kp * error + Ki * integral_value - Kd * derivative_value
 
 def update_desired_pitch_roll(pitch_change, roll_change, delta_t):
     # To completely finish this function, i need to know the range of the pitch and roll values from the IMU
@@ -50,11 +50,11 @@ def regulate_pitch_yaw(direction_vector):
     # Update desired pitch and roll values
     desired_pitch_change = direction_vector[0]
     desired_roll_change = direction_vector[1]
-    update_desired_pitch_roll(desired_pitch_change, desired_roll_change)
+    update_desired_pitch_roll(desired_pitch_change, desired_roll_change, delta_t)
 
     # Update integral values
-    integral_value_pitch += (current_pitch - desired_pitch) * delta_t
-    integral_value_roll += (current_roll - desired_roll) * delta_t
+    integral_value_pitch += (desired_pitch - current_pitch) * delta_t
+    integral_value_roll  += (desired_roll - current_roll) * delta_t
 
     # Calculate derivative values using exponential moving average
     current_dt_pitch = EMA_lambda * current_dt_pitch + (1-EMA_lambda)*(current_pitch-previous_pitch)/delta_t
@@ -88,9 +88,9 @@ def regulate_to_absolute(direction_vector, target_pitch, target_roll):
     current_pitch, current_roll = imu.get_imu_data()
 
     # Update integral values
-    integral_value_pitch += (current_pitch - target_pitch) * delta_t
-    integral_value_roll += (current_roll - target_roll) * delta_t
-
+    integral_value_pitch += (desired_pitch - current_pitch) * delta_t
+    integral_value_roll  += (desired_roll - current_roll) * delta_t
+    
     # Calculate derivative values using exponential moving average
     current_dt_pitch = EMA_lambda * current_dt_pitch + (1-EMA_lambda)*(current_pitch-previous_pitch)/delta_t
     current_dt_roll = EMA_lambda * current_dt_roll + (1-EMA_lambda)*(current_roll-previous_roll)/delta_t
