@@ -32,28 +32,6 @@ def thrust_allocation(input_vector, thrustAllocationMatrix):
 
     return thrust_vector.astype(np.float64)
 
-def normalize_thrust_vector(thrust_vector):
-    
-    # Normalize thrust vector by dividing by the maximum value, unused
-    max_thrust = np.max(np.abs(thrust_vector))
-    if max_thrust > 0.01:
-        thrust_vector /= max_thrust
-
-    return thrust_vector
-
-def linear_ramping(thrust_vector, previous_thrust_vector, ramp_rate):
-    # Unused
-    difference = thrust_vector - previous_thrust_vector
-    difference_norm = np.linalg.norm(difference)
-    
-    if difference_norm > ramp_rate:
-        unity_differece = difference / difference_norm 
-        new_thrust_vector = previous_thrust_vector + unity_differece * ramp_rate
-    else:
-        new_thrust_vector = thrust_vector
-
-    return new_thrust_vector
-
 def adjust_magnitude(thrust_vector, magnitude):
     thrust_vector = thrust_vector * magnitude
     return thrust_vector
