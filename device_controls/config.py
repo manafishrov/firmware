@@ -26,6 +26,30 @@ def get_device_controls_port():
 def get_thruster_magnitude():
     return int(load_config()['thrusters']['magnitude'])
 
+def get_thruster1_pin():
+    return int(load_config()['thrusters']['thruster1_pin'])
+
+def get_thruster2_pin():
+    return int(load_config()['thrusters']['thruster2_pin'])
+
+def get_thruster3_pin():
+    return int(load_config()['thrusters']['thruster3_pin'])
+
+def get_thruster4_pin():
+    return int(load_config()['thrusters']['thruster4_pin'])
+
+def get_thruster5_pin():
+    return int(load_config()['thrusters']['thruster5_pin'])
+
+def get_thruster6_pin():
+    return int(load_config()['thrusters']['thruster6_pin'])
+
+def get_thruster7_pin():    
+    return int(load_config()['thrusters']['thruster7_pin'])
+
+def get_thruster8_pin():
+    return int(load_config()['thrusters']['thruster8_pin'])
+
 def get_Kp():
     return float(load_config()['regulator']['Kp'])
 

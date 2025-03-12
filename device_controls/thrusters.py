@@ -2,6 +2,7 @@ import numpy as np
 import dshot_thrust_control as dshot
 
 import regulator
+import config
 
 def tuning_correction(direction_vector):
     correction_matrix = np.array([
@@ -65,7 +66,7 @@ def run_thrusters(direction_vector, PID_enabled=False):
 
 
 def initialize_thrusters():
-    dshot.setup_thrusters([6, 19, 13, 26, 7, 8, 25, 1])
+    dshot.setup_thrusters([config.get_thruster1_pin(), config.get_thruster2_pin(), config.get_thruster3_pin(), config.get_thruster4_pin(), config.get_thruster5_pin(), config.get_thruster6_pin(), config.get_thruster7_pin(), config.get_thruster8_pin()])
     print("Thruster initialization complete!")
 
 # Initialization processes
