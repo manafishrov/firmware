@@ -2,6 +2,7 @@ import numpy as np
 import time
 
 import imu
+import config
 
 # Variables owned by this script
 desired_pitch = 0
@@ -19,12 +20,12 @@ integral_value_roll = 0
 last_called_time = time.time()
 
 # TUNING PARAMETERS
-Kp = 0.1
-Ki = 0.1
-Kd = 0.1
+Kp = config.get_Kp()
+Ki = config.get_Ki()
+Kd = config.get_Kd()
 
-turn_speed = 0.1
-EMA_lambda = 0.8
+turn_speed = config.get_turn_speed()
+EMA_lambda = config.get_EMA_lambda()
 
 def PID(current_value, desired_value, integral_value, derivative_value):
     error = desired_value - current_value
@@ -48,7 +49,7 @@ def regulate_pitch_yaw(direction_vector):
     current_pitch, current_roll = imu.get_imu_data()
 
     # Update desired pitch and roll values
-    desired_pitch_change = direction_vector[0]
+    desired_pitch_change = direction_vector[0] # WRONG
     desired_roll_change = direction_vector[1]
     update_desired_pitch_roll(desired_pitch_change, desired_roll_change, delta_t)
 

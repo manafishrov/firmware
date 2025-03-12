@@ -2,6 +2,8 @@ import time
 import pybmi2
 import numpy as np
 
+import config
+
 #Variables owned by this script
 sensor = None
 last_measurement_time = time.time()
@@ -9,7 +11,7 @@ current_pitch = 0
 current_roll = 0
 
 # TUNING PARAMETERS
-alpha = 0.98
+CF_alpha = config.get_CF_alpha()   
 
 def init_sensor():
     global sensor, last_measurement_time
@@ -40,8 +42,8 @@ def get_imu_data():
     accel_roll = 180 * np.arctan2(accel[1], np.sqrt(accel[0]**2 + accel[2]**2)) / np.pi
 
     # Complementary filter
-    current_pitch = alpha * (current_pitch + gyro[0] * delta_t) + (1 - alpha) * accel_pitch
-    current_roll = alpha * (current_roll + gyro[1] * delta_t) + (1 - alpha) * accel_roll
+    current_pitch = CF_alpha * (current_pitch + gyro[0] * delta_t) + (1 - CF_alpha) * accel_pitch
+    current_roll = CF_alpha * (current_roll + gyro[1] * delta_t) + (1 - CF_alpha) * accel_roll
 
     return current_pitch, current_roll
     

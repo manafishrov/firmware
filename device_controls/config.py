@@ -26,3 +26,21 @@ def get_device_controls_port():
 def get_thruster_magnitude():
     return int(load_config()['thrusters']['magnitude'])
 
+def get_Kp():
+    return float(load_config()['regulator']['Kp'])
+
+def get_Ki():
+    return float(load_config()['regulator']['Ki'])
+
+def get_Kd():
+    return float(load_config()['regulator']['Kd'])
+
+def get_turn_speed():
+    return float(load_config()['regulator']['turn_speed'])
+
+def get_EMA_lambda():
+    return float(load_config()['regulator']['EMA_lambda'])
+
+def get_CF_alpha():
+    return float(load_config()['imu']['CF_alpha'])
+
