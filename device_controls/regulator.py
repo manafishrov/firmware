@@ -49,8 +49,8 @@ def regulate_pitch_yaw(direction_vector):
     current_pitch, current_roll = imu.get_imu_data()
 
     # Update desired pitch and roll values
-    desired_pitch_change = direction_vector[0] # WRONG
-    desired_roll_change = direction_vector[1]
+    desired_pitch_change = direction_vector[3]
+    desired_roll_change = direction_vector[5]
     update_desired_pitch_roll(desired_pitch_change, desired_roll_change, delta_t)
 
     # Update integral values
@@ -70,8 +70,8 @@ def regulate_pitch_yaw(direction_vector):
     previous_roll = current_roll
 
     # Put the actuation values into the direction vector
-    direction_vector[0] = pitch_actuation
-    direction_vector[1] = roll_actuation
+    direction_vector[3] = pitch_actuation
+    direction_vector[5] = roll_actuation
 
     return direction_vector
 
@@ -105,8 +105,8 @@ def regulate_to_absolute(direction_vector, target_pitch, target_roll):
     previous_roll = current_roll
 
     # Put the actuation values into the direction vector
-    direction_vector[0] = pitch_actuation
-    direction_vector[1] = roll_actuation
+    direction_vector[3] = pitch_actuation
+    direction_vector[5] = roll_actuation
 
     return direction_vector
 

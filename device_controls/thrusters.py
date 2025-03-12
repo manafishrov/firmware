@@ -47,6 +47,8 @@ def print_thrust_vector(thrust_vector):
 
 
 def run_thrusters(direction_vector, PID_enabled=False):
+    # direction vecor format [forward, side, up, pitch, yaw, roll]
+
     direction_vector = tuning_correction(direction_vector) # Probably not needed when we have a good PID controller
 
     if PID_enabled:
