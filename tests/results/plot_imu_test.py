@@ -2,7 +2,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Read the file
-file_path = "tests/results/IMUTEST_alpha95real.txt"  
+file_path = "tests/results/MPU6050_WITHGYRO.txt"  
 pitch, roll, time = [], [], []
 
 with open(file_path, "r") as file:
