@@ -33,12 +33,15 @@ def PID(current_value, desired_value, integral_value, derivative_value):
 
 def update_desired_pitch_roll(pitch_change, roll_change, delta_t):
     # To completely finish this function, i need to know the range of the pitch and roll values from the IMU
-    global desired_pitch, desired_roll
+    global desired_pitch, desired_roll, integral_value_pitch, integral_value_roll
+
+    integral_value_pitch = 0
+    integral_value_roll = 0
     pass
 
 
 
-def regulate_pitch_yaw(direction_vector):
+def regulate_pitch_roll(direction_vector):
     global current_dt_pitch, current_dt_roll, previous_pitch, previous_roll, integral_value_pitch, integral_value_roll, last_called_time
 
     # Update time

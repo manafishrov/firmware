@@ -53,7 +53,7 @@ def run_thrusters(direction_vector, PID_enabled=False):
     direction_vector = tuning_correction(direction_vector) # Probably not needed when we have a good PID controller
 
     if PID_enabled:
-        direction_vector = regulator.regulate_pitch_yaw(direction_vector)
+        direction_vector = regulator.regulate_pitch_roll(direction_vector)
             
     thrust_vector = thrust_allocation(direction_vector, thrustAllocationMatrix)
     
