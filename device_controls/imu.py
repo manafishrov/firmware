@@ -1,6 +1,6 @@
 import time
 import numpy as np
-from monster_imu_file import *
+from mpu6050 import mpu6050
 
 import config
 
@@ -16,20 +16,7 @@ CF_alpha = config.get_CF_alpha()
 def init_sensor():
     global sensor, last_measurement_time
     
-    sensor = BMI270(0x68)
-    sensor.load_config_file()
-    sensor.set_mode(PERFORMANCE_MODE)
-    sensor.set_acc_range(ACC_RANGE_2G)
-    sensor.set_gyr_range(GYR_RANGE_1000)
-    sensor.set_acc_odr(ACC_ODR_200)
-    sensor.set_gyr_odr(GYR_ODR_200)
-    sensor.set_acc_bwp(ACC_BWP_OSR4)
-    sensor.set_gyr_bwp(GYR_BWP_OSR4)
-    sensor.disable_fifo_header()
-    sensor.enable_data_streaming()
-    sensor.enable_acc_filter_perf()
-    sensor.enable_gyr_noise_perf()
-    sensor.enable_gyr_filter_perf()
+    sensor = mpu6050(0x68)
     print("--- IMU initialization finished! ---")
 
     last_measurement_time = time.time()
@@ -44,8 +31,8 @@ def update_pitch_roll():
         raise Exception("IMU sensor not initialized.")
     
     # Get sensor data
-    accel = sensor.get_acc_data()  # Returns (x, y, z) in m/s²
-    gyro = sensor.get_gyr_data()    # Returns (x, y, z) in °/s
+    accel = sensor.get_accel_data()  # Returns (x, y, z) in m/s²
+    gyro = sensor.get_gyro_data()    # Returns (x, y, z) in °/s
 
     # Update time
     delta_t = time.time() - last_measurement_time
@@ -65,7 +52,7 @@ def get_pitch_roll():
 
 def get_yaw_gyro():
     global sensor
-    gyro = sensor.get_gyr_data()    # Returns (x, y, z) in °/s
+    gyro = sensor.get_gyro_data()    # Returns (x, y, z) in °/s
     return gyro[2]
     
 

@@ -10,7 +10,7 @@ print("Measuring IMU for 10 seconds and logging")
 for i in range(500):
     imu.update_pitch_roll()
     data = imu.get_pitch_roll()
-    imu.log_imu_data("IMUTEST_"+filename+".txt")
+    imu.log_imu_data("MPU6050_"+filename+".txt")
 
     if i % 50 == 0:
         print(f"time: {i/50}")
