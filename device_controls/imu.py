@@ -31,8 +31,10 @@ def update_pitch_roll():
         raise Exception("IMU sensor not initialized.")
     
     # Get sensor data
-    accel = sensor.get_accel_data()  # Returns (x, y, z) in m/s²
-    gyro = sensor.get_gyro_data()    # Returns (x, y, z) in °/s
+    accel = sensor.get_accel_data()  # Returns dictionary with (x, y, z) in m/s²
+    accel = np.array([accel["x"], accel["y"], accel["z"]])
+    gyro = sensor.get_gyro_data()    # Returns dictionary with (x, y, z) in °/s
+    gyro = np.array([gyro["x"], gyro["y"], gyro["z"]])
 
     # Update time
     delta_t = time.time() - last_measurement_time
@@ -43,8 +45,8 @@ def update_pitch_roll():
     accel_roll = 180 * np.arctan2(accel[1], np.sqrt(accel[0]**2 + accel[2]**2)) / np.pi
 
     # Complementary filter
-    current_pitch = CF_alpha * (current_pitch + gyro[0] * delta_t) + (1 - CF_alpha) * accel_pitch
-    current_roll = CF_alpha * (current_roll + gyro[1] * delta_t) + (1 - CF_alpha) * accel_roll
+    current_pitch = CF_alpha * (current_pitch - gyro[1] * delta_t) + (1 - CF_alpha) * accel_pitch
+    current_roll = CF_alpha * (current_roll - gyro[0] * delta_t) + (1 - CF_alpha) * accel_roll
 
 def get_pitch_roll():
     global current_pitch, current_roll
