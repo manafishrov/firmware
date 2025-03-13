@@ -60,6 +60,11 @@ def get_imu_data():
     current_roll = CF_alpha * (current_roll + gyro[1] * delta_t) + (1 - CF_alpha) * accel_roll
 
     return current_pitch, current_roll
+
+def get_yaw_gyro():
+    global sensor
+    gyro = sensor.get_gyr_data()    # Returns (x, y, z) in °/s
+    return gyro[2]
     
 
 def log_imu_data(filename):
