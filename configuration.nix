@@ -7,7 +7,11 @@
   nix = {
     gc = {
       automatic = true;
-      interval.Day = 7;
+      interval = {
+        Hour = 3;
+        Minute = 15;
+        Weekday = 7;
+      };
       options = "--delete-older-than 30d";
     };
     settings = {
