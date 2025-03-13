@@ -63,7 +63,7 @@
   # Package settings
   environment.systemPackages = with pkgs; [
     git
-    nvim
+    neovim
     nano
     python3
   ];
