@@ -16,6 +16,5 @@
           ];
         };
       };
-      defaultNixosConfiguration = self.nixosConfigurations.cyberfish;
     };
 }
