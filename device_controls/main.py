@@ -9,7 +9,6 @@ from config import get_ip_address, get_device_controls_port
 import wetsensor
 import thrusters
 
-water_sensor_status = False
 
 async def handle_client(websocket):
     global water_sensor_status
@@ -34,7 +33,6 @@ async def handle_client(websocket):
     async def send_status_updates():
         # THIS IS WHERE WE NEED TO PUT THE CODE TO READ THE WATER SENSOR
         # Preferably we import from another file.
-        global water_sensor_status 
 
         counter = 0
         while True:
@@ -75,7 +73,6 @@ async def handle_client(websocket):
                 elif msg_type == "ControlInput":
                     if isinstance(payload, list) and len(payload) == 6:
                         # HERE WE GET THE INPUT ARRAY FROM THE APP
-                        # Call motor control function here
                         thrusters.run_thrusters(payload)
 
                         #logging.info(f"Received control input: {payload}")
