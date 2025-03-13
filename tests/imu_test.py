@@ -8,7 +8,8 @@ filename = input("Enter filename for logging: ")
 print("Measuring IMU for 10 seconds and logging")
 
 for i in range(500):
-    data = imu.get_imu_data()
+    imu.update_pitch_roll()
+    data = imu.get_pitch_roll()
     imu.log_imu_data("IMUTEST_"+filename+".txt")
 
     if i % 50 == 0:

@@ -36,7 +36,7 @@ def init_sensor():
     
 
 
-def get_imu_data():
+def update_pitch_roll():
     global sensor, last_measurement_time, current_pitch, current_roll
 
     # Check if sensor is initialized
@@ -59,6 +59,8 @@ def get_imu_data():
     current_pitch = CF_alpha * (current_pitch + gyro[0] * delta_t) + (1 - CF_alpha) * accel_pitch
     current_roll = CF_alpha * (current_roll + gyro[1] * delta_t) + (1 - CF_alpha) * accel_roll
 
+def get_pitch_roll():
+    global current_pitch, current_roll
     return current_pitch, current_roll
 
 def get_yaw_gyro():

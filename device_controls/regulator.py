@@ -49,7 +49,9 @@ def regulate_pitch_roll(direction_vector):
     last_called_time = time.time()
 
     # Get current pitch and roll values from the IMU
-    current_pitch, current_roll = imu.get_imu_data()
+    imu.update_pitch_roll()
+    current_pitch, current_roll = imu.get_pitch_roll()
+
 
     # Update desired pitch and roll values
     desired_pitch_change = direction_vector[3]
