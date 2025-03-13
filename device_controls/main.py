@@ -9,14 +9,23 @@ from config import get_ip_address, get_device_controls_port
 import wetsensor
 import thrusters
 
+# Variables owned by this script
+PID_enabled = True
+connected = True #Used to disable thrusters when loosing connection
 
 async def handle_client(websocket):
-    global water_sensor_status
     logging.info(f"Client connected from Cyberfish App at {websocket.remote_address}!")
+
+    heartbeat_received = True
 
     async def send_heartbeat():
         while True:
             try:
+                if not heartbeat_received:
+                    logging.error("Heartbeat not received in 1 second, disabling thrusters")
+                    connected = False
+                    thrusters.run_thrusters([0, 0, 0, 0, 0, 0], False)
+
                 heartbeat_msg = {
                     "message_type": "Heartbeat",
                     "payload": {
@@ -25,6 +34,9 @@ async def handle_client(websocket):
                 }
                 await websocket.send(json.dumps(heartbeat_msg))
                 logging.info("Sent heartbeat")
+
+                heartbeat_received = False
+
                 await asyncio.sleep(1)
             except Exception as e:
                 logging.error(f"Heartbeat error: {e}")
@@ -56,7 +68,6 @@ async def handle_client(websocket):
     try:
         heartbeat_task = asyncio.create_task(send_heartbeat())
         status_task = asyncio.create_task(send_status_updates())
-        # TODO: We can probably remove a lot of the logging, here but it is fine for now.
 
         async for message in websocket:
             try:
@@ -69,11 +80,12 @@ async def handle_client(websocket):
 
                 elif msg_type == "Heartbeat":
                     logging.info("Received heartbeat response")
+                    heartbeat_received = True
 
                 elif msg_type == "ControlInput":
                     if isinstance(payload, list) and len(payload) == 6:
                         # HERE WE GET THE INPUT ARRAY FROM THE APP
-                        thrusters.run_thrusters(payload)
+                        thrusters.run_thrusters(payload, PID_enabled)
 
                         #logging.info(f"Received control input: {payload}")
                     else:
