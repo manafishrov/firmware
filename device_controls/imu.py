@@ -41,12 +41,28 @@ def update_pitch_roll():
     last_measurement_time = time.time()
 
     # Convert accelerometer data to pitch and roll euler angles
-    accel_pitch = 180 * np.arctan2(accel[0], np.sqrt(accel[1]**2 + accel[2]**2)) / np.pi
-    accel_roll = 180 * np.arctan2(accel[1], np.sqrt(accel[0]**2 + accel[2]**2)) / np.pi
+    accel_pitch = np.degrees(np.arctan2(accel[0], np.sqrt(accel[1]**2 + accel[2]**2))) # Pitch angle that ranges between -90 and 90 degrees
+    accel_roll = np.degrees(np.arctan2(accel[1], accel[2])) # Roll angle between -180 and 180 degrees
+
+    print(f"Accel pitch: {accel_pitch}, Accel roll: {accel_roll}")
+
+    # 1: This makes sure the complimentary filter uses accelerometer data in the right way even when doing a full rotation
+    # and going from -180 to 180 degrees
+    if accel_roll - current_roll > 180:
+        current_roll += 360
+
+    if accel_roll - current_roll < -180:
+        current_roll -= 360
 
     # Complementary filter
     current_pitch = CF_alpha * (current_pitch - gyro[1] * delta_t) + (1 - CF_alpha) * accel_pitch
     current_roll = CF_alpha * (current_roll - gyro[0] * delta_t) + (1 - CF_alpha) * accel_roll
+
+    # Adjust angles back to be between -180 and 180 degrees
+    if current_roll > 180:
+        current_roll -= 360
+    if current_roll < -180:
+        current_roll += 360
 
 def get_pitch_roll():
     global current_pitch, current_roll
