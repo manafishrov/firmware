@@ -10,6 +10,7 @@ last_measurement_time = time.time()
 current_pitch = 0
 current_roll = 0
 
+
 # TUNING PARAMETERS
 CF_alpha = config.get_CF_alpha()   
 
@@ -54,15 +55,27 @@ def update_pitch_roll():
     if accel_roll - current_roll < -180:
         current_roll -= 360
 
-    # Complementary filter
-    current_pitch = CF_alpha * (current_pitch - gyro[1] * delta_t) + (1 - CF_alpha) * accel_pitch
+    # Complementary filter, pitch is updated with different gyro direction depening on if sensor is upside down or not
+    if current_roll >= 0:
+        current_pitch = CF_alpha * (current_pitch - gyro[1] * delta_t) + (1 - CF_alpha) * accel_pitch
+    else:
+        current_pitch = CF_alpha * (current_pitch + gyro[1] * delta_t) + (1 - CF_alpha) * accel_pitch
+    
     current_roll = CF_alpha * (current_roll - gyro[0] * delta_t) + (1 - CF_alpha) * accel_roll
 
-    # Adjust angles back to be between -180 and 180 degrees
+    # Adjust roll back to be between -180 and 180 degrees
     if current_roll > 180:
         current_roll -= 360
     if current_roll < -180:
         current_roll += 360
+
+    # Adjust pitch back to be between -90 and 90 degrees
+    if current_pitch > 90:
+        current_pitch = 90 - (current_pitch - 90)
+    if current_pitch < -90:
+        current_pitch = -90 + (current_pitch - 90)
+
+
 
 def get_pitch_roll():
     global current_pitch, current_roll
