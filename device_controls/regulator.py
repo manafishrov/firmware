@@ -73,7 +73,7 @@ def regulate_pitch_roll(direction_vector):
     # Update desired pitch and roll values
     desired_pitch_change = direction_vector[3]
     desired_roll_change = direction_vector[5]
-    update_desired_pitch_roll(desired_pitch_change, desired_roll_change, current_roll delta_t)
+    update_desired_pitch_roll(desired_pitch_change, desired_roll_change, current_roll, delta_t)
 
     # Update integral values
     integral_value_pitch += (desired_pitch - current_pitch) * delta_t
