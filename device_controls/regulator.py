@@ -31,13 +31,30 @@ def PID(current_value, desired_value, integral_value, derivative_value):
     error = desired_value - current_value
     return Kp * error + Ki * integral_value - Kd * derivative_value
 
-def update_desired_pitch_roll(pitch_change, roll_change, delta_t):
+def update_desired_pitch_roll(pitch_change, roll_change, current_roll, delta_t):
     # To completely finish this function, i need to know the range of the pitch and roll values from the IMU
     global desired_pitch, desired_roll, integral_value_pitch, integral_value_roll
 
+    # Reset integral values
     integral_value_pitch = 0
     integral_value_roll = 0
-    pass
+
+    # Update and clip desired pitch
+    desired_pitch += pitch_change * turn_speed * delta_t
+    desired_pitch = np.clip(desired_pitch, -80, 80)
+    
+    # Update and loop desired roll
+    desired_roll += roll_change * turn_speed * delta_t
+    if desired_roll > 180:
+        desired_roll -= 360
+    if desired_roll < -180:
+        desired_roll += 360
+
+    # Updating desired with regards to current roll to allow looping angles
+    if desired_roll - current_roll > 180:
+        desired_roll -= 360
+    if desired_roll - current_roll < -180:
+        desired_roll += 360
 
 
 
@@ -56,7 +73,7 @@ def regulate_pitch_roll(direction_vector):
     # Update desired pitch and roll values
     desired_pitch_change = direction_vector[3]
     desired_roll_change = direction_vector[5]
-    update_desired_pitch_roll(desired_pitch_change, desired_roll_change, delta_t)
+    update_desired_pitch_roll(desired_pitch_change, desired_roll_change, current_roll delta_t)
 
     # Update integral values
     integral_value_pitch += (desired_pitch - current_pitch) * delta_t
