@@ -82,7 +82,7 @@ def update_pitch_roll():
     if current_pitch > 90:
         current_pitch = 90 - (current_pitch - 90)
     if current_pitch < -90:
-        current_pitch = -90 + (current_pitch - 90)
+        current_pitch = -90 - (current_pitch + 90)
 
 
 def get_pitch_roll():
