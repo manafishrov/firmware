@@ -17,12 +17,14 @@ def load_config():
     config.read(config_path)
     return config
 
+# Network
 def get_ip_address():
     return load_config()['network']['ip_address']
 
 def get_device_controls_port():
     return load_config()['network']['device_controls_port']
 
+# Thrusters
 def get_thruster_magnitude():
     return int(load_config()['thrusters']['magnitude'])
 
@@ -50,6 +52,7 @@ def get_thruster7_pin():
 def get_thruster8_pin():
     return int(load_config()['thrusters']['thruster8_pin'])
 
+# Regulator
 def get_Kp():
     return float(load_config()['regulator']['Kp'])
 
@@ -65,6 +68,9 @@ def get_turn_speed():
 def get_EMA_lambda():
     return float(load_config()['regulator']['EMA_lambda'])
 
+# imu
 def get_CF_alpha():
     return float(load_config()['imu']['CF_alpha'])
 
+def get_GYRO_HPF_tau():
+    return float(load_config()['imu']['GYRO_HPF_tau'])
