@@ -1,8 +1,8 @@
 import time
 import numpy as np
-from mpu6050 import mpu6050
 
 import config
+from bmi270 import *
 
 # Variables owned by this script
 sensor = None
@@ -21,7 +21,20 @@ GYRO_HPF_tau = config.get_GYRO_HPF_tau()
 def init_sensor():
     global sensor, last_measurement_time
     
-    sensor = mpu6050(0x68)
+    sensor= BMI270(0x68)
+    sensor.load_config_file()
+    sensor.set_mode(PERFORMANCE_MODE)
+    sensor.set_acc_range(ACC_RANGE_2G)
+    sensor.set_gyr_range(GYR_RANGE_1000)
+    sensor.set_acc_odr(ACC_ODR_200)
+    sensor.set_gyr_odr(GYR_ODR_200)
+    sensor.set_acc_bwp(ACC_BWP_OSR4)
+    sensor.set_gyr_bwp(GYR_BWP_OSR4)
+    sensor.disable_fifo_header()
+    sensor.enable_data_streaming()
+    sensor.enable_acc_filter_perf()
+    sensor.enable_gyr_noise_perf()
+    sensor.enable_gyr_filter_perf()
     print("--- IMU initialization finished! ---")
 
     last_measurement_time = time.time()
