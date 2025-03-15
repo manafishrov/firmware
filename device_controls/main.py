@@ -8,17 +8,20 @@ from config import get_ip_address, get_device_controls_port
 # User made packages
 import wetsensor
 import thrusters
+import imu
 
 # Variables owned by this script
 PID_enabled = True
 connected = True #Used to disable thrusters when loosing connection
+heartbeat_received = True
 
 async def handle_client(websocket):
     logging.info(f"Client connected from Cyberfish App at {websocket.remote_address}!")
 
-    heartbeat_received = True
+    global heartbeat_received
 
     async def send_heartbeat():
+        global heartbeat_received, connected
         while True:
             try:
                 if not heartbeat_received:
@@ -65,9 +68,18 @@ async def handle_client(websocket):
                 logging.error(f"Status update error: {e}")
                 break
 
+    async def update_imu_reading():
+        while True:
+            try:
+                imu.update_pitch_roll()
+                await asyncio.sleep(0.01)
+            except Exception as e:
+                logging.error(f"IMU update error: {e}")
+
     try:
         heartbeat_task = asyncio.create_task(send_heartbeat())
         status_task = asyncio.create_task(send_status_updates())
+        imu_task = asyncio.create_task(update_imu_reading())
 
         async for message in websocket:
             try:
@@ -101,6 +113,7 @@ async def handle_client(websocket):
     finally:
         heartbeat_task.cancel()
         status_task.cancel()
+        imu_task.cancel()
 
 async def main(): 
     # INITIALIZING THRUSTERS
