@@ -91,8 +91,11 @@ def regulate_pitch_roll(direction_vector):
     previous_pitch = current_pitch
     previous_roll = current_roll
 
-    # Put the actuation values into the direction vector
-    direction_vector[3] = pitch_actuation
+    # Put the actuation values into the direction vector, if upside down, the pitch actuation is inverted
+    if current_roll >= 90 or current_roll <= -90:
+        direction_vector[3] = -pitch_actuation
+    else:
+        direction_vector[3] = pitch_actuation
     direction_vector[5] = roll_actuation
 
     return direction_vector
