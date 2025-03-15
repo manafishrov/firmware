@@ -217,7 +217,7 @@ python --version
 Make sure the Pi is connected to a Network and install dependencies:
 
 ```bash
-sudo apt install -y python3-dev python3-setuptools python3-numpy python3-websockets
+sudo apt install -y python3-dev python3-setuptools python3-numpy python3-websockets python3-smbus2 i2c-tools
 ```
 
 #### Build and install the DSHOT package
