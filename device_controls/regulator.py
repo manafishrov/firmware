@@ -28,6 +28,12 @@ turn_speed = config.get_turn_speed()
 EMA_lambda = config.get_EMA_lambda()
 
 def PID(current_value, desired_value, integral_value, derivative_value):
+    # Convert all values to radians (neccesary for ziegle-nichols method to work)
+    current_value = np.radians(current_value)
+    desired_value = np.radians(desired_value)
+    integral_value = np.radians(integral_value)
+    derivative_value = np.radians(derivative_value)
+
     error = desired_value - current_value
     return Kp * error + Ki * integral_value - Kd * derivative_value
 
