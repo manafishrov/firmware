@@ -27,7 +27,11 @@ async def handle_client(websocket):
                 if not heartbeat_received:
                     logging.error("Heartbeat not received in 1 second, disabling thrusters")
                     connected = False
-                    thrusters.run_thrusters([0, 0, 0, 0, 0, 0], False)
+                    for i in range(10):
+                        thrusters.run_thrusters([0, 0, 0, 0, 0, 0], False)
+                        await asyncio.sleep(0.1)
+
+                    logging.error("Thrusters disabled")
 
                 heartbeat_msg = {
                     "message_type": "Heartbeat",
