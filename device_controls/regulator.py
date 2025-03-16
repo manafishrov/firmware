@@ -84,6 +84,10 @@ def regulate_pitch_roll(direction_vector):
     integral_value_pitch += (desired_pitch - current_pitch) * delta_t
     integral_value_roll  += (desired_roll - current_roll) * delta_t
 
+    # Make sure the integral values don't get too big, prevent windup
+    integral_value_pitch = np.clip(integral_value_pitch, -1000, 1000)
+    integral_value_roll = np.clip(integral_value_roll, -1000, 1000)
+
     # Calculate derivative values using exponential moving average
     current_dt_pitch = EMA_lambda * current_dt_pitch + (1-EMA_lambda)*(current_pitch-previous_pitch)/delta_t
     current_dt_roll = EMA_lambda * current_dt_roll + (1-EMA_lambda)*(current_roll-previous_roll)/delta_t
