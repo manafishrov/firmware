@@ -7,6 +7,7 @@ import imu
 import regulator
 import thrusters
 
+imu.init_sensor()
 thrust_allocation_matrix = thrusters.get_thrust_allocation_matrix()
 thrusters.initialize_thrusters()
 
@@ -27,16 +28,22 @@ while running:
     
     # EKSTRASJEKK MED M-DAWG AT FREKVENSEN ER 50HZ
     for i in range(500):
+
+        imu.update_pitch_roll()
         imu.log_imu_data(filename)
 
         direction_vector = regulator.regulate_to_absolute(direction_vector, pitchVal, rollVal)
                 
-        thrust_vector = thrust_allocation(direction_vector, thrustAllocationMatrix)
+        thrust_vector = thrusters.thrust_allocation(direction_vector, thrust_allocation_matrix)
         
-        thrust_vector = correct_spin_direction(thrust_vector)
+        thrust_vector = thrusters.correct_spin_direction(thrust_vector)
 
-        thrust_vector = adjust_magnitude(thrust_vector, 0.3)
+        thrust_vector = thrusters.adjust_magnitude(thrust_vector, 0.3)
         
         thrust_vector = np.clip(thrust_vector, -1, 1) #Clipping cause the regulator can give values outside of the range [-1, 1]
         dshot.send_thrust_values(thrust_vector)
+        time.sleep(0.02)
+
+    for i in range(10):
+        dshot.send_thrust_values(np.array([0, 0, 0, 0, 0, 0, 0, 0]))
         time.sleep(0.02)

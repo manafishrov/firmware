@@ -120,7 +120,7 @@ def regulate_to_absolute(direction_vector, target_pitch, target_roll):
     last_called_time = time.time()
 
     # Get current pitch and roll values from the IMU
-    current_pitch, current_roll = imu.get_imu_data()
+    current_pitch, current_roll = imu.get_pitch_roll()
 
     # Update integral values
     integral_value_pitch += (desired_pitch - current_pitch) * delta_t
