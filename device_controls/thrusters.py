@@ -42,6 +42,12 @@ def correct_spin_direction(thrust_vector):
     thrust_vector = thrust_vector * spin_directions
     return thrust_vector
 
+def remove_deadzone(thrust_vector, deadzone = 0.015):
+    for i in range(len(thrust_vector)):
+        if abs(thrust_vector[i]) < deadzone:
+            thrust_vector[i] = 0
+    return thrust_vector
+
 def print_thrust_vector(thrust_vector):
     print(f"Thrust vector: {thrust_vector}")
 
@@ -62,6 +68,8 @@ def run_thrusters(direction_vector, PID_enabled=False):
     thrust_vector = adjust_magnitude(thrust_vector, 0.3)
     
     thrust_vector = np.clip(thrust_vector, -1, 1) #Clipping cause the regulator can give values outside of the range [-1, 1]
+    thrust_vector = remove_deadzone(thrust_vector)
+
     dshot.send_thrust_values(thrust_vector)
 
 

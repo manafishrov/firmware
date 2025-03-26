@@ -56,6 +56,8 @@ while running:
         
         # Clipping causes the regulator to give values outside of the range [-1, 1]
         thrust_vector = np.clip(thrust_vector, -1, 1)
+        thrust_vector = thrusters.remove_deadzone(thrust_vector)
+
         dshot.send_thrust_values(thrust_vector)
         time.sleep(0.02)
 
