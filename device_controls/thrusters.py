@@ -38,7 +38,7 @@ def adjust_magnitude(thrust_vector, magnitude):
     return thrust_vector
 
 def correct_spin_direction(thrust_vector):
-    spin_directions = np.array([1, -1, -1, 1, -1, -1, -1, -1])
+    spin_directions = np.array([1, 1, -1, -1, 1, 1, 1, 1])
     thrust_vector = thrust_vector * spin_directions
     return thrust_vector
 
