@@ -45,9 +45,10 @@ while running:
         imu.update_pitch_roll()
         imu.log_imu_data(filename)
 
-        direction_vector = regulator.regulate_to_absolute(direction_vector, pitchVal, rollVal)
+        direction_vector1 = regulator.regulate_to_absolute(direction_vector, pitchVal, rollVal)
+        print(direction_vector1)
                 
-        thrust_vector = thrusters.thrust_allocation(direction_vector, thrust_allocation_matrix)
+        thrust_vector = thrusters.thrust_allocation(direction_vector1, thrust_allocation_matrix)
         
         thrust_vector = thrusters.correct_spin_direction(thrust_vector)
 

@@ -135,8 +135,8 @@ def regulate_to_absolute(direction_vector, target_pitch, target_roll):
     current_pitch, current_roll = imu.get_pitch_roll()
 
     # Update integral values
-    integral_value_pitch += (desired_pitch - current_pitch) * delta_t
-    integral_value_roll  += (desired_roll - current_roll) * delta_t
+    integral_value_pitch += (target_pitch - current_pitch) * delta_t
+    integral_value_roll  += (target_roll - current_roll) * delta_t
     
     # Calculate derivative values using exponential moving average
     current_dt_pitch = EMA_lambda * current_dt_pitch + (1-EMA_lambda)*(current_pitch-previous_pitch)/delta_t
@@ -150,12 +150,8 @@ def regulate_to_absolute(direction_vector, target_pitch, target_roll):
     previous_pitch = current_pitch
     previous_roll = current_roll
 
-    # Put the actuation values into the direction vector
-    direction_vector[3] = pitch_actuation
-    direction_vector[5] = roll_actuation
-
-    return direction_vector
-
+    # Had to do it this way because of some weird python comy list stuff i dont understand, but this worked!
+    return np.array([0, 0, 0, pitch_actuation, 0, roll_actuation])
 
     
     

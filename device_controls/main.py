@@ -10,28 +10,12 @@ import wetsensor
 import thrusters
 import imu
 
-# Variables owned by this script
-PID_enabled = True
-connected = True #Used to disable thrusters when loosing connection
-heartbeat_received = True
-
 async def handle_client(websocket):
     logging.info(f"Client connected from Cyberfish App at {websocket.remote_address}!")
 
-    global heartbeat_received
-
     async def send_heartbeat():
-        global heartbeat_received, connected
         while True:
             try:
-                if not heartbeat_received:
-                    logging.error("Heartbeat not received in 1 second, disabling thrusters")
-                    connected = False
-                    for i in range(10):
-                        thrusters.run_thrusters([0, 0, 0, 0, 0, 0], False)
-                        await asyncio.sleep(0.1)
-
-                    logging.error("Thrusters disabled")
 
                 heartbeat_msg = {
                     "message_type": "Heartbeat",
@@ -41,8 +25,6 @@ async def handle_client(websocket):
                 }
                 await websocket.send(json.dumps(heartbeat_msg))
                 logging.info("Sent heartbeat")
-
-                heartbeat_received = False
 
                 await asyncio.sleep(1)
             except Exception as e:
@@ -73,7 +55,6 @@ async def handle_client(websocket):
                 break
 
     async def update_imu_reading():
-        i = 0
         while True:
             try:
                 imu.update_pitch_roll()
@@ -81,9 +62,6 @@ async def handle_client(websocket):
             except Exception as e:
                 logging.error(f"IMU update error: {e}")
             
-            if i % 100 == 0:
-                print(f"Pitch: {imu.current_pitch}, Roll: {imu.current_roll}")
-            i += 1
 
     try:
         heartbeat_task = asyncio.create_task(send_heartbeat())
@@ -101,12 +79,13 @@ async def handle_client(websocket):
 
                 elif msg_type == "Heartbeat":
                     logging.info("Received heartbeat response")
-                    heartbeat_received = True
+                    logging.info(f"Pitch: {imu.current_pitch}, Roll: {imu.current_roll}")
+
 
                 elif msg_type == "ControlInput":
                     if isinstance(payload, list) and len(payload) == 6:
                         # HERE WE GET THE INPUT ARRAY FROM THE APP
-                        thrusters.run_thrusters(payload, PID_enabled)
+                        thrusters.run_thrusters(payload, PID_enabled=False)
 
                         #logging.info(f"Received control input: {payload}")
                     else:
@@ -128,8 +107,7 @@ async def main():
     # INITIALIZING THRUSTERS
     imu.init_sensor()
     thrusters.initialize_thrusters()
-    print("10 second wait for thrusters to initialize starting now...")
-    time.sleep(10)
+    print("Thrusters are starting to initialize")
     wetsensor.setup_sensor()
 
     # INITIALIZING WEBSOCKET SERVER
