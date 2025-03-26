@@ -112,14 +112,14 @@ def regulate_pitch_roll(direction_vector):
     previous_pitch = current_pitch
     previous_roll = current_roll
 
+    #TODO: Remove forward connection in pitch and roll, and the desired pitch and roll values don't get updated
     # Put the actuation values into the direction vector, if upside down, the pitch actuation is inverted
     if current_roll >= 90 or current_roll <= -90:
-        direction_vector[3] = -pitch_actuation
+        actuation_vector = np.array([0, 0, 0, -pitch_actuation, 0, roll_actuation])
     else:
-        direction_vector[3] = pitch_actuation
-    direction_vector[5] = roll_actuation
+        actuation_vector = np.array([0, 0, 0, pitch_actuation, 0, roll_actuation])
 
-    return direction_vector
+    return direction_vector + actuation_vector
 
 
 # A function similar to the previous one, but insted of getting user input it regulates to an absolute specified value.
