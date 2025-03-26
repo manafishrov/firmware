@@ -24,6 +24,18 @@ Kp = config.get_Kp()
 Ki = config.get_Ki()
 Kd = config.get_Kd()
 
+def set_Kp(value):
+    global Kp
+    Kp = value
+
+def set_Ki(value):
+    global Ki  
+    Ki = value
+
+def set_Kd(value):
+    global Kd
+    Kd = value
+
 turn_speed = config.get_turn_speed()
 EMA_lambda = config.get_EMA_lambda()
 

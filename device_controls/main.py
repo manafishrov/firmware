@@ -65,7 +65,7 @@ async def handle_client(websocket):
                         }
                     }
                     await websocket.send(json.dumps(status_msg))
-                    logging.info(f"Sent status update: water_sensor_status={water_sensor_status}")
+                    #logging.info(f"Sent status update: water_sensor_status={water_sensor_status}")
                 counter += 1
                 await asyncio.sleep(1)
             except Exception as e:
@@ -73,12 +73,17 @@ async def handle_client(websocket):
                 break
 
     async def update_imu_reading():
+        i = 0
         while True:
             try:
                 imu.update_pitch_roll()
                 await asyncio.sleep(0.01)
             except Exception as e:
                 logging.error(f"IMU update error: {e}")
+            
+            if i % 100 == 0:
+                print(f"Pitch: {imu.current_pitch}, Roll: {imu.current_roll}")
+            i += 1
 
     try:
         heartbeat_task = asyncio.create_task(send_heartbeat())

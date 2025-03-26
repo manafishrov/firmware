@@ -13,22 +13,35 @@ thrusters.initialize_thrusters()
 
 running = True
 while running:
-    usercontinue = input("Do you want to continue? (y/n)")
-    if usercontinue == "n":
+    # Ask user if they want to test new PID parameters
+    usercontinue = input("Do you want to test new PID parameters? (y/n): ")
+    if usercontinue.lower() == "n":
         running = False
         break
 
+    # Get PID values from the user
+    Kp = float(input("Enter K_p value: "))
+    Ki = float(input("Enter K_i value: "))
+    Kd = float(input("Enter K_d value: "))
+
+    # Set the PID values in the regulator
+    regulator.set_Kp(Kp)
+    regulator.set_Ki(Ki)
+    regulator.set_Kd(Kd)
+
+    print(f"Current PID values: Kp={regulator.Kp}, Ki={regulator.Ki}, Kd={regulator.Kd}")
+
+    # Get pitch and roll target values
     pitchVal = float(input("Enter pitch value: "))
     rollVal = float(input("Enter roll value: "))
 
+    # Get filename for logging
     filename = input("Enter filename for logging: ")
 
-    print("Regulating to specified values for 10 seconds...")
+    print("Regulating to specified values for 8 seconds...")
     direction_vector = np.array([0, 0, 0, 0, 0, 0])
     
-    # EKSTRASJEKK MED M-DAWG AT FREKVENSEN ER 50HZ
-    for i in range(500):
-
+    for i in range(400):
         imu.update_pitch_roll()
         imu.log_imu_data(filename)
 
@@ -40,10 +53,12 @@ while running:
 
         thrust_vector = thrusters.adjust_magnitude(thrust_vector, 0.3)
         
-        thrust_vector = np.clip(thrust_vector, -1, 1) #Clipping cause the regulator can give values outside of the range [-1, 1]
+        # Clipping causes the regulator to give values outside of the range [-1, 1]
+        thrust_vector = np.clip(thrust_vector, -1, 1)
         dshot.send_thrust_values(thrust_vector)
         time.sleep(0.02)
 
+    # Stop all thrust for a short period after the run
     for i in range(10):
         dshot.send_thrust_values(np.array([0, 0, 0, 0, 0, 0, 0, 0]))
         time.sleep(0.02)
