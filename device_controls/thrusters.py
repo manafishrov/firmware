@@ -18,15 +18,16 @@ def tuning_correction(direction_vector):
 
 def get_thrust_allocation_matrix():
     # This matrix cannot contain values larger than 1 or smaller than -1
+    # Columns represent [forward, side, up, pitch, yaw, roll]
     return np.array([
-        [1, 1, 0, 0, 1, 0],
-        [1, -1, 0, 0, -1, 0],
+        [1, 1, 0, 0, 0.25, 0],
+        [1, -1, 0, 0, -0.25, 0],
         [0, 0, 1, -1, 0, 1],
         [0, 0, 1, -1, 0, -1],
         [0, 0, 1, 1, 0, 1],
         [0, 0, 1, 1, 0, -1],
-        [-1, 1, 0, 0, -1, 0],
-        [-1, -1, 0, 0, 1, 0]])
+        [-1, 1, 0, 0, -0.25, 0],
+        [-1, -1, 0, 0, 0.25, 0]])
 
 def thrust_allocation(input_vector, thrustAllocationMatrix): 
     thrust_vector = thrustAllocationMatrix @ input_vector
