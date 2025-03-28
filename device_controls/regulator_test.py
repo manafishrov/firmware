@@ -35,15 +35,19 @@ while running:
     pitchVal = float(input("Enter pitch value: "))
     rollVal = float(input("Enter roll value: "))
 
-    # Get filename for logging
-    filename = input("Enter filename for logging: ")
+    start = input("Press Enter to start the test... or type 'exit' to quit: ")
+    if start.lower() == "exit":
+        break
 
     print("Regulating to specified values for 8 seconds...")
     direction_vector = np.array([0, 0, 0, 0, 0, 0])
     
+    # Resetting the integrator term in regulator
+    regulator.integral_value_pitch = 0
+    regulator.integral_value_roll = 0
+
     for i in range(400):
         imu.update_pitch_roll()
-        imu.log_imu_data(filename)
 
         direction_vector1 = regulator.regulate_to_absolute(direction_vector, pitchVal, rollVal)
         print(direction_vector1)
