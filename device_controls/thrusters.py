@@ -22,12 +22,14 @@ def get_thrust_allocation_matrix():
     return np.array([
         [1, 1, 0, 0, 0.25, 0],
         [1, -1, 0, 0, -0.25, 0],
-        [0, 0, 1, -1, 0, 1],
-        [0, 0, 1, -1, 0, -1],
         [0, 0, 1, 1, 0, 1],
         [0, 0, 1, 1, 0, -1],
+        [0, 0, 1, -1, 0, 1],
+        [0, 0, 1, -1, 0, -1],
         [-1, 1, 0, 0, -0.25, 0],
         [-1, -1, 0, 0, 0.25, 0]])
+
+
 
 def thrust_allocation(input_vector, thrustAllocationMatrix): 
     thrust_vector = thrustAllocationMatrix @ input_vector
