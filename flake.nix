@@ -11,7 +11,7 @@
         system = "aarch64-linux";
         modules = [
           nixos-hardware.nixosModules.raspberry-pi-3
-          "${nixpkgs}/nixos/modules/installer/sd-card/sd-image-aarch64-installer.nix"
+          "${nixpkgs}/nixos/modules/installer/sd-card/sd-image-aarch64.nix"
           ./configuration.nix
         ];
       };
