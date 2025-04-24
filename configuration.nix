@@ -39,7 +39,7 @@
     hostName = "cyberfish";
     # This is the IP of the computer connecting to the Pi
     defaultGateway = "10.10.10.11";
-    nameservers = [ "10.10.10.11" ];
+    networkmanager.enable = true;
     interfaces.eth0 = {
       useDHCP = false;
       ipv4.addresses = [{
