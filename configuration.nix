@@ -1,4 +1,4 @@
-{ config, pkgs, lib, ... }:
+{ pkgs, ... }:
 {
   system.stateVersion = "24.11";
 
@@ -27,10 +27,7 @@
     allowUnfree = true;
     allowBroken = true;
   };
-  boot = {
-    tmp.cleanOnBoot = true;
-    kernelPackages = pkgs.linuxPackages;
-  };
+  boot.tmp.cleanOnBoot = true;
   users.users.pi = {
     isNormalUser = true;
     extraGroups = [ "wheel" ];
