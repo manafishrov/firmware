@@ -37,9 +37,9 @@
   # Connection settings
   networking = {
     hostName = "cyberfish";
-    # This is the IP of the computer connecting to the Pi (I will try this later to avoid wifi all together)
-    # defaultGateway = "10.10.10.11";
-    # nameservers = [ "10.10.10.11" ];
+    # This is the IP of the computer connecting to the Pi
+    defaultGateway = "10.10.10.11";
+    nameservers = [ "10.10.10.11" ];
     interfaces.eth0 = {
       useDHCP = false;
       ipv4.addresses = [{
@@ -48,13 +48,11 @@
         prefixLength = 24;
       }];
     };
+    nat.enable = true;
   };
   services.openssh = {
     enable = true;
-    settings = {
-      PasswordAuthentication = true;
-      PermitRootLogin = "yes";
-    };
+    settings.PasswordAuthentication = true;
   };
 
   # Package settings
