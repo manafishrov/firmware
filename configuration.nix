@@ -48,6 +48,7 @@
   };
 
   # Enable camera
+  # https://wiki.nixos.org/wiki/NixOS_on_ARM/Raspberry_Pi
   boot = {
     kernelModules = [ "bcm2835-v4l2" ];
     loader.raspberryPi = {
@@ -63,11 +64,24 @@
 
   # Packages
   environment.systemPackages = with pkgs; [
-    git
     neovim
     nano
-    python3
+    python3.withPackages (pypkgs: with pypkgs; [
+      numpy
+      websockets
+      smbus2
+      i2c-tools
+    ])
   ];
+
+  # Adding these packages to the library path is required for installing packages with pip (Only for temporary use)
+  # https://www.youtube.com/watch?v=6fftiTJ2vuQ
+  environment.sessionVariables = {
+    LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
+      pkgs.stdenv.cc.cc.lib
+      pkgs.libz
+    ];
+  };
 
   # Modules
   imports = [
