@@ -22,8 +22,9 @@
   # Login credentials
   users.users.pi = {
     isNormalUser = true;
-    extraGroups = [ "wheel" ];
+    extraGroups = [ "wheel" "i2c" ];
     password = "cyberfish";
+    home = "/home/pi";
   };
 
   # Static IP
@@ -81,6 +82,30 @@
       pkgs.stdenv.cc.cc.lib
       pkgs.libz
     ];
+  };
+
+  # Copy firmware files to pi's home directory
+  system.activationScripts.copyFirmwareFiles = {
+    text = ''
+      cp -r ${./src}/* /home/pi/
+      chown -R pi:pi /home/pi/
+    '';
+  };
+
+  # Firmware service
+  systemd.services.cyberfish-firmware = {
+    enable = false;
+    description = "Cyberfish Firmware";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network.target" ];
+    serviceConfig = {
+      Type = "simple";
+      User = "pi";
+      WorkingDirectory = "/home/pi";
+      ExecStart = "${pkgs.python3}/bin/python3 main.py";
+      Restart = "always";
+      RestartSec = "5";
+    };
   };
 
   # Modules
