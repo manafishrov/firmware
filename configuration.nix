@@ -49,11 +49,11 @@
   environment.systemPackages = with pkgs; [
     neovim
     nano
+    i2c-tools
     (python3.withPackages (pypkgs: with pypkgs; [
       numpy
       websockets
       smbus2
-      i2c-tools
     ]))
   ];
 
