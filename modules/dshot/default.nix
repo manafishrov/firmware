@@ -1,10 +1,10 @@
-{ lib, pkgs, ... }:
+{ pkgs, ... }:
 let
   dshot-src = pkgs.fetchFromGitHub {
     owner = "Marian-Vittek";
     repo = "raspberry-pi-dshot";
     rev = "f7f0409359c39357c4d8353146d0eed72b1e86d3";
-    hash = "";
+    hash = "sha256-U4TsW+vPEu/2Txvm5dvyDKKsd1hCoSxscEtF5j2D6lo=";
   };
 
   dshot = pkgs.python3Packages.buildPythonPackage {

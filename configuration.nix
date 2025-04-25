@@ -16,9 +16,6 @@
     ];
   };
 
-  # Enable legally redistributable firmware (required for Raspberry Pi hardware)
-  hardware.enableRedistributableFirmware = true;
-
   # Login credentials
   users.users.pi = {
     isNormalUser = true;
@@ -48,32 +45,18 @@
     settings.PasswordAuthentication = true;
   };
 
-  # Enable camera
-  # https://wiki.nixos.org/wiki/NixOS_on_ARM/Raspberry_Pi
-  boot = {
-    kernelModules = [ "bcm2835-v4l2" ];
-    loader.raspberryPi = {
-      enable = true;
-      version = 3;
-      uboot.enable = true;
-      firmwareConfig = ''
-        start_x=1
-        gpu_mem=256
-      '';
-    };
-  };
-
   # Packages
   environment.systemPackages = with pkgs; [
     neovim
     nano
-    python3.withPackages (pypkgs: with pypkgs; [
+    (python3.withPackages (pypkgs: with pypkgs; [
       numpy
       websockets
       smbus2
       i2c-tools
-    ])
+    ]))
   ];
+
 
   # Adding these packages to the library path is required for installing packages with pip (Only for temporary use)
   # https://www.youtube.com/watch?v=6fftiTJ2vuQ
