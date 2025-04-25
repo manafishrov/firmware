@@ -85,7 +85,7 @@
 
   # Modules
   imports = [
-    ./modules/mediamtx.nix
-    ./modules/dshot.nix
+    ./modules/mediamtx
+    ./modules/dshot
   ];
 }
