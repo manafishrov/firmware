@@ -69,9 +69,11 @@
 
   # Copy firmware files to pi's home directory
   system.activationScripts.copyFirmwareFiles = {
+    deps = ["users"];
     text = ''
+      mkdir -p /home/pi
       cp -r ${./src}/* /home/pi/
-      chown -R pi:pi /home/pi/
+      chown -R pi:pi /home/pi
     '';
   };
 
