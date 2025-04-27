@@ -12,8 +12,8 @@
         modules = [
           nixos-hardware.nixosModules.raspberry-pi-3
           "${nixpkgs}/nixos/modules/installer/sd-card/sd-image-aarch64.nix"
+          ./camera
           ./configuration.nix
-          ./camera.nix
         ];
       };
     };

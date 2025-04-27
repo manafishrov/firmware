@@ -59,12 +59,12 @@
 
   # Adding these packages to the library path is required for installing packages with pip (Only for temporary use)
   # https://www.youtube.com/watch?v=6fftiTJ2vuQ
-  environment.sessionVariables = {
-    LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
-      pkgs.stdenv.cc.cc.lib
-      pkgs.libz
-    ];
-  };
+  # environment.sessionVariables = {
+  #   LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
+  #     pkgs.stdenv.cc.cc.lib
+  #     pkgs.libz
+  #   ];
+  # };
 
   # Copy firmware files to pi's home directory
   system.activationScripts.copyFirmwareFiles = {
