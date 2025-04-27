@@ -1,4 +1,4 @@
-{ pkgs, config, ... }:
+{ pkgs, config, nixos-hardware, ... }:
 {
   # Nix settings
   system.stateVersion = "24.11";
@@ -130,6 +130,7 @@
 
   # Modules
   imports = [
+    "${nixos-hardware}/raspberry-pi/4/pkgs-overlays.nix"
     ./modules/mediamtx
     ./modules/dshot
   ];
