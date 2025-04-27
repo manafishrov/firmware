@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, config, ... }:
 {
   # Nix settings
   system.stateVersion = "24.11";
@@ -52,6 +52,33 @@
   services.openssh = {
     enable = true;
     settings.PasswordAuthentication = true;
+  };
+
+  hardware = {
+    i2c.enable = true;
+    raspberry-pi."4".apply-overlays-dtmerge.enable = true;
+    deviceTree = {
+      enable = true;
+      filter = "bcm2837-rpi-3*";
+      overlays =
+      let
+        mkCompatibleDtsFile = dtbo:
+          let
+            drv = (pkgs.runCommand (builtins.replaceStrings [ ".dtbo" ] [ ".dts" ] (baseNameOf dtbo)) {
+              nativeBuildInputs = with pkgs; [ dtc gnused ];
+            }) ''
+              mkdir "$out"
+              dtc -I dtb -O dts '${dtbo}' | sed -e 's/bcm2835/bcm2837/' > "$out/overlay.dts"
+            '';
+          in
+          "${drv}/overlay.dts";
+      in
+        [{
+          name = "ov5647";
+          dtsFile =
+            mkCompatibleDtsFile "${config.boot.kernelPackages.kernel}/dtbs/overlays/ov5647.dtbo";
+        }];
+    };
   };
 
   # Packages
