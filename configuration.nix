@@ -100,7 +100,7 @@
   };
 
   # Enable specific hardware support for camera and i2c
-  boot.kernelModules = [ "arbcm2835_v412" "i2c-dev" ];
+  boot.kernelModules = [ "bcm2835-v412" "i2c-dev" ];
   imports = [
     "${nixos-hardware}/raspberry-pi/4/pkgs-overlays.nix"
   ];
