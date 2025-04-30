@@ -191,7 +191,7 @@
     enable = false;
     description = "Cyberfish Firmware";
     wantedBy = [ "multi-user.target" ];
-    after = [ "network.target" ];
+    after = [ "network.target" "mediamtx.service" ];
     serviceConfig = {
       Type = "simple";
       User = "pi";
