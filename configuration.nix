@@ -158,18 +158,21 @@
     ffmpeg
     i2c-tools
     (python3.withPackages (pypkgs: with pypkgs; [
+      pip
       numpy
       websockets
       smbus2
     ]))
   ];
 
-  # Adding these packages to the library path is required for installing packages with pip (Only for temporary use)
-  # https://www.youtube.com/watch?v=6fftiTJ2vuQ
+  # Adding these packages to the library path is required for installing packages with pip (So people can install their own packages)
   environment.sessionVariables = {
     LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
       pkgs.stdenv.cc.cc.lib
       pkgs.libz
+      pkgs.zlib
+      pkgs.openssl
+      pkgs.python3
     ];
   };
 
