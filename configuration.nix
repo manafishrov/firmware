@@ -144,7 +144,7 @@
       webrtcAddress = ":8889";
       paths = {
         cam = {
-          runOnInit = "ffmpeg -f v4l2 -i /dev/video0 -c:v libx264 -pix_fmt yuv420p -preset ultrafast -b:v 600k -f rtsp rtsp://localhost:8889/$MTX_PATH";
+          runOnInit = "${pkgs.ffmpeg}/bin/ffmpeg -f v4l2 -i /dev/video0 -c:v libx264 -pix_fmt yuv420p -preset ultrafast -b:v 600k -f rtsp rtsp://localhost:8889/$MTX_PATH";
           runOnInitRestart = true;
         };
       };
