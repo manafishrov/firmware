@@ -136,11 +136,11 @@
     enable = true;
     allowVideoAccess = true;
     settings = {
-      rtsp = "no";
-      rtmp = "no";
-      hls = "no";
-      srt = "no";
-      webrtc = "yes";
+      rtsp = false;
+      rtmp = false;
+      hls = false;
+      srt = false;
+      webrtc = true;
       webrtcAddress = ":8889";
       paths = {
         cam = {
