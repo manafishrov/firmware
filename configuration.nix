@@ -2,18 +2,20 @@
 {
   # Nix settings
   system.stateVersion = "24.11";
-  nix.settings = {
-    auto-optimise-store = true;
-    builders-use-substitutes = true;
-    extra-experimental-features = [ "flakes" "nix-command" ];
-    substituters = [
-      "https://cache.nixos.org"
-      "https://nix-community.cachix.org"
-    ];
-    trusted-public-keys = [
-      "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
-      "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
-    ];
+  nix = {
+    optimise.automatic = true;
+    settings = {
+      builders-use-substitutes = true;
+      extra-experimental-features = [ "flakes" "nix-command" ];
+      substituters = [
+        "https://cache.nixos.org"
+        "https://nix-community.cachix.org"
+      ];
+      trusted-public-keys = [
+        "cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY="
+        "nix-community.cachix.org-1:mB9FSh9qf2dCimDSUo8Zy7bkq5CX+/rkCWyvRCYg3Fs="
+      ];
+    };
   };
 
   # nixpkgs.overlays = [
@@ -39,8 +41,8 @@
   #         src = prev.fetchFromGitHub {
   #           owner = "raspberrypi";
   #           repo = "libcamera";
-  #           rev = "6ddd79b5bdbedc1f61007aed35391f1559f9e29a";
-  #           sha256 = "eFIiYCsuukPuG6iqHZeKsXQYSuZ+9q5oLNwuJJ+bAhk=";
+  #           rev = "d83ff0a4ae4503bc56b7ed48cd142c3dd423ad3b";
+  #           hash = "sha256-VP0s1jOON9J3gn81aiemsChvGeqx0PPivQF5rmSga6M=";
   #
   #           nativeBuildInputs = [ prev.git ];
   #
@@ -97,8 +99,11 @@
     settings.PasswordAuthentication = true;
   };
 
-  boot.kernelModules = [ "bcm2835_v412" "i2c-dev" ];
-
+  # Enable specific hardware support for camera and i2c
+  boot.kernelModules = [ "arbcm2835_v412" "i2c-dev" ];
+  imports = [
+    "${nixos-hardware}/raspberry-pi/4/pkgs-overlays.nix"
+  ];
   hardware = {
     i2c.enable = true;
     raspberry-pi."4".apply-overlays-dtmerge.enable = true;
@@ -126,10 +131,31 @@
     };
   };
 
+  # Setup MediaMTX
+  services.mediamtx = {
+    enable = true;
+    allowVideoAccess = true;
+    settings = {
+      rtsp = "no";
+      rtmp = "no";
+      hls = "no";
+      srt = "no";
+      webrtc = "yes";
+      webrtcAddress = ":8889";
+      paths = {
+        cam = {
+          runOnInit = "ffmpeg -f v4l2 -i /dev/video0 -c:v libx264 -pix_fmt yuv420p -preset ultrafast -b:v 600k -f rtsp rtsp://localhost:8889/$MTX_PATH";
+          runOnInitRestart = true;
+        };
+      };
+    };
+  };
+
   # Packages
   environment.systemPackages = with pkgs; [
     neovim
     nano
+    ffmpeg
     i2c-tools
     (python3.withPackages (pypkgs: with pypkgs; [
       numpy
@@ -172,11 +198,4 @@
       RestartSec = "5";
     };
   };
-
-  # Modules
-  imports = [
-    "${nixos-hardware}/raspberry-pi/4/pkgs-overlays.nix"
-    ./modules/mediamtx
-    # ./modules/dshot
-  ];
 }
