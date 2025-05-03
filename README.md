@@ -1,6 +1,43 @@
 # Cyberfish Firmware
 
-## Raspberry Pi Setup
+To build the SD image you need to have nix installed and proper emulation support for the aarch64-linux platform.
+
+Build the SD image:
+
+```sh
+nix build .#packages.aarch64-linux.sdImage
+```
+
+When you have built the image you can list it out with the following command:
+
+```sh
+ls -lh result/sd-image
+```
+
+This will include the size of the image in the output. The image is compressed with zstd.
+
+Then we need to plug in the SD card and find out what the device path is.
+On linux:
+
+```sh
+lsblk
+```
+
+On darwin:
+
+```sh
+diskutil list
+```
+
+On linux it is usually `/dev/sdX` where `X` is a letter. On macOS it is usually `/dev/diskX` where `X` is a number.
+
+To flash the image to the SD card you can use the following command, make sure to replace `/dev/XXX` with the correct device path for your SD card:
+
+```sh
+zstd -dc result/sd-image/*.zst | sudo dd of=/dev/XXX bs=4M status=progress oflag=sync
+```
+
+## Raspberry Pi Setup (This is all pre NixOS and needs to be removed/updated)
 
 ### Flash SD Card
 
@@ -23,7 +60,7 @@ Connect to the Pi via Ethernet cable. Then SSH into it via the terminal:
 ssh pi@cyberfish.local
 ```
 
-> [!WARNING]  
+> [!WARNING]
 > The cyberfish may disconnect at random times when connected via its hostname. This will be fixed after setting up a static IP address.
 
 #### Install Required Packages
