@@ -57,13 +57,13 @@
   };
 
   # Enable specific hardware support for camera and i2c
-  boot.kernelModules = [ "bcm2835-v412" "i2c-dev" ];
+  boot.kernelModules = [ "bcm2835-v412" "i2c-bcm2835" ]; # Do not know if we need this i2c kernel module
   imports = [
     "${nixos-hardware}/raspberry-pi/4/pkgs-overlays.nix"
   ];
   hardware = {
-    i2c.enable = true;
-    raspberry-pi."4".apply-overlays-dtmerge.enable = true;
+    i2c.enable = true; # Adds "i2c-dev" kernel module and creates i2c group
+    raspberry-pi."4".apply-overlays-dtmerge.enable = true; # This and the overlays import make the device tree overlays work (it is not specific to the 4 even though it is labeled as such)
     deviceTree = {
       enable = true;
       filter = "bcm2837-rpi-3*";
@@ -80,11 +80,16 @@
           in
           "${drv}/overlay.dts";
       in
-        [{
-          name = "ov5647";
-          dtsFile =
-            mkCompatibleDtsFile "${config.boot.kernelPackages.kernel}/dtbs/overlays/ov5647.dtbo";
-        }];
+        [
+          {
+            name = "i2c1";
+            dtsFile = mkCompatibleDtsFile "${config.boot.kernelPackages.kernel}/dtbs/overlays/i2c1.dtbo";
+          }
+          {
+            name = "ov5647";
+            dtsFile = mkCompatibleDtsFile "${config.boot.kernelPackages.kernel}/dtbs/overlays/ov5647.dtbo";
+          }
+        ];
     };
   };
 
@@ -135,7 +140,7 @@
 
   # Copy firmware files to pi's home directory
   system.activationScripts.copyFirmwareFiles = {
-    deps = ["users"];
+    deps = [ "users" ];
     text = ''
       mkdir -p /home/pi
       cp -r ${./src}/* /home/pi/
