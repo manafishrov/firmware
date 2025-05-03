@@ -145,6 +145,7 @@
       mkdir -p /home/pi
       cp -r ${./src}/* /home/pi/
       chown -R pi:pi /home/pi
+      chmod -R u+rw /home/pi
     '';
   };
 
