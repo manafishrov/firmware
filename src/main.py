@@ -58,6 +58,7 @@ async def handle_client(websocket):
                 await asyncio.sleep(0.01)
             except Exception as e:
                 logging.error(f"IMU update error: {e}")
+                await asyncio.sleep(3)
             
 
     try:

@@ -6,7 +6,7 @@ def setup_sensor():
     GPIO.setmode(GPIO.BCM)
 
     # Set up the pin as input (no internal pull-up/down resistor)
-    GPIO.setup(15, GPIO.IN)
+    GPIO.setup(20, GPIO.IN)
 
 
 def check_sensor(pin):
