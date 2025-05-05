@@ -1,17 +1,22 @@
-from picosend import send_thrust
+# test_send_uart.py
+import picosend_uart
 
-print("Enter 8 thrust values (-1, 0, or 1), separated by commas.")
-print("Example: 0,0,0,1,1,-1,0,0")
+# must match PWM_PINS on the Pico
+PIN_LIST = [2, 4, 6, 8, 10, 12, 14, 16]
+
+print('Send a float to one PWM pin; others stay at 0.0.')
 
 while True:
     try:
-        raw = input("Thrust values: ")
-        values = [int(v.strip()) for v in raw.split(',')]
-        if len(values) != 8 or not all(v in (-1, 0, 1) for v in values):
-            print("Invalid input! Please enter exactly 8 numbers (only -1, 0, or 1).")
+        pin = int(input(f"Choose pin {PIN_LIST}: "))
+        val = float(input("Value: "))
+        if pin not in PIN_LIST or not -1.0 <= val <= 1.0:
+            print("Invalid pin or value; try again.")
             continue
-        send_thrust(values)
-        print(f"Sent: {values}")
+        arr = [0.0]*8
+        arr[PIN_LIST.index(pin)] = val
+        picosend_uart.send_thrust(arr)
+        print(f"Sent ? GP{pin} = {val:.3f}")
     except KeyboardInterrupt:
         print("\nExiting.")
         break
