@@ -1,5 +1,5 @@
 import numpy as np
-import dshot_thrust_control as dshot
+import picosend_uart
 
 import regulator
 import config
@@ -73,12 +73,7 @@ def run_thrusters(direction_vector, PID_enabled=False):
     thrust_vector = np.clip(thrust_vector, -1, 1) #Clipping cause the regulator can give values outside of the range [-1, 1]
     thrust_vector = remove_deadzone(thrust_vector)
 
-    dshot.send_thrust_values(thrust_vector)
-
-
-def initialize_thrusters():
-    dshot.setup_thrusters([config.get_thruster1_pin(), config.get_thruster2_pin(), config.get_thruster3_pin(), config.get_thruster4_pin(), config.get_thruster5_pin(), config.get_thruster6_pin(), config.get_thruster7_pin(), config.get_thruster8_pin()])
-    print("Thruster initialization complete!")
+    picosend_uart.send_thrust(thrust_vector)
 
 # Initialization processes
 thrustAllocationMatrix = get_thrust_allocation_matrix()

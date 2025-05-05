@@ -106,7 +106,6 @@ async def handle_client(websocket):
 async def main(): 
     # INITIALIZING THRUSTERS
     imu.init_sensor()
-    thrusters.initialize_thrusters()
     print("Thrusters are starting to initialize")
     wetsensor.setup_sensor()
 
