@@ -1,0 +1,1 @@
+This folder is a temporary folder for scripts that will use to test the pico and make it work!
