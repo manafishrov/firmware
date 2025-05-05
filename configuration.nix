@@ -105,7 +105,7 @@
     "${nixos-hardware}/raspberry-pi/4/pkgs-overlays.nix"
   ];
   hardware = {
-    i2c.enable = true;
+    i2c.enable = true; # maybe not needed
     raspberry-pi."4".apply-overlays-dtmerge.enable = true;
     deviceTree = {
       enable = true;
@@ -127,7 +127,8 @@
           name = "ov5647";
           dtsFile =
             mkCompatibleDtsFile "${config.boot.kernelPackages.kernel}/dtbs/overlays/ov5647.dtbo";
-        }];
+        }
+        ];
     };
   };
 
