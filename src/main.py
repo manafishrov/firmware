@@ -32,9 +32,6 @@ async def handle_client(websocket):
                 break
 
     async def send_status_updates():
-        # THIS IS WHERE WE NEED TO PUT THE CODE TO READ THE WATER SENSOR
-        # Preferably we import from another file.
-
         counter = 0
         while True:
             try:
@@ -104,9 +101,12 @@ async def handle_client(websocket):
         imu_task.cancel()
 
 async def main(): 
-    # INITIALIZING THRUSTERS
-    imu.init_sensor()
-    print("Thrusters are starting to initialize")
+    # Trying to initialize the IMU sensor, if it fails, throw an error and continue
+    try:
+        imu.setup_sensor()
+    except Exception as e:
+        logging.error(f"IMU setup error: {e}")
+
     wetsensor.setup_sensor()
 
     # INITIALIZING WEBSOCKET SERVER

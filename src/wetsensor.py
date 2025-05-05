@@ -2,7 +2,7 @@ import RPi.GPIO as GPIO
 import time
 
 def setup_sensor():
-    # Use BCM pin numbering
+    # Use BCM pin numbering, basic GPIO setup
     GPIO.setmode(GPIO.BCM)
 
     # Set up the pin as input (no internal pull-up/down resistor)
