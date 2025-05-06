@@ -2,7 +2,7 @@
 import picosend_uart
 
 # must match PWM_PINS on the Pico
-PIN_LIST = [2, 4, 6, 8, 10, 12, 14, 16]
+PIN_LIST = [0, 2, 6, 8, 10, 12, 14, 16]
 
 print('Send a float to one PWM pin; others stay at 0.0.')
 

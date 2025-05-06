@@ -1,51 +1,26 @@
-# picosend_uart.py
+import serial
+import struct
+import time
 
-import os, termios, struct
+# Open UART on GPIO14 (TX) and GPIO15 (RX) – only TX actually needs to be wired for transmission
+ser = serial.Serial('/dev/serial0', baudrate=115200)
 
-# Try these in order until one opens successfully
-_PORT_CANDIDATES = ["/dev/serial0", "/dev/ttyAMA0", "/dev/ttyS0"]
-_BAUD = termios.B115200  # 115200 baud
+# 8-byte ASCII header
+HEADER = b'MICHFISH'
 
-def _init_uart():
-    for PORT in _PORT_CANDIDATES:
-        try:
-            fd = os.open(PORT, os.O_RDWR | os.O_NOCTTY | os.O_NONBLOCK)
-        except OSError:
-            continue
+def send_thrust(data):
 
-        # Get current attributes
-        attrs = termios.tcgetattr(fd)
-        # attrs = [iflag, oflag, cflag, lflag, ispeed, ospeed, cc]
+    payload = struct.pack('<8f', *data)
 
-        # Raw mode: no parity, 8 bits, enable read, local mode
-        attrs[0] = termios.IGNPAR          # iflag
-        attrs[1] = 0                       # oflag
-        attrs[2] = _BAUD | termios.CS8 | termios.CLOCAL | termios.CREAD  # cflag
-        attrs[3] = 0                       # lflag
+    checksum = bytes([sum(payload) & 0xFF])
 
-        # Directly set input/output speeds
-        attrs[4] = _BAUD  # ispeed
-        attrs[5] = _BAUD  # ospeed
+    packet = HEADER + payload + checksum
+    ser.write(packet)
 
-        # VMIN=1, VTIME=0
-        attrs[6][termios.VMIN]  = 1
-        attrs[6][termios.VTIME] = 0
 
-        termios.tcsetattr(fd, termios.TCSANOW, attrs)
-        print(f"Opened UART on {PORT}")
-        return fd
+if __name__ == '__main__':
+    time.sleep(2)  
 
-    raise FileNotFoundError(
-        "Could not open any of: " + ", ".join(_PORT_CANDIDATES)
-    )
-
-# Open and configure UART once at import time
-_fd = _init_uart()
-
-def send_thrust(values):
-    if len(values) != 8:
-        raise ValueError("Must send exactly 8 values")
-    # Clamp to [-1.0, +1.0]
-    clamped = [max(min(float(v), 1.0), -1.0) for v in values]
-    packet = b'\xAA\x55' + struct.pack('>8f', *clamped)
-    os.write(_fd, packet)
+    example_data = [0.1, -0.5, 0.9, 0.0, -1.0, 1.0, 0.42, -0.77]
+    send_thrust(example_data)
+    print("Packet sent.")
