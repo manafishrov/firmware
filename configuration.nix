@@ -18,49 +18,6 @@
     };
   };
 
-  nixpkgs.overlays = [
-    (final: prev: {
-        libcamera = prev.libcamera.overrideAttrs (old: {
-          buildInputs = old.buildInputs ++ [ prev.boost prev.nlohmann_json ];
-          nativeBuildInputs = old.nativeBuildInputs ++ [ prev.python3Packages.pybind11 ];
-
-          BOOST_INCLUDEDIR = "${prev.lib.getDev prev.boost}/include";
-          BOOST_LIBRARYDIR = "${prev.lib.getLib prev.boost}/lib";
-
-          postPatch = old.postPatch + ''
-            patchShebangs src/py/libcamera
-          '';
-
-          mesonFlags = old.mesonFlags ++ [
-            "-Dcam=disabled"
-            "-Dgstreamer=disabled"
-            "-Dipas=rpi/vc4,rpi/pisp"
-            "-Dpipelines=rpi/vc4,rpi/pisp"
-          ];
-
-          src = prev.fetchFromGitHub {
-            owner = "raspberrypi";
-            repo = "libcamera";
-            rev = "d83ff0a4ae4503bc56b7ed48cd142c3dd423ad3b";
-            hash = "sha256-VP0s1jOON9J3gn81aiemsChvGeqx0PPivQF5rmSga6M=";
-
-            nativeBuildInputs = [ prev.git ];
-
-            postFetch = ''
-              cd "$out"
-
-              export NIX_SSL_CERT_FILE=${prev.cacert}/etc/ssl/certs/ca-bundle.crt
-
-              ${prev.lib.getExe prev.meson} subprojects download \
-                libpisp
-
-              find subprojects -type d -name .git -prune -execdir rm -r {} +
-            '';
-          };
-        });
-    })
-  ];
-
   # Remove documentation to save space
   documentation = {
     enable = false;
@@ -100,18 +57,16 @@
   };
 
   # Enable specific hardware support for camera and i2c
-  boot.kernelModules = [ "i2c-bcm2835" ];
+  boot = {
+    kernelModules = [ "bcm2835-v412" "i2c-bcm2835" ];
+    kernelParams = [ "cma=256M" ];
+  };
   imports = [
     "${nixos-hardware}/raspberry-pi/4/pkgs-overlays.nix"
   ];
   hardware = {
-<<<<<<< HEAD
-    i2c.enable = true; # maybe not needed
-    raspberry-pi."4".apply-overlays-dtmerge.enable = true;
-=======
     i2c.enable = true; # Adds "i2c-dev" kernel module and creates i2c group
-    raspberry-pi."4".apply-overlays-dtmerge.enable = true; # This and the overlays import above, makes the device tree overlays work (it is not specific to the pi 4 even though it is labeled as such)
->>>>>>> 1071bbebf21b04f2ecce453ec474b0de9129d33f
+    raspberry-pi."4".apply-overlays-dtmerge.enable = true; # This and the overlays import make the device tree overlays work (it is not specific to the 4 even though it is labeled as such)
     deviceTree = {
       enable = true;
       filter = "bcm2837-rpi-3*";
@@ -128,13 +83,6 @@
           in
           "${drv}/overlay.dts";
       in
-<<<<<<< HEAD
-        [{
-          name = "ov5647";
-          dtsFile =
-            mkCompatibleDtsFile "${config.boot.kernelPackages.kernel}/dtbs/overlays/ov5647.dtbo";
-        }
-=======
         [
           {
             name = "i2c1";
@@ -144,7 +92,6 @@
             name = "ov5647";
             dtsFile = mkCompatibleDtsFile "${config.boot.kernelPackages.kernel}/dtbs/overlays/ov5647.dtbo";
           }
->>>>>>> 1071bbebf21b04f2ecce453ec474b0de9129d33f
         ];
     };
   };
@@ -162,11 +109,8 @@
       webrtcAddress = ":8889";
       paths = {
         cam = {
-          source = "rpiCamera";
-          sourceType = "yes";
-          sourceOnDemandStartTimeout = "1s";
-          sourceOnDemandCloseAfter = "1s";
-          rpiCameraAfSpeed = "fast";
+          runOnInit = "${pkgs.ffmpeg}/bin/ffmpeg -f v4l2 -i /dev/video0 -c:v libx264 -pix_fmt yuv420p -preset ultrafast -b:v 600k -f rtsp rtsp://localhost:8889/$MTX_PATH";
+          runOnInitRestart = true;
         };
       };
     };
@@ -175,6 +119,7 @@
   # Packages
   environment.systemPackages = with pkgs; [
     i2c-tools
+    v4l-utils
     neovim
     nano
     ffmpeg
@@ -204,7 +149,8 @@
       mkdir -p /home/pi
       cp -r ${./src}/* /home/pi/
       chown -R pi:pi /home/pi
-      chmod -R u+rw /home/pi
+      find /home/pi -type d -exec chmod 700 {} +
+      find /home/pi -type f -exec chmod 600 {} +
     '';
   };
 
