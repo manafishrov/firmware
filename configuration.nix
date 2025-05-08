@@ -58,7 +58,7 @@
 
   # Enable specific hardware support for camera and i2c
   boot = {
-    kernelModules = [ "bcm2835-v412" "i2c-bcm2835" ];
+    kernelModules = [ "bcm2835-v4l2" "i2c-bcm2835" ];
     kernelParams = [ "cma=256M" ];
   };
   imports = [
