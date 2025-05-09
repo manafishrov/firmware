@@ -167,6 +167,10 @@ if __name__ == '__main__':
     pwm = PCA9685(bus_num=1, address=0x40)
     pwm.set_pwm_freq(50)
 
+    print("Initializing all thrusters")
+    for i in range(8):
+        pwm.set_pwm_scaled(i, 0.0)  # Set all thrusters to 0 thrust
+
     while True:
         try:
             thruster = int(input("Enter thruster number (0-7)"))
