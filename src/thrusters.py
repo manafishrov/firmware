@@ -9,6 +9,7 @@ import config
 
 print("Resetting all PCA9685 devices on bus 1")
 PCA9685.software_reset(bus_num=1)
+prev_thrust_vector = np.zeros(8) # Initialize the previous thrust vector to zero
 
 print("Initializing PCA9685 on bus 1 and setting frequency to 50 Hz")
 pwm = PCA9685.PCA9685(bus_num=1, address=0x40)
@@ -65,15 +66,20 @@ def print_thrust_vector(thrust_vector):
     print(f"Thrust vector: {thrust_vector}")
 
 def send_thrust_vector(thrust_vector):
-    # This code is probably very inefficient, but it works for now
-    pwm.set_pwm_scaled(config.get_thruster1_pin(), thrust_vector[0])
-    pwm.set_pwm_scaled(config.get_thruster2_pin(), thrust_vector[1])
-    pwm.set_pwm_scaled(config.get_thruster3_pin(), thrust_vector[2])
-    pwm.set_pwm_scaled(config.get_thruster4_pin(), thrust_vector[3])
-    pwm.set_pwm_scaled(config.get_thruster5_pin(), thrust_vector[4])
-    pwm.set_pwm_scaled(config.get_thruster6_pin(), thrust_vector[5])
-    pwm.set_pwm_scaled(config.get_thruster7_pin(), thrust_vector[6])
-    pwm.set_pwm_scaled(config.get_thruster8_pin(), thrust_vector[7])
+    if np.array_equal(thrust_vector, prev_thrust_vector):
+        return
+    else:
+        global prev_thrust_vector
+        prev_thrust_vector = thrust_vector.copy()
+        # This code is probably very inefficient, but it works for now
+        pwm.set_pwm_scaled(3, thrust_vector[0])
+        pwm.set_pwm_scaled(2, thrust_vector[1])
+        pwm.set_pwm_scaled(1, thrust_vector[2])
+        pwm.set_pwm_scaled(0, thrust_vector[3])
+        pwm.set_pwm_scaled(4, thrust_vector[4])
+        pwm.set_pwm_scaled(7, thrust_vector[5])
+        pwm.set_pwm_scaled(6, thrust_vector[6])
+        pwm.set_pwm_scaled(5, thrust_vector[7])
 
 def run_thrusters(direction_vector, PID_enabled=False):
     # direction vecor format [forward, side, up, pitch, yaw, roll]
