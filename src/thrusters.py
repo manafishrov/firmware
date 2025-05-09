@@ -2,7 +2,7 @@ import numpy as np
 
 
 import regulator
-import PCA9685
+import PCA9685_fast as PCA9685
 import config
 
 # PWM DRIVER SETUP
@@ -52,7 +52,7 @@ def adjust_magnitude(thrust_vector, magnitude):
     return thrust_vector
 
 def correct_spin_direction(thrust_vector):
-    spin_directions = np.array([1, 1, 1, 1, 1, 1, 1, 1])
+    spin_directions = np.array([-1, 1, -1, 1, -1, -1, -1, -1])
     thrust_vector = thrust_vector * spin_directions
     return thrust_vector
 
@@ -66,20 +66,24 @@ def print_thrust_vector(thrust_vector):
     print(f"Thrust vector: {thrust_vector}")
 
 def send_thrust_vector(thrust_vector):
+    global prev_thrust_vector
+
     if np.array_equal(thrust_vector, prev_thrust_vector):
         return
-    else:
-        global prev_thrust_vector
-        prev_thrust_vector = thrust_vector.copy()
-        # This code is probably very inefficient, but it works for now
-        pwm.set_pwm_scaled(3, thrust_vector[0])
-        pwm.set_pwm_scaled(2, thrust_vector[1])
-        pwm.set_pwm_scaled(1, thrust_vector[2])
-        pwm.set_pwm_scaled(0, thrust_vector[3])
-        pwm.set_pwm_scaled(4, thrust_vector[4])
-        pwm.set_pwm_scaled(7, thrust_vector[5])
-        pwm.set_pwm_scaled(6, thrust_vector[6])
-        pwm.set_pwm_scaled(5, thrust_vector[7])
+    prev_thrust_vector = thrust_vector.copy()
+
+    reordered_thrust_vector = np.array([
+        thrust_vector[3],  
+        thrust_vector[2],  
+        thrust_vector[1],  
+        thrust_vector[0],  
+        thrust_vector[4],  
+        thrust_vector[7],  
+        thrust_vector[6],  
+        thrust_vector[5]   
+    ])
+    pwm.set_all_pwm_scaled(reordered_thrust_vector)
+
 
 def run_thrusters(direction_vector, PID_enabled=False):
     # direction vecor format [forward, side, up, pitch, yaw, roll]
