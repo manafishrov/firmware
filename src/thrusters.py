@@ -1,7 +1,8 @@
 import numpy as np
-import picosend_uart
+
 
 import regulator
+import PCA9685
 import config
 
 def tuning_correction(direction_vector):
@@ -54,7 +55,10 @@ def remove_deadzone(thrust_vector, deadzone = 0.015):
 def print_thrust_vector(thrust_vector):
     print(f"Thrust vector: {thrust_vector}")
 
-
+def send_thrust_vector(thrust_vector):
+    # Send the thrust vector to the PCA9685 controller
+    for i in range(len(thrust_vector)):
+        PCA9685.set_pwm_scaled(i, thrust_vector[i])
 
 def run_thrusters(direction_vector, PID_enabled=False):
     # direction vecor format [forward, side, up, pitch, yaw, roll]
@@ -73,7 +77,7 @@ def run_thrusters(direction_vector, PID_enabled=False):
     thrust_vector = np.clip(thrust_vector, -1, 1) #Clipping cause the regulator can give values outside of the range [-1, 1]
     thrust_vector = remove_deadzone(thrust_vector)
 
-    picosend_uart.send_thrust(thrust_vector)
+    send_thrust_vector(thrust_vector)
 
 # Initialization processes
 thrustAllocationMatrix = get_thrust_allocation_matrix()
