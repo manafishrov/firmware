@@ -104,7 +104,7 @@ async def handle_client(websocket):
 async def main(): 
     # Trying to initialize the IMU sensor, if it fails, throw an error and continue
     try:
-        imu.setup_sensor()
+        imu.init_sensor()
     except Exception as e:
         logging.error(f"IMU setup error: {e}")
 
