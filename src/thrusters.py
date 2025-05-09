@@ -42,7 +42,7 @@ def adjust_magnitude(thrust_vector, magnitude):
     return thrust_vector
 
 def correct_spin_direction(thrust_vector):
-    spin_directions = np.array([1, -1, -1, 1, 1, -1, -1, -1])
+    spin_directions = np.array([1, 1, 1, 1, 1, 1, 1, 1])
     thrust_vector = thrust_vector * spin_directions
     return thrust_vector
 
@@ -56,9 +56,15 @@ def print_thrust_vector(thrust_vector):
     print(f"Thrust vector: {thrust_vector}")
 
 def send_thrust_vector(thrust_vector):
-    # Send the thrust vector to the PCA9685 controller
-    for i in range(len(thrust_vector)):
-        PCA9685.set_pwm_scaled(i, thrust_vector[i])
+    # This code is probably very inefficient, but it works for now
+    PCA9685.set_pwm_scaled(config.get_thruster1_pin, thrust_vector[0])
+    PCA9685.set_pwm_scaled(config.get_thruster2_pin, thrust_vector[1])
+    PCA9685.set_pwm_scaled(config.get_thruster3_pin, thrust_vector[2])
+    PCA9685.set_pwm_scaled(config.get_thruster4_pin, thrust_vector[3])
+    PCA9685.set_pwm_scaled(config.get_thruster5_pin, thrust_vector[4])
+    PCA9685.set_pwm_scaled(config.get_thruster6_pin, thrust_vector[5])
+    PCA9685.set_pwm_scaled(config.get_thruster7_pin, thrust_vector[6])
+    PCA9685.set_pwm_scaled(config.get_thruster8_pin, thrust_vector[7])
 
 def run_thrusters(direction_vector, PID_enabled=False):
     # direction vecor format [forward, side, up, pitch, yaw, roll]
