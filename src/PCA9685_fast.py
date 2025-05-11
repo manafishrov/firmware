@@ -73,11 +73,16 @@ class PCA9685:
         self.bus.write_byte_data(self.address, 0xFD, off >> 8)
 
     def _compute_off_tick(self, thrust):
-        # Map [-1,1] ? off-tick using calibrated formula
+        # Ensure we are in the range [-1.0, 1.0]
         t = max(-1.0, min(1.0, thrust))
-        if t < 0:
-            return int((0.076 + t * 0.017) * 4095)
-        return int((0.076 + t * 0.019) * 4095)
+
+        # Compute the duty cycle 
+        if t > 0:
+            duty_cycle = 0.078 + t * (0.016)
+        else:
+            duty_cycle = 0.076 + t * (0.016)
+        
+        return int(duty_cycle * 4095)
 
     def set_all_pwm_scaled(self, thrust_vector):
         # Batch-write channels 0-7 in one I2C transaction
@@ -87,8 +92,7 @@ class PCA9685:
 
         data = []
         for t in thrust_vector:
-            #off = self._compute_off_tick(t)
-            off = int(t * 4095)
+            off = self._compute_off_tick(t)
             data.extend([
                 0        & 0xFF,
                 (0 >> 8) & 0xFF,
@@ -123,15 +127,37 @@ if __name__ == "__main__":
     pwm = PCA9685(bus_num=1)
     pwm.set_pwm_freq(50)
 
-    # Set all channels to 0 to initialize ESCs
-    pwm.set_all_pwm_scaled([0.076, 0.076, 0.076, 0.076, 0.076, 0.076, 0.076, 0.076])
+    print("Testing PCA9685 with all channels")
+    print("Setting all channels to 0.0 to initialize ESCs") 
+    pwm.set_all_pwm_scaled([0, 0, 0, 0, 0, 0, 0, 0])
     time.sleep(2)
 
-    import time
-    for i in range(100):
-        pulseWidth = (0.05 + i*0.0005)
-        print(f"Settiing pulse width to {pulseWidth*1000}")
-        pwm.set_all_pwm_scaled([pulseWidth, pulseWidth, pulseWidth, pulseWidth, pulseWidth, pulseWidth, pulseWidth, pulseWidth])
-        time.sleep(1)
+    print()
+    print("Going back and forth on interval [-0.1, 0.1] to check deadband and reverse thrust")
+    for i in range(3):
+        for i in range(-100, 101):
+            pwm.set_all_pwm_scaled([i / 1000] * 8)
+            time.sleep(0.02)
+        for i in range(100, -101, -1):
+            pwm.set_all_pwm_scaled([i / 1000] * 8)
+            time.sleep(0.02)
 
+    print()
+    print("Setting thrusters to -0.2 and 0.2. All thrusters should now spin at the same speed")
+    pwm.set_all_pwm_scaled([-0.2, 0.2, -0.2, 0.2, -0.2, 0.2, -0.2, 0.2])
+    time.sleep(2)
+
+    print()
+    print("Spinning one thruster at a time fast cause it looks cool")
+    for j in range(1):
+        for i in range(8):
+            pwm.set_all_pwm_scaled([0] * 8)
+            pwm.set_all_pwm_scaled([0.2 if j == i else 0 for j in range(8)])
+            time.sleep(0.2)
+
+    print()
+    print("Setting all channels to 0.0 to stop thrusters")
+    pwm.set_all_pwm_scaled([0] * 8)
+
+    print("Test over")
     pwm.close()
