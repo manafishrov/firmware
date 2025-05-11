@@ -10,7 +10,7 @@ from smbus2 import SMBus
 
 logger = logging.getLogger(__name__)
 
-# I²C default address
+# I2C default address
 PCA9685_ADDRESS = 0x40
 
 # Register addresses
@@ -80,14 +80,15 @@ class PCA9685:
         return int((0.076 + t * 0.019) * 4095)
 
     def set_all_pwm_scaled(self, thrust_vector):
-        # Batch-write channels 0–7 in one I²C transaction
+        # Batch-write channels 0-7 in one I2C transaction
         # Falls back to per-channel on failure
         if len(thrust_vector) != 8:
             raise ValueError("Expected thrust_vector length 8")
 
         data = []
         for t in thrust_vector:
-            off = self._compute_off_tick(t)
+            #off = self._compute_off_tick(t)
+            off = int(t * 4095)
             data.extend([
                 0        & 0xFF,
                 (0 >> 8) & 0xFF,
@@ -122,9 +123,15 @@ if __name__ == "__main__":
     pwm = PCA9685(bus_num=1)
     pwm.set_pwm_freq(50)
 
+    # Set all channels to 0 to initialize ESCs
+    pwm.set_all_pwm_scaled([0.076, 0.076, 0.076, 0.076, 0.076, 0.076, 0.076, 0.076])
+    time.sleep(2)
+
     import time
-    for level in [i/10 for i in range(-10, 11)] + [i/10 for i in reversed(range(-10, 11))]:
-        pwm.set_all_pwm_scaled([level]*8)
-        time.sleep(0.1)
+    for i in range(100):
+        pulseWidth = (0.05 + i*0.0005)
+        print(f"Settiing pulse width to {pulseWidth*1000}")
+        pwm.set_all_pwm_scaled([pulseWidth, pulseWidth, pulseWidth, pulseWidth, pulseWidth, pulseWidth, pulseWidth, pulseWidth])
+        time.sleep(1)
 
     pwm.close()
