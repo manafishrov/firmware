@@ -86,50 +86,20 @@ def regulate_pitch_roll(direction_vector):
     # Get current pitch and roll values from the IMU
     current_pitch, current_roll = imu.get_pitch_roll()
 
-
     # Update desired pitch and roll values
     desired_pitch_change = direction_vector[3]
     desired_roll_change = direction_vector[5]
     update_desired_pitch_roll(desired_pitch_change, desired_roll_change, current_roll, delta_t)
 
-    # Update integral values
-    integral_value_pitch += (desired_pitch - current_pitch) * delta_t
-    integral_value_roll  += (desired_roll - current_roll) * delta_t
+    regulated_direction_vector = regulate_to_absolute(direction_vector, desired_pitch, desired_roll, delta_t)
 
-    # Make sure the integral values don't get too big, prevent windup
-    integral_value_pitch = np.clip(integral_value_pitch, -100, 100)
-    integral_value_roll = np.clip(integral_value_roll, -100, 100)
-
-    # Calculate derivative values using exponential moving average
-    current_dt_pitch = EMA_lambda * current_dt_pitch + (1-EMA_lambda)*(current_pitch-previous_pitch)/delta_t
-    current_dt_roll = EMA_lambda * current_dt_roll + (1-EMA_lambda)*(current_roll-previous_roll)/delta_t
-
-    # Calculate actuation for pitch and roll using PID
-    pitch_actuation = PID(current_pitch, desired_pitch, integral_value_pitch, current_dt_pitch)
-    roll_actuation = PID(current_roll, desired_roll, integral_value_roll, current_dt_roll)
-
-    # Update previous pitch and roll values
-    previous_pitch = current_pitch
-    previous_roll = current_roll
-
-    # Put the actuation values into the direction vector, if upside down, the pitch actuation is inverted
-    if current_roll >= 90 or current_roll <= -90:
-        actuation_vector = np.array([0, 0, 0, pitch_actuation, 0, -roll_actuation])
-    else:
-        actuation_vector = np.array([0, 0, 0, -pitch_actuation, 0, -roll_actuation])
-
-    #Cursed i know, but it works.
-    return np.array([direction_vector[0], direction_vector[1], direction_vector[2], actuation_vector[3], direction_vector[4], actuation_vector[5]])
+    return regulated_direction_vector
 
 
 # A function similar to the previous one, but insted of getting user input it regulates to an absolute specified value.
 # Good for tuning parameters or resetting ROV position to neutral.  
-def regulate_to_absolute(direction_vector, target_pitch, target_roll):
+def regulate_to_absolute(direction_vector, target_pitch, target_roll, delta_t):
     global current_dt_pitch, current_dt_roll, previous_pitch, previous_roll, integral_value_pitch, integral_value_roll, last_called_time
-
-    # Update time
-    delta_t = time.time() - last_called_time
-    last_called_time = time.time()
 
     # Get current pitch and roll values from the IMU
     current_pitch, current_roll = imu.get_pitch_roll()
@@ -137,6 +107,10 @@ def regulate_to_absolute(direction_vector, target_pitch, target_roll):
     # Update integral values
     integral_value_pitch += (target_pitch - current_pitch) * delta_t
     integral_value_roll  += (target_roll - current_roll) * delta_t
+
+    # Make sure the integral values don't get too big, prevent windup
+    integral_value_pitch = np.clip(integral_value_pitch, -100, 100)
+    integral_value_roll = np.clip(integral_value_roll, -100, 100)
     
     # Calculate derivative values using exponential moving average
     current_dt_pitch = EMA_lambda * current_dt_pitch + (1-EMA_lambda)*(current_pitch-previous_pitch)/delta_t
@@ -150,8 +124,14 @@ def regulate_to_absolute(direction_vector, target_pitch, target_roll):
     previous_pitch = current_pitch
     previous_roll = current_roll
 
-    # Had to do it this way because of some weird python comy list stuff i dont understand, but this worked!
-    return np.array([0, 0, 0, pitch_actuation, 0, roll_actuation]) 
+    # Put the actuation values into the direction vector, if upside down, the pitch actuation is inverted
+    if current_roll >= 90 or current_roll <= -90:
+        actuation_vector = np.array([0, 0, 0, pitch_actuation, 0, -roll_actuation])
+    else:
+        actuation_vector = np.array([0, 0, 0, -pitch_actuation, 0, -roll_actuation])
+
+    #Cursed i know, but it works.
+    return np.array([direction_vector[0], direction_vector[1], direction_vector[2], actuation_vector[3], direction_vector[4], actuation_vector[5]])
 
     
     

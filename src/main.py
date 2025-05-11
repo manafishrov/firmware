@@ -64,7 +64,7 @@ async def handle_client(websocket):
                     elif msg_type == "ControlInput":
                         if isinstance(payload, list) and len(payload) == 6:
                             # HERE WE GET THE INPUT ARRAY FROM THE APP
-                            thrusters.run_thrusters(payload, PID_enabled=False)
+                            thrusters.run_thrusters(payload, PID_enabled=True)
 
                             logging.info(f"Received control input: {payload}")
                         else:
