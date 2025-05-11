@@ -1,5 +1,3 @@
-# IMPORTANT! THIS FILE NEEDS TO BE NAMED main.py WHEN UPLOADING TO THE PICO, THEN IT WILL RUN AUTOMATICALLY ON BOOTUP.
-
 from machine import UART, Pin, PWM
 import struct
 import time
@@ -46,12 +44,14 @@ while True:
             checksum = buffer[HEADER_LEN+PAYLOAD_LEN]
             if sum(payload) & 0xFF == checksum:
                 vals = struct.unpack('<8f', payload)
-                print(vals)
+                #print(vals)
                 for i, v in enumerate(vals):
                     set_us(pwms[i], float_to_us(v)) #This is where actual call to activate PWMs happens
                 led.toggle()
                 buffer = buffer[PACKET_SIZE:]
             else:
                 buffer = buffer[1:]
+                #print("SIGNAL ERROR")
         else:
             buffer = buffer[1:]
+            #print("SIGNAL ERROR")
