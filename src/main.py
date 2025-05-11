@@ -6,7 +6,6 @@ import logging
 from config import get_ip_address, get_device_controls_port
 
 # User made packages
-import wetsensor
 import thrusters
 import imu
 
@@ -30,27 +29,7 @@ async def handle_client(websocket):
             except Exception as e:
                 logging.error(f"Heartbeat error: {e}")
                 break
-
-    # async def send_status_updates():
-    #     counter = 0
-    #     while True:
-    #         try:
-    #             if counter % 1 == 0:
-    #                 water_sensor_status = wetsensor.check_sensor(15)
-    #                 status_msg = {
-    #                     "message_type": "Status",
-    #                     "payload": {
-    #                         "water_sensor_status": water_sensor_status
-    #                     }
-    #                 }
-    #                 await websocket.send(json.dumps(status_msg))
-    #                 #logging.info(f"Sent status update: water_sensor_status={water_sensor_status}")
-    #             counter += 1
-    #             await asyncio.sleep(1)
-    #         except Exception as e:
-    #             logging.error(f"Status update error: {e}")
-    #             break
-
+    
     async def update_imu_reading():
         while True:
             try:
@@ -63,7 +42,6 @@ async def handle_client(websocket):
 
     try:
         heartbeat_task = asyncio.create_task(send_heartbeat())
-        #status_task = asyncio.create_task(send_status_updates())
         imu_task = asyncio.create_task(update_imu_reading())
 
         messageNr = 0 #This is the MOST MAKESHIFTED THING EVER, BUT IT WORKS FOR NOW
@@ -101,7 +79,6 @@ async def handle_client(websocket):
         logging.info(f"Client disconnected: {e}")
     finally:
         heartbeat_task.cancel()
-        #status_task.cancel()
         imu_task.cancel()
 
 async def main(): 
@@ -110,8 +87,6 @@ async def main():
         imu.init_sensor()
     except Exception as e:
         logging.error(f"IMU setup error: {e}")
-
-    wetsensor.setup_sensor()
 
     # INITIALIZING WEBSOCKET SERVER
     try:
