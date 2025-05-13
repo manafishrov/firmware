@@ -57,10 +57,7 @@
   };
 
   # Enable specific hardware support for camera and i2c
-  boot = {
-    kernelModules = [ "bcm2835-v4l2" "i2c-bcm2835" ];
-    kernelParams = [ "cma=256M" ];
-  };
+  boot.kernelModules = [ "bcm2835-v4l2" "i2c-bcm2835" ];
   imports = [
     "${nixos-hardware}/raspberry-pi/4/pkgs-overlays.nix"
   ];
@@ -70,29 +67,99 @@
     deviceTree = {
       enable = true;
       filter = "bcm2837-rpi-3*";
-      overlays =
-      let
-        mkCompatibleDtsFile = dtbo:
-          let
-            drv = (pkgs.runCommand (builtins.replaceStrings [ ".dtbo" ] [ ".dts" ] (baseNameOf dtbo)) {
-              nativeBuildInputs = with pkgs; [ dtc gnused ];
-            }) ''
-              mkdir "$out"
-              dtc -I dtb -O dts '${dtbo}' | sed -e 's/bcm2835/bcm2837/' > "$out/overlay.dts"
-            '';
-          in
-          "${drv}/overlay.dts";
-      in
-        [
-          {
-            name = "i2c1";
-            dtsFile = mkCompatibleDtsFile "${config.boot.kernelPackages.kernel}/dtbs/overlays/i2c1.dtbo";
-          }
-          {
-            name = "ov5647";
-            dtsFile = mkCompatibleDtsFile "${config.boot.kernelPackages.kernel}/dtbs/overlays/ov5647.dtbo";
-          }
-        ];
+      overlays = [
+        {
+          name = "i2c1";
+          dtsText = ''
+            /dts-v1/;
+            /plugin/;
+
+            / {
+              compatible = "brcm,bcm2837";
+
+              fragment@0 {
+                target = <&i2c1>;
+                __overlay__ {
+                  status = "okay";
+                  clock-frequency = <1000000>;  // Setting to 1MHz
+                };
+              };
+            };
+          '';
+        }
+        {
+          name = "ov5647";
+          dtsText = ''
+            /dts-v1/;
+            /plugin/;
+
+            /{
+              compatible = "brcm,bcm2837";
+
+              fragment@0 {
+                target = <&i2c_csi_dsi>;
+                __overlay__ {
+                  #address-cells = <1>;
+                  #size-cells = <0>;
+                  status = "okay";
+
+                  ov5647: ov5647@36 {
+                    compatible = "ovti,ov5647";
+                    reg = <0x36>;
+                    status = "okay";
+
+                    clocks = <&cam1_clk>;
+                    clock-names = "xclk";
+
+                    avdd-supply = <&cam1_reg>;
+                    dovdd-supply = <&cam_dummy_reg>;
+                    dvdd-supply = <&cam_dummy_reg>;
+
+                    port {
+                      cam_endpoint: endpoint {
+                        remote-endpoint = <&csi1_ep>;
+                        clock-lanes = <0>;
+                        data-lanes = <1 2>;
+                        clock-noncontinuous;
+                        link-frequencies = /bits/ 64 <297000000>;
+                      };
+                    };
+                  };
+                };
+              };
+
+              fragment@1 {
+                target = <&csi1>;
+                __overlay__ {
+                  status = "okay";
+
+                  port {
+                    csi1_ep: endpoint {
+                      remote-endpoint = <&cam_endpoint>;
+                      data-lanes = <1 2>;
+                    };
+                  };
+                };
+              };
+
+              fragment@2 {
+                target = <&cam1_clk>;
+                __overlay__ {
+                  clock-frequency = <25000000>;
+                  status = "okay";
+                };
+              };
+
+              fragment@3 {
+                target = <&cam1_reg>;
+                __overlay__ {
+                  startup-delay-us = <20000>;
+                };
+              };
+            };
+          '';
+        }
+      ];
     };
   };
 
@@ -120,6 +187,7 @@
   environment.systemPackages = with pkgs; [
     i2c-tools
     v4l-utils
+    media-ctl
     neovim
     nano
     ffmpeg
