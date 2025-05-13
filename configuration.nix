@@ -1,4 +1,4 @@
-{ pkgs, config, nixos-hardware, ... }:
+{ pkgs, nixos-hardware, ... }:
 {
   # Nix settings
   system.stateVersion = "24.11";
@@ -81,7 +81,7 @@
                 target = <&i2c1>;
                 __overlay__ {
                   status = "okay";
-                  clock-frequency = <1000000>;  // Setting to 1MHz
+                  clock-frequency = <1000000>;
                 };
               };
             };
@@ -90,75 +90,122 @@
         {
           name = "ov5647";
           dtsText = ''
-            /dts-v1/;
-            /plugin/;
+          /dts-v1/;
+          /plugin/;
 
-            /{
-              compatible = "brcm,bcm2837";
+          / {
+            compatible = "brcm,bcm2837";
 
-              fragment@0 {
+            i2c_frag: fragment@0 {
                 target = <&i2c_csi_dsi>;
                 __overlay__ {
-                  #address-cells = <1>;
-                  #size-cells = <0>;
-                  status = "okay";
-
-                  ov5647: ov5647@36 {
-                    compatible = "ovti,ov5647";
-                    reg = <0x36>;
+                    #address-cells = <1>;
+                    #size-cells = <0>;
                     status = "okay";
 
-                    clocks = <&cam1_clk>;
-                    clock-names = "xclk";
+                    cam_node: ov5647@36 {
+                        compatible = "ovti,ov5647";
+                        reg = <0x36>;
+                        status = "disabled";
 
-                    avdd-supply = <&cam1_reg>;
-                    dovdd-supply = <&cam_dummy_reg>;
-                    dvdd-supply = <&cam_dummy_reg>;
+                        clocks = <&cam1_clk>;
+
+                        avdd-supply = <&cam1_reg>;
+                        dovdd-supply = <&cam_dummy_reg>;
+                        dvdd-supply = <&cam_dummy_reg>;
+
+                        rotation = <0>;
+                        orientation = <2>;
+
+                        port {
+                            cam_endpoint: endpoint {
+                                clock-lanes = <0>;
+                                data-lanes = <1 2>;
+                                clock-noncontinuous;
+                                link-frequencies =
+                                    /bits/ 64 <297000000>;
+                            };
+                        };
+                    };
+
+                    vcm_node: ad5398@c {
+                        compatible = "adi,ad5398";
+                        reg = <0x0c>;
+                        status = "disabled";
+                        VANA-supply = <&cam1_reg>;
+                    };
+                };
+            };
+
+            csi_frag: fragment@1 {
+                target = <&csi1>;
+                csi: __overlay__ {
+                    status = "okay";
+                    brcm,media-controller;
 
                     port {
-                      cam_endpoint: endpoint {
-                        remote-endpoint = <&csi1_ep>;
-                        clock-lanes = <0>;
-                        data-lanes = <1 2>;
-                        clock-noncontinuous;
-                        link-frequencies = /bits/ 64 <297000000>;
-                      };
+                        csi_ep: endpoint {
+                            remote-endpoint = <&cam_endpoint>;
+                            data-lanes = <1 2>;
+                        };
                     };
-                  };
                 };
-              };
+            };
 
-              fragment@1 {
-                target = <&csi1>;
+            fragment@2 {
+                target = <&i2c0if>;
                 __overlay__ {
-                  status = "okay";
-
-                  port {
-                    csi1_ep: endpoint {
-                      remote-endpoint = <&cam_endpoint>;
-                      data-lanes = <1 2>;
-                    };
-                  };
+                    status = "okay";
                 };
-              };
+            };
 
-              fragment@2 {
-                target = <&cam1_clk>;
+            fragment@3 {
+                target = <&i2c0mux>;
                 __overlay__ {
-                  clock-frequency = <25000000>;
-                  status = "okay";
+                    status = "okay";
                 };
-              };
+            };
 
-              fragment@3 {
+            reg_frag: fragment@4 {
                 target = <&cam1_reg>;
                 __overlay__ {
-                  startup-delay-us = <20000>;
+                    startup-delay-us = <20000>;
                 };
-              };
             };
-          '';
-        }
+
+            clk_frag: fragment@5 {
+                target = <&cam1_clk>;
+                __overlay__ {
+                    status = "okay";
+                    clock-frequency = <25000000>;
+                };
+            };
+
+            __overrides__ {
+                rotation = <&cam_node>,"rotation:0";
+                orientation = <&cam_node>,"orientation:0";
+                media-controller = <&csi>,"brcm,media-controller?";
+                cam0 = <&i2c_frag>, "target:0=",<&i2c_csi_dsi0>,
+                      <&csi_frag>, "target:0=",<&csi0>,
+                      <&reg_frag>, "target:0=",<&cam0_reg>,
+                      <&clk_frag>, "target:0=",<&cam0_clk>,
+                      <&cam_node>, "clocks:0=",<&cam0_clk>,
+                      <&cam_node>, "avdd-supply:0=",<&cam0_reg>,
+                      <&vcm_node>, "VANA-supply:0=",<&cam0_reg>;
+                vcm = <&vcm_node>, "status=okay",
+                      <&cam_node>,"lens-focus:0=", <&vcm_node>;
+            };
+          };
+
+          &cam_node {
+            status = "okay";
+          };
+
+          &cam_endpoint {
+            remote-endpoint = <&csi_ep>;
+          };
+        '';
+      }
       ];
     };
   };
