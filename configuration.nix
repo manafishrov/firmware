@@ -187,7 +187,6 @@
   environment.systemPackages = with pkgs; [
     i2c-tools
     v4l-utils
-    media-ctl
     neovim
     nano
     ffmpeg
