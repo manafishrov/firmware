@@ -18,6 +18,7 @@
     };
   };
 
+  # Libcamera overlay
   nixpkgs.overlays = [
     (final: prev: {
       libcamera = prev.libcamera.overrideAttrs (old: rec {
