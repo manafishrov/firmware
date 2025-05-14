@@ -106,3 +106,7 @@ class ThrusterController:
         thrust_vector = np.clip(thrust_vector, -1, 1)
 
         self.send_thrust_vector(thrust_vector)
+
+
+    def get_desired_pitch_roll(self):
+        return self.regulator.desired_pitch, self.regulator.desired_roll
