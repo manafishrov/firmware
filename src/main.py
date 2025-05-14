@@ -43,8 +43,9 @@ async def handle_client(websocket, path):
                         "payload": {
                             "pitch": imu_sensor.current_pitch,
                             "roll": imu_sensor.current_roll,
-                            # "desired_pitch": desired_pitch,
-                            # "desired_roll": desired_roll,
+                            "desired_pitch": desired_pitch,
+                            "desired_roll": desired_roll,
+                            "water_detected": False,
                         }
                     }
                     await websocket.send(json.dumps(status_msg))
@@ -70,30 +71,36 @@ async def handle_client(websocket, path):
 
 
     try:
+        messageNr = 0 # the WORST fix but it seems to be necessary, cuts out 3/4 of the messages
         async for message in websocket:
-            try:
-                msg_data = json.loads(message)
-                msg_type = msg_data.get("message_type")
-                payload = msg_data.get("payload")
+            messageNr += 1
+            if messageNr % 4 == 0:
+                try:
+                    msg_data = json.loads(message)
+                    msg_type = msg_data.get("message_type")
+                    payload = msg_data.get("payload")
 
-                if msg_type == "Command" and payload == "connect":
-                    logging.info("Client sent handshake")
-                
-                elif msg_type == "Heartbeat":
-                    logging.info("Received heartbeat response")
-                    logging.info(f"Pitch: {imu_sensor.current_pitch}, Roll: {imu_sensor.current_roll}")
-                
-                elif msg_type == "ControlInput":
-                    if isinstance(payload, list) and len(payload) == 6:
-                        thruster_ctrl.run_thrusters(payload, PID_enabled=True)
-                        logging.info(f"Received control input: {payload}")
+                    if msg_type == "Command" and payload == "connect":
+                        logging.info("Client sent handshake")
+                    
+                    elif msg_type == "Heartbeat":
+                        logging.info("Received heartbeat response")
+                        logging.info(f"Pitch: {imu_sensor.current_pitch}, Roll: {imu_sensor.current_roll}")
+                    
+                    elif msg_type == "ControlInput":
+                        if isinstance(payload, list) and len(payload) == 6:
+                            if messageNr < 200:
+                                thruster_ctrl.run_thrusters(payload, PID_enabled=False)
+                            else:
+                                thruster_ctrl.run_thrusters(payload, PID_enabled=True)
+                            # logging.info(f"Received control input: {payload}")
+                        else:
+                            logging.warning(f"Invalid control input format: {payload}")
+                    
                     else:
-                        logging.warning(f"Invalid control input format: {payload}")
-                
-                else:
-                    logging.info(f"Received message: {msg_data}")
-            except json.JSONDecodeError:
-                logging.warning(f"Received non-JSON message: {message}")
+                        logging.info(f"Received message: {msg_data}")
+                except json.JSONDecodeError:
+                    logging.warning(f"Received non-JSON message: {message}")
 
     except websockets.exceptions.ConnectionClosed as e:
         logging.info(f"Client disconnected: {e}")

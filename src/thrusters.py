@@ -12,7 +12,7 @@ class ThrusterController:
             self.regulator = regulator_controller
 
         # State
-        self.prev_thrust_vector = np.zeros(8)
+        self.prev_thrust_vector = None
         self._sending = False
 
         # PWM DRIVER SETUP
@@ -58,7 +58,7 @@ class ThrusterController:
         return thrust_vector * magnitude
 
     def correct_spin_direction(self, thrust_vector):
-        spin_directions = np.array([-1, 1, -1, 1, -1, -1, -1, -1])
+        spin_directions = np.array([-1, 1, -1, 1, -1, 1, -1, -1])
         return thrust_vector * spin_directions
 
     def print_thrust_vector(self, thrust_vector):

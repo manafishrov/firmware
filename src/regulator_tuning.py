@@ -13,6 +13,12 @@ desired_pitch = 0
 desired_roll = 0
 
 time.sleep(0.1)
+print("Initializing thrusters")
+for i in range(8):
+    thrust_controller.send_thrust_vector([0, 0, 0, 0, 0, 0, 0, 0])
+    time.sleep(0.1)
+time.sleep(3)
+
 
 def run_test(desired_pitch, desired_roll):
     last_called_time = time.time()
@@ -63,7 +69,7 @@ while running:
     regulator.set_Ki_roll(Ki_roll)
     regulator.set_Kd_roll(Kd_roll)
     
-    
+
     # Get pitch and roll target values
     pitchVal = float(input("Enter pitch value: "))
     rollVal = float(input("Enter roll value: "))

@@ -98,6 +98,6 @@ class IMU:
 if __name__ == "__main__":
     imu = IMU()
     while True:
-        imu.update()
+        imu.update_pitch_roll()
         print(f"Pitch: {imu.current_pitch}, Roll: {imu.current_roll}")
         time.sleep(1)
