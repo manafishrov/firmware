@@ -57,12 +57,6 @@ def correct_spin_direction(thrust_vector):
     thrust_vector = thrust_vector * spin_directions
     return thrust_vector
 
-def remove_deadzone(thrust_vector, deadzone = 0.015):
-    for i in range(len(thrust_vector)):
-        if abs(thrust_vector[i]) < deadzone:
-            thrust_vector[i] = 0
-    return thrust_vector
-
 def print_thrust_vector(thrust_vector):
     print(f"Thrust vector: {thrust_vector}")
 
@@ -70,17 +64,17 @@ def print_thrust_vector(thrust_vector):
 async def _async_send(thrust_vector):
     global prev_thrust_vector, _sending
 
-    # offload the blocking i2c call so it doesn't block the loop, UNSURE IF THIS WILL WORK
-    loop = asyncio.get_running_loop()
-    await loop.run_in_executor(None, pwm.set_all_pwm_scaled, thrust_vector)
-    prev_thrust_vector = thrust_vector.copy()
-    _sending = False
+    # offload the blocking i2c call so it doesn't block the loop, UNSURE IF THIS WILL WORK, try and finally is there to prevent endless lock if set_all_pwm_scaled fails
+    try:
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, pwm.set_all_pwm_scaled, thrust_vector)
+        prev_thrust_vector = thrust_vector.copy()
+    finally:
+        _sending = False
 
 def send_thrust_vector(thrust_vector):
     global _sending
 
-    if np.array_equal(thrust_vector, prev_thrust_vector):
-        return
     
     if _sending:
         return
@@ -95,6 +89,9 @@ def send_thrust_vector(thrust_vector):
         thrust_vector[6],  
         thrust_vector[5]   
     ])
+    
+    if np.array_equal(reordered_thrust_vector, prev_thrust_vector):
+        return
     
     _sending = True
     asyncio.create_task(_async_send(reordered_thrust_vector))
@@ -116,7 +113,6 @@ def run_thrusters(direction_vector, PID_enabled=False):
     thrust_vector = adjust_magnitude(thrust_vector, 0.3)
     
     thrust_vector = np.clip(thrust_vector, -1, 1) #Clipping cause the regulator can give values outside of the range [-1, 1]
-    thrust_vector = remove_deadzone(thrust_vector)
 
     send_thrust_vector(thrust_vector)
 
