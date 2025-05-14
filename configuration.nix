@@ -1,4 +1,4 @@
-{ pkgs, nixos-hardware, ... }:
+{ pkgs, config, nixos-hardware, ... }:
 {
   # Nix settings
   system.stateVersion = "24.11";
@@ -17,6 +17,45 @@
       ];
     };
   };
+
+  nixpkgs.overlays = [
+    (final: prev: {
+      libcamera = prev.libcamera.overrideAttrs (old: rec {
+        version = "0.4.0+rpt20250213";
+
+        src = prev.fetchFromGitHub {
+          owner = "raspberrypi";
+          repo = "libcamera";
+          rev = "v${version}";
+          hash = "sha256-89uo3ajxozSpM4AGVIVb5GJ70giAQeyw0duIj5PRBgo=";
+        };
+
+        postPatch = ''
+          ${old.postPatch}
+          patchShebangs src/py/
+        '';
+
+        buildInputs = old.buildInputs ++ (with prev; [
+          python3Packages.pybind11
+        ]);
+
+        mesonFlags = old.mesonFlags ++ [
+          "--buildtype=release"
+          "-Dpipelines=rpi/vc4"
+          "-Dipas=rpi/vc4"
+          "-Dgstreamer=enabled"
+          "-Dtest=false"
+          "-Dcam=disabled"
+          "-Dpycamera=enabled"
+        ];
+
+        meta = old.meta // {
+          homepage = "https://github.com/raspberrypi/libcamera";
+          changelog = "https://github.com/raspberrypi/libcamera/releases/tag/v${version}";
+        };
+      });
+    })
+  ];
 
   # Remove documentation to save space
   documentation = {
@@ -57,7 +96,7 @@
   };
 
   # Enable specific hardware support for camera and i2c
-  boot.kernelModules = [ "bcm2835-v4l2" "i2c-bcm2835" ];
+  boot.kernelModules = [ "i2c-bcm2835" ];
   imports = [
     "${nixos-hardware}/raspberry-pi/4/pkgs-overlays.nix"
   ];
@@ -67,152 +106,50 @@
     deviceTree = {
       enable = true;
       filter = "bcm2837-rpi-3*";
-      overlays = [
-        {
-          name = "i2c1";
-          dtsText = ''
-            /dts-v1/;
-            /plugin/;
+      overlays =
+      let
+        mkCompatibleDtsFile = dtbo:
+          let
+            drv = (pkgs.runCommand (builtins.replaceStrings [ ".dtbo" ] [ ".dts" ] (baseNameOf dtbo)) {
+              nativeBuildInputs = with pkgs; [ dtc gnused ];
+            }) ''
+              mkdir "$out"
+              dtc -I dtb -O dts '${dtbo}' | sed -e 's/bcm2835/bcm2837/' > "$out/overlay.dts"
+            '';
+          in
+          "${drv}/overlay.dts";
+      in
+        [
+          {
+            name = "i2c1";
+            dtsText = ''
+              /dts-v1/;
+              /plugin/;
 
-            / {
-              compatible = "brcm,bcm2837";
+              / {
+                compatible = "brcm,bcm2837";
 
-              fragment@0 {
-                target = <&i2c1>;
-                __overlay__ {
-                  status = "okay";
-                  clock-frequency = <1000000>;
+                fragment@0 {
+                  target = <&i2c1>;
+                  __overlay__ {
+                    status = "okay";
+                    clock-frequency = <1000000>;
+                  };
                 };
               };
-            };
-          '';
-        }
-        {
-          name = "ov5647";
-          dtsText = ''
-          /dts-v1/;
-          /plugin/;
-
-          / {
-            compatible = "brcm,bcm2837";
-
-            i2c_frag: fragment@0 {
-                target = <&i2c_csi_dsi>;
-                __overlay__ {
-                    #address-cells = <1>;
-                    #size-cells = <0>;
-                    status = "okay";
-
-                    cam_node: ov5647@36 {
-                        compatible = "ovti,ov5647";
-                        reg = <0x36>;
-                        status = "disabled";
-
-                        clocks = <&cam1_clk>;
-
-                        avdd-supply = <&cam1_reg>;
-                        dovdd-supply = <&cam_dummy_reg>;
-                        dvdd-supply = <&cam_dummy_reg>;
-
-                        rotation = <0>;
-                        orientation = <2>;
-
-                        port {
-                            cam_endpoint: endpoint {
-                                clock-lanes = <0>;
-                                data-lanes = <1 2>;
-                                clock-noncontinuous;
-                                link-frequencies =
-                                    /bits/ 64 <297000000>;
-                            };
-                        };
-                    };
-
-                    vcm_node: ad5398@c {
-                        compatible = "adi,ad5398";
-                        reg = <0x0c>;
-                        status = "disabled";
-                        VANA-supply = <&cam1_reg>;
-                    };
-                };
-            };
-
-            csi_frag: fragment@1 {
-                target = <&csi1>;
-                csi: __overlay__ {
-                    status = "okay";
-                    brcm,media-controller;
-
-                    port {
-                        csi_ep: endpoint {
-                            remote-endpoint = <&cam_endpoint>;
-                            data-lanes = <1 2>;
-                        };
-                    };
-                };
-            };
-
-            fragment@2 {
-                target = <&i2c0if>;
-                __overlay__ {
-                    status = "okay";
-                };
-            };
-
-            fragment@3 {
-                target = <&i2c0mux>;
-                __overlay__ {
-                    status = "okay";
-                };
-            };
-
-            reg_frag: fragment@4 {
-                target = <&cam1_reg>;
-                __overlay__ {
-                    startup-delay-us = <20000>;
-                };
-            };
-
-            clk_frag: fragment@5 {
-                target = <&cam1_clk>;
-                __overlay__ {
-                    status = "okay";
-                    clock-frequency = <25000000>;
-                };
-            };
-
-            __overrides__ {
-                rotation = <&cam_node>,"rotation:0";
-                orientation = <&cam_node>,"orientation:0";
-                media-controller = <&csi>,"brcm,media-controller?";
-                cam0 = <&i2c_frag>, "target:0=",<&i2c_csi_dsi0>,
-                      <&csi_frag>, "target:0=",<&csi0>,
-                      <&reg_frag>, "target:0=",<&cam0_reg>,
-                      <&clk_frag>, "target:0=",<&cam0_clk>,
-                      <&cam_node>, "clocks:0=",<&cam0_clk>,
-                      <&cam_node>, "avdd-supply:0=",<&cam0_reg>,
-                      <&vcm_node>, "VANA-supply:0=",<&cam0_reg>;
-                vcm = <&vcm_node>, "status=okay",
-                      <&cam_node>,"lens-focus:0=", <&vcm_node>;
-            };
-          };
-
-          &cam_node {
-            status = "okay";
-          };
-
-          &cam_endpoint {
-            remote-endpoint = <&csi_ep>;
-          };
-        '';
-      }
-      ];
+            '';
+          }
+          {
+            name = "ov5647";
+            dtsFile = mkCompatibleDtsFile "${config.boot.kernelPackages.kernel}/dtbs/overlays/ov5647.dtbo";
+          }
+        ];
     };
   };
 
   # Setup MediaMTX
   services.mediamtx = {
-    enable = true;
+    enable = false;
     allowVideoAccess = true;
     settings = {
       rtsp = false;
@@ -233,7 +170,6 @@
   # Packages
   environment.systemPackages = with pkgs; [
     i2c-tools
-    v4l-utils
     neovim
     nano
     ffmpeg
