@@ -53,14 +53,19 @@ def get_thruster8_pin():
     return int(load_config()['thrusters']['thruster8_pin'])
 
 # Regulator
-def get_Kp():
-    return float(load_config()['regulator']['Kp'])
+def get_Kp_pitch():
+    return float(load_config()['regulator']['Kp_pitch'])
+def get_Ki_pitch():
+    return float(load_config()['regulator']['Ki_pitch'])
+def get_Kd_pitch():
+    return float(load_config()['regulator']['Kd_pitch'])
 
-def get_Ki():
-    return float(load_config()['regulator']['Ki'])
-
-def get_Kd():
-    return float(load_config()['regulator']['Kd'])
+def get_Kp_roll():
+    return float(load_config()['regulator']['Kp_roll'])
+def get_Ki_roll():
+    return float(load_config()['regulator']['Ki_roll'])
+def get_Kd_roll():
+    return float(load_config()['regulator']['Kd_roll'])
 
 def get_turn_speed():
     return float(load_config()['regulator']['turn_speed'])

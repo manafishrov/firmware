@@ -22,25 +22,37 @@ class PIDController:
         self.last_called_time = time.time()
 
         # TUNING PARAMETERS (loaded from config)
-        self.Kp = config.get_Kp()
-        self.Ki = config.get_Ki()
-        self.Kd = config.get_Kd()
+        self.Kp_pitch = config.get_Kp_pitch()
+        self.Ki_pitch = config.get_Ki_pitch()
+        self.Kd_pitch = config.get_Kd_pitch()
+        self.Kp_roll = config.get_Kp_roll()
+        self.Ki_roll = config.get_Ki_roll() 
+        self.Kd_roll = config.get_Kd_roll()
         self.turn_speed = config.get_turn_speed()
         self.EMA_lambda = config.get_EMA_lambda()
 
         self.imu = imu
 
     # Setters for gains
-    def set_Kp(self, value):
-        self.Kp = value
+    def set_Kp_pitch(self, value):
+        self.Kp_pitch = value
 
-    def set_Ki(self, value):
-        self.Ki = value
+    def set_Ki_pitch(self, value):
+        self.Ki_pitch = value
 
-    def set_Kd(self, value):
-        self.Kd = value
+    def set_Kd_pitch(self, value):
+        self.Kd_pitch = value
 
-    def PID(self, current_value, desired_value, integral_value, derivative_value):
+    def set_Kp_roll(self, value):
+        self.Kp_roll = value
+
+    def set_Ki_roll(self, value):
+        self.Ki_roll = value
+
+    def set_Kd_roll(self, value):
+        self.Kd_roll = value
+
+    def PID(self, current_value, desired_value, integral_value, derivative_value, type):
         # Convert all values to radians (necessary for ziegler–nichols method)
         current_value = np.radians(current_value)
         desired_value = np.radians(desired_value)
@@ -48,7 +60,17 @@ class PIDController:
         derivative_value = np.radians(derivative_value)
 
         error = desired_value - current_value
-        return self.Kp * error + self.Ki * integral_value - self.Kd * derivative_value
+
+        if type == "pitch":
+            Kp = self.Kp_pitch
+            Ki = self.Ki_pitch
+            Kd = self.Kd_pitch
+        elif type == "roll":
+            Kp = self.Kp_roll
+            Ki = self.Ki_roll
+            Kd = self.Kd_roll
+
+        return Kp * error + Ki * integral_value - Kd * derivative_value
 
     def update_desired_pitch_roll(self, pitch_change, roll_change, current_roll, delta_t):
 
@@ -109,12 +131,8 @@ class PIDController:
         )
 
         # PID outputs
-        pitch_actuation = self.PID(current_pitch, target_pitch,
-                                   self.integral_value_pitch,
-                                   self.current_dt_pitch)
-        roll_actuation = self.PID(current_roll, target_roll,
-                                  self.integral_value_roll,
-                                  self.current_dt_roll)
+        pitch_actuation = self.PID(current_pitch, target_pitch, self.integral_value_pitch, self.current_dt_pitch, "pitch")
+        roll_actuation = self.PID(current_roll, target_roll, self.integral_value_roll, self.current_dt_roll, "roll")
 
         # Save for next derivative calc
         self.previous_pitch = current_pitch

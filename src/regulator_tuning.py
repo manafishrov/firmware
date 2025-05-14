@@ -47,17 +47,23 @@ while running:
         break
 
     # Get PID values from the user
-    Kp = float(input("Enter K_p value: "))
-    Ki = float(input("Enter K_i value: "))
-    Kd = float(input("Enter K_d value: "))
+    Kp_pitch = float(input("Enter K_p_pitch value: "))
+    Ki_pitch = float(input("Enter K_i_pitch value: "))
+    Kd_pitch = float(input("Enter K_d_pitch value: "))
+
+    Kp_roll = float(input("Enter K_p_roll value: "))
+    Ki_roll = float(input("Enter K_i_roll value: "))
+    Kd_roll = float(input("Enter K_d_roll value: "))
 
     # Set the PID values in the regulator
-    regulator.set_Kp(Kp)
-    regulator.set_Ki(Ki)
-    regulator.set_Kd(Kd)
-
-    print(f"Current PID values: Kp={regulator.Kp}, Ki={regulator.Ki}, Kd={regulator.Kd}")
-
+    regulator.set_Kp_pitch(Kp_pitch)
+    regulator.set_Ki_pitch(Ki_pitch)
+    regulator.set_Kd_pitch(Kd_pitch)
+    regulator.set_Kp_roll(Kp_roll)  
+    regulator.set_Ki_roll(Ki_roll)
+    regulator.set_Kd_roll(Kd_roll)
+    
+    
     # Get pitch and roll target values
     pitchVal = float(input("Enter pitch value: "))
     rollVal = float(input("Enter roll value: "))
