@@ -100,4 +100,4 @@ if __name__ == "__main__":
     while True:
         imu.update_pitch_roll()
         print(f"Pitch: {imu.current_pitch}, Roll: {imu.current_roll}")
-        time.sleep(1)
+        time.sleep(0.1)
