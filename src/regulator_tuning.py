@@ -1,40 +1,40 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import asyncio
+import time
+import numpy as np
 from thrusters import ThrusterController
 from imu import IMU
 from regulator import PIDController
 
-import numpy as np
-import time
+# Async wrapper for the blocking input() call
+async def ainput(prompt: str) -> str:
+    return await asyncio.get_event_loop().run_in_executor(None, input, prompt)
 
-imu = IMU()
-thrust_controller = ThrusterController(imu)
-regulator = PIDController(imu)
-
-desired_pitch = 0
-desired_roll = 0
-
-time.sleep(0.1)
-print("Initializing thrusters")
-for i in range(8):
-    thrust_controller.send_thrust_vector([0, 0, 0, 0, 0, 0, 0, 0])
-    time.sleep(0.1)
-time.sleep(3)
-
-
-def run_test(desired_pitch, desired_roll):
+# Async version of your test loop
+async def run_test_async(
+    thrust_controller: ThrusterController,
+    regulator: PIDController,
+    imu: IMU,
+    desired_pitch: float,
+    desired_roll: float
+):
     last_called_time = time.time()
-    
-    for i in range(200):
-        # Calculate the time delta
+    for _ in range(200):
+        # compute delta_t
         current_time = time.time()
         delta_t = current_time - last_called_time
         last_called_time = current_time
 
-        # Update the IMU readings
+        # update and compute
         imu.update_pitch_roll()
-
-        # Call the regulator to get the direction vector
-        direction_vector = regulator.regulate_to_absolute([0, 0, 0, 0, 0, 0], desired_pitch, desired_roll, delta_t)
-
+        direction_vector = regulator.regulate_to_absolute(
+            [0, 0, 0, 0, 0, 0],
+            desired_pitch,
+            desired_roll,
+            delta_t
+        )
         thrust_vector = thrust_controller.thrust_allocation(direction_vector)
         thrust_vector = thrust_controller.correct_spin_direction(thrust_vector)
         thrust_vector = thrust_controller.adjust_magnitude(thrust_vector, 0.3)
@@ -42,46 +42,60 @@ def run_test(desired_pitch, desired_roll):
 
         thrust_controller.send_thrust_vector(thrust_vector)
 
-        time.sleep(0.05) # 20Hz
+        # 20 Hz
+        await asyncio.sleep(0.05)
+    for i in range(10):
+        # Stop thrusters
+        thrust_controller.send_thrust_vector([0] * 8)
+        await asyncio.sleep(0.1)
 
-running = True
-while running:
-    # Ask user if they want to test new PID parameters
-    usercontinue = input("Do you want to test new PID parameters? (y/n): ")
-    if usercontinue.lower() == "n":
-        running = False
-        break
+async def main():
+    # Initialization
+    imu = IMU()
+    thrust_controller = ThrusterController(imu)
+    regulator = PIDController(imu)
 
-    # Get PID values from the user
-    Kp_pitch = float(input("Enter K_p_pitch value: "))
-    Ki_pitch = float(input("Enter K_i_pitch value: "))
-    Kd_pitch = float(input("Enter K_d_pitch value: "))
+    await asyncio.sleep(0.1)
+    print("Initializing thrusters")
+    for _ in range(8):
+        thrust_controller.send_thrust_vector([0] * 8)
+        await asyncio.sleep(0.1)
+    await asyncio.sleep(3)
 
-    Kp_roll = float(input("Enter K_p_roll value: "))
-    Ki_roll = float(input("Enter K_i_roll value: "))
-    Kd_roll = float(input("Enter K_d_roll value: "))
+    # Interactive PID tuning loop
+    while True:
+        cont = (await ainput("Do you want to test new PID parameters? (y/n): ")).strip().lower()
+        if cont == "n":
+            print("Exiting.")
+            break
 
-    # Set the PID values in the regulator
-    regulator.set_Kp_pitch(Kp_pitch)
-    regulator.set_Ki_pitch(Ki_pitch)
-    regulator.set_Kd_pitch(Kd_pitch)
-    regulator.set_Kp_roll(Kp_roll)  
-    regulator.set_Ki_roll(Ki_roll)
-    regulator.set_Kd_roll(Kd_roll)
-    
+        # Read gains
+        Kp_pitch = float(await ainput("Enter K_p_pitch value: "))
+        Ki_pitch = float(await ainput("Enter K_i_pitch value: "))
+        Kd_pitch = float(await ainput("Enter K_d_pitch value: "))
 
-    # Get pitch and roll target values
-    pitchVal = float(input("Enter pitch value: "))
-    rollVal = float(input("Enter roll value: "))
+        Kp_roll = float(await ainput("Enter K_p_roll value: "))
+        Ki_roll = float(await ainput("Enter K_i_roll value: "))
+        Kd_roll = float(await ainput("Enter K_d_roll value: "))
 
-    # Resetting the integrator term in regulator
-    regulator.integral_value_pitch = 0
-    regulator.integral_value_roll = 0
+        # Apply them
+        regulator.set_Kp_pitch(Kp_pitch)
+        regulator.set_Ki_pitch(Ki_pitch)
+        regulator.set_Kd_pitch(Kd_pitch)
+        regulator.set_Kp_roll(Kp_roll)
+        regulator.set_Ki_roll(Ki_roll)
+        regulator.set_Kd_roll(Kd_roll)
 
-    # Run the test for 10 seconds
-    print("Regulating to specified values for 10 seconds...")
-    run_test(pitchVal, rollVal)
-    
+        # Reset integrators
+        regulator.integral_value_pitch = 0
+        regulator.integral_value_roll = 0
 
+        # Targets
+        pitchVal = float(await ainput("Enter pitch value: "))
+        rollVal = float(await ainput("Enter roll value: "))
 
+        print("Regulating to specified values for 10 seconds...")
+        await run_test_async(thrust_controller, regulator, imu, pitchVal, rollVal)
 
+if __name__ == "__main__":
+    asyncio.run(main())
