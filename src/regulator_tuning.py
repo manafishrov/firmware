@@ -29,6 +29,7 @@ async def run_test_async(
 
         # update and compute
         imu.update_pitch_roll()
+        imu.log_data("IMUREADING.txt")
         direction_vector = regulator.regulate_to_absolute(
             [0, 0, 0, 0, 0, 0],
             desired_pitch,
