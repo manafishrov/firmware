@@ -1,18 +1,16 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11?shallow=1";
-    nixos-hardware.url = "github:NixOS/nixos-hardware?shallow=1";
+    nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi?shallow=1";
   };
 
-  outputs = { self, nixpkgs, nixos-hardware, ... }:
+  outputs = { self, nixos-raspberrypi, ... }:
   {
     nixosConfigurations = {
-      cyberfish = nixpkgs.lib.nixosSystem {
-        specialArgs = { inherit nixos-hardware; };
-        system = "aarch64-linux";
+      cyberfish = nixos-raspberrypi.lib.nixosSystem {
+        specialArgs = { inherit nixos-raspberrypi; };
         modules = [
-          "${nixpkgs}/nixos/modules/installer/sd-card/sd-image-aarch64.nix"
-          nixos-hardware.nixosModules.raspberry-pi-3
+          nixos-raspberrypi.nixosModules.raspberry-pi-4.base
+          nixos-raspberrypi.nixosModules.sd-image
           ./configuration.nix
         ];
       };
