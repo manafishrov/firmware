@@ -1,11 +1,11 @@
 # Cyberfish Firmware
 
-To build the SD image you need to have nix installed and proper emulation support for the aarch64-linux platform.
+To build the SD image you need to have nix installed and proper emulation support for the aarch64-linux platform. Also add the caches for the `nixos-raspberrypi` flake to the build system.
 
 Build the SD image:
 
 ```sh
-nix build .#packages.aarch64-linux.sdImage
+nix build
 ```
 
 When you have built the image you can list it out with the following command:
