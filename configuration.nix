@@ -58,83 +58,95 @@
     settings.PasswordAuthentication = true;
   };
 
-  # # Adds "i2c-dev" kernel module and creates i2c group
-  # hardware.i2c.enable = true;
-  #
-  # # Setup MediaMTX
-  # services.mediamtx = {
-  #   enable = true;
-  #   allowVideoAccess = true;
-  #   settings = {
-  #     rtsp = false;
-  #     rtmp = false;
-  #     hls = false;
-  #     srt = false;
-  #     webrtc = true;
-  #     webrtcAddress = ":8889";
-  #     paths = {
-  #       cam = {
-  #         source = "rpiCamera";
-  #         sourceType = "yes";
-  #         sourceOnDemandStartTimeout = "1s";
-  #         sourceOnDemandCloseAfter = "1s";
-  #         rpiCameraAfSpeed = "fast";
-  #       };
-  #     };
-  #   };
-  # };
-  #
-  # # Packages
-  # environment.systemPackages = with pkgs; [
-  #   libcamera
-  #   i2c-tools
-  #   neovim
-  #   nano
-  #   ffmpeg
-  #   (python3.withPackages (pypkgs: with pypkgs; [
-  #     pip
-  #     numpy
-  #     websockets
-  #     smbus2
-  #   ]))
-  # ];
-  #
-  # # Adding these packages to the library path is required for installing packages with pip (So people can install their own packages)
-  # environment.sessionVariables = {
-  #   LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
-  #     pkgs.stdenv.cc.cc.lib
-  #     pkgs.libz
-  #     pkgs.zlib
-  #     pkgs.openssl
-  #     pkgs.python3
-  #   ];
-  # };
-  #
-  # # Copy firmware files to pi's home directory
-  # system.activationScripts.copyFirmwareFiles = {
-  #   deps = [ "users" ];
-  #   text = ''
-  #     mkdir -p /home/pi
-  #     cp -r ${./src}/* /home/pi/
-  #     chown -R pi:pi /home/pi
-  #     find /home/pi -type d -exec chmod 700 {} +
-  #     find /home/pi -type f -exec chmod 600 {} +
-  #   '';
-  # };
-  #
-  # # Firmware service
-  # systemd.services.cyberfish-firmware = {
-  #   enable = false;
-  #   description = "Cyberfish Firmware";
-  #   wantedBy = [ "multi-user.target" ];
-  #   after = [ "network.target" "mediamtx.service" ];
-  #   serviceConfig = {
-  #     Type = "simple";
-  #     User = "pi";
-  #     WorkingDirectory = "/home/pi";
-  #     ExecStart = "${pkgs.python3}/bin/python3 main.py";
-  #     Restart = "always";
-  #     RestartSec = "5";
-  #   };
-  # };
+  # Enable I2C with a high baud rate
+  hardware = {
+    i2c.enable = true; # Adds "i2c-dev" kernel module and creates i2c group
+    raspberry-pi.config.all.base-dt-params = {
+      i2c = {
+        enable = true;
+        value = "on";
+      };
+      i2c_baudrate = {
+        enable = true;
+        value = "1000000";
+      };
+    };
+  };
+
+  # Setup MediaMTX
+  services.mediamtx = {
+    enable = true;
+    allowVideoAccess = true;
+    settings = {
+      rtsp = false;
+      rtmp = false;
+      hls = false;
+      srt = false;
+      webrtc = true;
+      webrtcAddress = ":8889";
+      paths = {
+        cam = {
+          source = "rpiCamera";
+          sourceType = "yes";
+          sourceOnDemandStartTimeout = "1s";
+          sourceOnDemandCloseAfter = "1s";
+          rpiCameraAfSpeed = "fast";
+        };
+      };
+    };
+  };
+
+  # Packages
+  environment.systemPackages = with pkgs; [
+    libcamera
+    i2c-tools
+    neovim
+    nano
+    ffmpeg
+    (python3.withPackages (pypkgs: with pypkgs; [
+      pip
+      numpy
+      websockets
+      smbus2
+    ]))
+  ];
+
+  # Adding these packages to the library path is required for installing packages with pip (So people can install their own packages)
+  environment.sessionVariables = {
+    LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
+      pkgs.stdenv.cc.cc.lib
+      pkgs.libz
+      pkgs.zlib
+      pkgs.openssl
+      pkgs.python3
+    ];
+  };
+
+  # Copy firmware files to pi's home directory
+  system.activationScripts.copyFirmwareFiles = {
+    deps = [ "users" ];
+    text = ''
+      mkdir -p /home/pi
+      cp -r ${./src}/* /home/pi/
+      chown -R pi:pi /home/pi
+      find /home/pi -type d -exec chmod 700 {} +
+      find /home/pi -type f -exec chmod 600 {} +
+    '';
+  };
+
+  # Firmware service
+  systemd.services.cyberfish-firmware = {
+    enable = false;
+    description = "Cyberfish Firmware";
+    wantedBy = [ "multi-user.target" ];
+    after = [ "network.target" "mediamtx.service" ];
+    serviceConfig = {
+      Type = "simple";
+      User = "pi";
+      WorkingDirectory = "/home/pi";
+      ExecStart = "${pkgs.python3}/bin/python3 main.py";
+      Restart = "always";
+      RestartSec = "5";
+    };
+  };
 }
