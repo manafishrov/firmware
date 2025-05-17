@@ -13,6 +13,10 @@
         ];
       };
     };
-    packages.default = self.nixosConfigurations.cyberfish.config.system.build.sdImage;
+    packages = {
+      aarch64-linux.default = self.nixosConfigurations.cyberfish.config.system.build.sdImage;
+      x86_64-linux.default = self.packages.aarch64-linux.default;
+      aarch64-darwin.default = self.packages.aarch64-linux.default;
+    };
   };
 }
