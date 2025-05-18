@@ -8,15 +8,15 @@
     ];
   };
 
-  inputs.nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi?shallow=1";
+  inputs.nixos-raspberrypi.url = "github:michaelbrusegard/nixos-raspberrypi/pi3?shallow=1";
 
   outputs = { self, nixos-raspberrypi, ... }:
   {
     nixosConfigurations = {
-      cyberfish = nixos-raspberrypi.lib.nixosSystemFull {
+      cyberfish = nixos-raspberrypi.lib.nixosSystem {
         specialArgs = { inherit nixos-raspberrypi; };
         modules = [
-          nixos-raspberrypi.nixosModules.raspberry-pi-02.base
+          nixos-raspberrypi.nixosModules.raspberry-pi-3.base
           nixos-raspberrypi.nixosModules.sd-image
           ./configuration.nix
         ];
