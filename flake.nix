@@ -13,7 +13,7 @@
   outputs = { self, nixos-raspberrypi, ... }:
   {
     nixosConfigurations = {
-      cyberfish = nixos-raspberrypi.lib.nixosSystem {
+      cyberfish = nixos-raspberrypi.lib.nixosSystemFull {
         specialArgs = { inherit nixos-raspberrypi; };
         modules = [
           nixos-raspberrypi.nixosModules.raspberry-pi-02.base
