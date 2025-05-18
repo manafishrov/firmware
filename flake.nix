@@ -1,4 +1,13 @@
 {
+  nixConfig = {
+    extra-substituters = [
+      "https://nixos-raspberrypi.cachix.org"
+    ];
+    extra-trusted-public-keys = [
+      "nixos-raspberrypi.cachix.org-1:4iMO9LXa8BqhU+Rpg6LQKiGa2lsNOQ5sPI="
+    ];
+  };
+
   inputs.nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi?shallow=1";
 
   outputs = { self, nixos-raspberrypi, ... }:
