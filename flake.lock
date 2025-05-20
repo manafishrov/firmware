@@ -49,16 +49,15 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1747496328,
+        "lastModified": 1747744176,
         "narHash": "sha256-3BLuH3lWdG8XaTvk9uXS5+MVAlnEKsozF3po+aWYzw4=",
-        "owner": "michaelbrusegard",
+        "owner": "nvmd",
         "repo": "nixos-raspberrypi",
-        "rev": "af1bff548d267b122b2d67c70c35cdea0a1522ba",
+        "rev": "01b0b89807a824f30220ddfc84ee568178d9965d",
         "type": "github"
       },
       "original": {
-        "owner": "michaelbrusegard",
-        "ref": "pi3",
+        "owner": "nvmd",
         "repo": "nixos-raspberrypi",
         "type": "github"
       }
