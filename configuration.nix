@@ -81,7 +81,7 @@
 
   # Packages
   environment.systemPackages = with pkgs; [
-    libcamera
+    rpi.libcamera
     i2c-tools
     neovim
     nano
