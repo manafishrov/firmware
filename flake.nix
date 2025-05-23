@@ -16,7 +16,8 @@
       cyberfish = nixos-raspberrypi.lib.nixosSystem {
         specialArgs = { inherit nixos-raspberrypi; };
         modules = [
-          nixos-raspberrypi.nixosModules.raspberry-pi-3.sdImage
+          nixos-raspberrypi.nixosModules.sd-image
+          nixos-raspberrypi.nixosModules.raspberry-pi-3.base
           ./configuration.nix
         ];
       };
