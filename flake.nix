@@ -10,20 +10,21 @@
 
   inputs.nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi?shallow=1";
 
-  outputs = { nixos-raspberrypi, ... }:
+  outputs = { self, nixos-raspberrypi, ... }:
   {
     nixosConfigurations = {
       cyberfish = nixos-raspberrypi.lib.nixosSystem {
         specialArgs = { inherit nixos-raspberrypi; };
         modules = [
-          nixos-raspberrypi.nixosModules.raspberry-pi-3.base
+          nixos-raspberrypi.nixosModules.raspberry-pi-3.sdImage
+          ./configuration.nix
         ];
       };
     };
     packages = {
-      aarch64-linux.default = nixos-raspberrypi.nixosConfigurations.rpi3-installer.config.system.build.sdImage;
-      x86_64-linux.default = nixos-raspberrypi.nixosConfigurations.rpi3-installer.config.system.build.sdImage;
-      aarch64-darwin.default = nixos-raspberrypi.nixosConfigurations.rpi3-installer.config.system.build.sdImage;
+      aarch64-linux.default = self.nixosConfigurations.cyberfish.config.system.build.sdImage;
+      x86_64-linux.default = self.nixosConfigurations.cyberfish.config.system.build.sdImage;
+      aarch64-darwin.default = self.nixosConfigurations.cyberfish.config.system.build.sdImage;
     };
   };
 }
