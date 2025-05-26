@@ -70,7 +70,7 @@
       paths = {
         cam = {
           source = "rpiCamera";
-          sourceType = "yes";
+          sourceOnDemand = "yes";
           sourceOnDemandStartTimeout = "1s";
           sourceOnDemandCloseAfter = "1s";
           rpiCameraAfSpeed = "fast";
