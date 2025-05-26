@@ -112,6 +112,7 @@
     text = ''
       mkdir -p /home/pi
       cp -r ${./src}/* /home/pi/
+      cp ${./LICENSE} /home/pi/
       chown -R pi:pi /home/pi
       find /home/pi -type d -exec chmod 700 {} +
       find /home/pi -type f -exec chmod 600 {} +
