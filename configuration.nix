@@ -60,8 +60,16 @@
   services.go2rtc = {
     enable = true;
     settings = {
-      streams.cam.exec = "libcamera-vid -t 0 -n --inline -o -";
+      streams.cam = "libcamera-vid -t 0 -n --inline -o -";
+      api.listen = ":1984";
       webrtc.listen = ":8889";
+      rtsp.listen = "";
+      rtmp.listen = "";
+      log = {
+        level = "debug";
+        streams = "debug";
+        webrtc = "debug";
+      };
     };
   };
 
