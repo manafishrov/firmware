@@ -56,40 +56,12 @@
     };
   };
 
-  # Setup MediaMTX
-  services.mediamtx = {
+  # Setup video streaming
+  services.go2rtc = {
     enable = true;
-    allowVideoAccess = true;
-    env = {
-      "LD_LIBRARY_PATH" = pkgs.lib.makeLibraryPath [
-        pkgs.glibc
-        pkgs.stdenv.cc.cc.lib
-        pkgs.rpi.libcamera
-        pkgs.rpi.rpicam-apps
-      ];
-    };
-    package = pkgs.stdenv.mkDerivation {
-      pname = "mediamtx";
-      version = "1.12.2";
-
-      src = pkgs.fetchurl {
-        url = "https://github.com/bluenviron/mediamtx/releases/download/v1.12.2/mediamtx_v1.12.2_linux_arm64.tar.gz";
-        hash = "sha256-NYA5U+J6eyQu+x8ltNSOPMJJmby0P2iVODqF1vgABlE=";
-      };
-      sourceRoot = ".";
-      installPhase = ''
-        mkdir -p $out/bin
-        install -m755 mediamtx $out/bin/mediamtx
-      '';
-    };
     settings = {
-      rtsp = false;
-      rtmp = false;
-      hls = false;
-      srt = false;
-      webrtc = true;
-      webrtcAddress = ":8889";
-      paths.cam.source = "rpiCamera";
+      streams.cam.exec = "libcamera-vid -t 0 -n --inline -o -";
+      webrtc.listen = ":8889";
     };
   };
 
