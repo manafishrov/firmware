@@ -32,10 +32,15 @@
     };
     firewall.enable = false;
     nftables.enable = false;
+
+    # Enable Wi-Fi (For downloading temporary packages or files, if permanent should instead be included in this configuration)
+    wireless.iwd.enable = true;
+    networking.networkmanager = {
+      enable = true;
+      wifi.backend = "iwd";
+    };
   };
 
-  # Enable Wi-Fi (For downloading temporary packages or files, if permanent should instead be included in this configuration)
-  networking.networkmanager.enable = true;
 
   # Enable SSH
   services.openssh = {
