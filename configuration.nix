@@ -59,6 +59,7 @@
   # Setup MediaMTX
   services.mediamtx = {
     enable = true;
+    package = pkgs.rpi.mediamtx;
     allowVideoAccess = true;
     settings = {
       rtsp = false;
