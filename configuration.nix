@@ -62,6 +62,7 @@
     allowVideoAccess = true;
     env = {
       "LD_LIBRARY_PATH" = pkgs.lib.makeLibraryPath [
+        pkgs.glibc
         pkgs.stdenv.cc.cc.lib
         pkgs.rpi.libcamera
         pkgs.rpi.rpicam-apps
