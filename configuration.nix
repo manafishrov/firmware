@@ -59,6 +59,13 @@
   # Setup MediaMTX
   services.mediamtx = {
     enable = true;
+    allowVideoAccess = true;
+    env = {
+      "LD_LIBRARY_PATH" = pkgs.lib.makeLibraryPath [
+        pkgs.stdenv.cc.cc.lib
+        pkgs.rpi.libcamera
+      ];
+    };
     package = pkgs.stdenv.mkDerivation {
       pname = "mediamtx";
       version = "1.12.2";
@@ -73,7 +80,6 @@
         install -m755 mediamtx $out/bin/mediamtx
       '';
     };
-    allowVideoAccess = true;
     settings = {
       rtsp = false;
       rtmp = false;
