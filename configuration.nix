@@ -30,6 +30,8 @@
         prefixLength = 24;
       }];
     };
+    firewall.enable = false;
+    nftables.enable = false;
   };
 
   # Enable Wi-Fi (For downloading temporary packages or files, if permanent should instead be included in this configuration)
@@ -60,16 +62,11 @@
   services.go2rtc = {
     enable = true;
     settings = {
-      streams.cam = "libcamera-vid -t 0 -n --inline -o -";
+      streams.cam = "exec:libcamera-vid -t 0 -n --inline -o -";
       api.listen = ":1984";
       webrtc.listen = ":8889";
       rtsp.listen = "";
       rtmp.listen = "";
-      log = {
-        level = "debug";
-        streams = "debug";
-        webrtc = "debug";
-      };
     };
   };
 
