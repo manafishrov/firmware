@@ -65,6 +65,7 @@
 
       src = pkgs.fetchurl {
         url = "https://github.com/bluenviron/mediamtx/releases/download/v1.12.2/mediamtx_v1.12.2_linux_arm64.tar.gz";
+        hash = "sha256-NYA5U+J6eyQu+x8ltNSOPMJJmby0P2iVODqF1vgABlE=";
       };
 
       installPhase = ''
