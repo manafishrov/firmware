@@ -59,6 +59,19 @@
   # Setup MediaMTX
   services.mediamtx = {
     enable = true;
+    package = pkgs.stdenv.mkDerivation {
+      pname = "mediamtx";
+      version = "1.12.2";
+
+      src = pkgs.fetchurl {
+        url = "https://github.com/bluenviron/mediamtx/releases/download/v1.12.2/mediamtx_v1.12.2_linux_arm64.tar.gz";
+      };
+
+      installPhase = ''
+        mkdir -p $out/bin
+        cp mediamtx $out/bin/
+      '';
+    };
     allowVideoAccess = true;
     settings = {
       rtsp = false;
