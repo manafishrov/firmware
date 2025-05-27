@@ -64,6 +64,7 @@
       "LD_LIBRARY_PATH" = pkgs.lib.makeLibraryPath [
         pkgs.stdenv.cc.cc.lib
         pkgs.rpi.libcamera
+        pkgs.rpi.rpicam-apps
       ];
     };
     package = pkgs.stdenv.mkDerivation {
@@ -87,12 +88,7 @@
       srt = false;
       webrtc = true;
       webrtcAddress = ":8889";
-      paths = {
-        cam = {
-          source = "rpiCamera";
-          rpiCameraAfSpeed = "fast";
-        };
-      };
+      paths.cam.source = "rpiCamera";
     };
   };
 
