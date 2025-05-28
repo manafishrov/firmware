@@ -50,17 +50,25 @@
     settings.PasswordAuthentication = true;
   };
 
-  # Enable I2C with a high baud rate
+  # Enable UART and I2C with a high baud rate
   hardware = {
     i2c.enable = true; # Adds "i2c-dev" kernel module and creates i2c group
-    raspberry-pi.config.all.base-dt-params = {
-      i2c_arm = {
-        enable = true;
-        value = "on";
+    raspberry-pi.config.all = {
+      options = {
+        enable_uart = {
+          enable = true;
+          value = true;
+        };
       };
-      i2c_arm_baudrate = {
-        enable = true;
-        value = 1000000;
+      base-dt-params = {
+        i2c_arm = {
+          enable = true;
+          value = "on";
+        };
+        i2c_arm_baudrate = {
+          enable = true;
+          value = 1000000;
+        };
       };
     };
   };
