@@ -5,7 +5,7 @@ To build the SD image you need to have nix installed and proper emulation suppor
 Build the SD image:
 
 ```sh
-nix build
+nix build .#pi3 # or .#pi4 for Raspberry Pi 4
 ```
 
 When you have built the image you can list it out with the following command:
