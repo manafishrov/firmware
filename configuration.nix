@@ -30,6 +30,8 @@
         prefixLength = 24;
       }];
     };
+
+    # Disable firewall so all ports are open to allow easy configuration
     firewall.enable = false;
     nftables.enable = false;
 
