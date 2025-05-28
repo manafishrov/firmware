@@ -70,7 +70,10 @@
     enable = true;
     settings = {
       streams.cam = "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline -o -";
-      api.listen = ":1984";
+      api = {
+        listen = ":1984";
+        origin = "*";
+      };
       webrtc.listen = ":8555";
       rtsp.listen = "";
       rtmp.listen = "";
