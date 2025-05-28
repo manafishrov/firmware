@@ -13,7 +13,7 @@
   outputs = { self, nixos-raspberrypi, ... }:
   {
     nixosConfigurations = {
-      cyberfish = nixos-raspberrypi.lib.nixosSystem {
+      manafish = nixos-raspberrypi.lib.nixosSystem {
         specialArgs = { inherit nixos-raspberrypi; };
         modules = [
           nixos-raspberrypi.nixosModules.sd-image
@@ -23,9 +23,9 @@
       };
     };
     packages = {
-      aarch64-linux.default = self.nixosConfigurations.cyberfish.config.system.build.sdImage;
-      x86_64-linux.default = self.nixosConfigurations.cyberfish.config.system.build.sdImage;
-      aarch64-darwin.default = self.nixosConfigurations.cyberfish.config.system.build.sdImage;
+      aarch64-linux.default = self.nixosConfigurations.manafish.config.system.build.sdImage;
+      x86_64-linux.default = self.nixosConfigurations.manafish.config.system.build.sdImage;
+      aarch64-darwin.default = self.nixosConfigurations.manafish.config.system.build.sdImage;
     };
   };
 }

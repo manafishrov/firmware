@@ -16,13 +16,13 @@
   users.users.pi = {
     isNormalUser = true;
     extraGroups = [ "wheel" "i2c" "video" "networkmanager" ];
-    password = "cyberfish";
+    password = "manafish";
     home = "/home/pi";
   };
 
   # Static IP
   networking = {
-    hostName = "cyberfish";
+    hostName = "manafish";
     interfaces.eth0 = {
       useDHCP = false;
       ipv4.addresses = [{
@@ -128,9 +128,8 @@
   };
 
   # Firmware service
-  systemd.services.cyberfish-firmware = {
+  systemd.services.manafish-firmware = {
     enable = false;
-    description = "Cyberfish Firmware";
     wantedBy = [ "multi-user.target" ];
     after = [ "network.target" "mediamtx.service" ];
     serviceConfig = {
