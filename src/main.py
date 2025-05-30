@@ -15,7 +15,8 @@ logging.basicConfig(level=logging.INFO)
 imu_sensor = IMU()
 thruster_ctrl = ThrusterController(imu_sensor)
 
-async def handle_client(websocket, path):
+
+async def handle_client(websocket):
     logging.info(f"Client connected from Cyberfish App at {websocket.remote_address}!")
 
     async def send_heartbeat():
@@ -23,7 +24,7 @@ async def handle_client(websocket, path):
             try:
                 heartbeat_msg = {
                     "message_type": "Heartbeat",
-                    "payload": { "timestamp": int(time.time()) }
+                    "payload": {"timestamp": int(time.time())},
                 }
                 await websocket.send(json.dumps(heartbeat_msg))
                 logging.info("Sent heartbeat")
@@ -46,7 +47,7 @@ async def handle_client(websocket, path):
                             "desired_pitch": desired_pitch,
                             "desired_roll": desired_roll,
                             "water_detected": False,
-                        }
+                        },
                     }
                     await websocket.send(json.dumps(status_msg))
                 counter += 1
@@ -69,9 +70,8 @@ async def handle_client(websocket, path):
     status_task = asyncio.create_task(send_status_updates())
     imu_task = asyncio.create_task(update_imu_reading())
 
-
     try:
-        messageNr = 0 # the WORST fix but it seems to be necessary, cuts out 3/4 of the messages
+        messageNr = 0  # the WORST fix but it seems to be necessary, cuts out 3/4 of the messages
         async for message in websocket:
             messageNr += 1
             if messageNr % 4 == 0:
@@ -82,11 +82,13 @@ async def handle_client(websocket, path):
 
                     if msg_type == "Command" and payload == "connect":
                         logging.info("Client sent handshake")
-                    
+
                     elif msg_type == "Heartbeat":
                         logging.info("Received heartbeat response")
-                        logging.info(f"Pitch: {imu_sensor.current_pitch}, Roll: {imu_sensor.current_roll}")
-                    
+                        logging.info(
+                            f"Pitch: {imu_sensor.current_pitch}, Roll: {imu_sensor.current_roll}"
+                        )
+
                     elif msg_type == "ControlInput":
                         if isinstance(payload, list) and len(payload) == 6:
                             if messageNr < 200:
@@ -96,7 +98,7 @@ async def handle_client(websocket, path):
                             # logging.info(f"Received control input: {payload}")
                         else:
                             logging.warning(f"Invalid control input format: {payload}")
-                    
+
                     else:
                         logging.info(f"Received message: {msg_data}")
                 except json.JSONDecodeError:
@@ -109,6 +111,7 @@ async def handle_client(websocket, path):
         status_task.cancel()
         imu_task.cancel()
 
+
 async def main():
     try:
         ip_address = get_ip_address()
@@ -118,6 +121,7 @@ async def main():
         await server.wait_closed()
     except Exception as e:
         logging.error(f"Server error: {e}")
+
 
 if __name__ == "__main__":
     asyncio.run(main())
