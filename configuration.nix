@@ -77,7 +77,7 @@
   services.go2rtc = {
     enable = true;
     settings = {
-      streams.cam = "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline -o -";
+      streams.cam = "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline --width 1920 --height 1440 --framerate 30 -o -";
       api = {
         listen = ":1984";
         origin = "*";
@@ -122,8 +122,8 @@
       cp -r ${./src}/* /home/pi/
       ln -sf ${./LICENSE} /home/pi/LICENSE
       chown -R pi:pi /home/pi
-      find /home/pi -type d -exec chmod 700 {} +
-      find /home/pi -type f -exec chmod 600 {} +
+      find /home/pi -type d -exec chmod 755 {} +
+      find /home/pi -type f -exec chmod 644 {} +
     '';
   };
 
@@ -131,7 +131,7 @@
   systemd.services.manafish-firmware = {
     enable = false;
     wantedBy = [ "multi-user.target" ];
-    after = [ "network.target" "mediamtx.service" ];
+    after = [ "network.target" "go2rtc.service" ];
     serviceConfig = {
       Type = "simple";
       User = "pi";
