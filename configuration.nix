@@ -118,13 +118,9 @@
   system.activationScripts.copyFirmwareFiles = {
     deps = [ "users" ];
     text = ''
-      mkdir -p /home/pi
       cp -r ${./src}/* /home/pi/
       ln -sf ${./LICENSE} /home/pi/LICENSE
-      chown -R pi:pi /home/pi
-      find /home/pi -type d -exec chmod 700 {} +
-      find /home/pi -type f -exec chmod 600 {} +
-      chmod -R u+w /home/pi
+      chown -R pi:pi /home/pi/*
     '';
   };
 

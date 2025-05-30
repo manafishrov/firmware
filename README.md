@@ -78,11 +78,91 @@ You need to tell your computer how to connect to the Pi without disrupting your 
 
 2. For command line:
 
-   ```bash
+   ```sh
    sudo ip addr add 10.10.10.11/24 dev eth0
    ```
 
    Replace `eth0` with your Ethernet interface name if different.
+
+## Raspberry Pi
+
+To modify the firmware on the Raspberry Pi, you need to connect to it via SSH. The default username is `pi` and the password is `manafish`. The Pi will be available on port 10.10.10.10 when connected via Ethernet after you have configured your computer's Ethernet connection as described above.
+
+Command to connect via SSH:
+
+```sh
+ssh pi@10.10.10.10
+```
+
+If you have reflashed the SD card, you may need to delete the known hosts entry for the Pi before connecting:
+
+```sh
+ssh-keygen -R 10.10.10.10
+```
+
+### WiFi Connection
+
+To connect to a WiFi network on the Pi, use the following commands:
+
+1. List available WiFi networks:
+
+   ```sh
+   nmcli device wifi list
+   ```
+
+2. Connect to a WiFi network:
+
+   ```sh
+   nmcli device wifi connect "NETWORK_NAME" password "PASSWORD"
+   ```
+
+3. Check connection status:
+
+   ```sh
+   nmcli connection show
+   ```
+
+### Firmware Service Management
+
+The Manafish firmware runs as a systemd service. It is set to run automatically on startup, but during development it can be useful to stop/start/restart it. Here are the common commands to manage it:
+
+1. Start the firmware service:
+
+   ```sh
+   sudo systemctl start manafish-firmware
+   ```
+
+2. Stop the firmware service:
+
+   ```sh
+   sudo systemctl stop manafish-firmware
+   ```
+
+3. Restart the firmware service:
+
+   ```sh
+   sudo systemctl restart manafish-firmware
+   ```
+
+4. Check the service status:
+
+   ```sh
+   sudo systemctl status manafish-firmware
+   ```
+
+5. Disable the service from starting on boot:
+
+   ```sh
+   sudo systemctl disable manafish-firmware
+   ```
+
+6. View service logs:
+
+   ```sh
+   journalctl -u manafish-firmware -f
+   ```
+
+   ```
 
 ## License
 
