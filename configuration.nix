@@ -77,7 +77,7 @@
   services.go2rtc = {
     enable = true;
     settings = {
-      streams.cam = "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline --width 1920 --height 1440 --framerate 30 -o -";
+      streams.cam = "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline -o -";
       api = {
         listen = ":1984";
         origin = "*";
