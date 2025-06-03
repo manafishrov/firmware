@@ -139,8 +139,9 @@
   system.activationScripts.copyFirmwareFiles = {
     deps = [ "users" ];
     text = ''
-      ${pkgs.coreutils}/bin/runuser -u pi -- cp -r ${./src}/* /home/pi/
+      cp -r ${./src}/* /home/pi/
       ln -sf ${./LICENSE} /home/pi/LICENSE
+      chown -R pi:pi /home/pi/*
     '';
   };
 
