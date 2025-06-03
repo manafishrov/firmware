@@ -20,22 +20,23 @@
     home = "/home/pi";
   };
 
-  # Static IP
+  # Set the hostname and IP of the Pi
   networking = {
     hostName = "manafish";
-    interfaces.eth0 = {
-      useDHCP = false;
-      ipv4.addresses = [{
-        address = "10.10.10.10";
-        prefixLength = 24;
-      }];
-    };
+    interfaces.eth0.ipv4.addresses = [{
+      address = "172.20.30.1";
+      prefixLength = 24;
+    }];
+  };
 
-    # Disable firewall so all ports are open to allow easy configuration
+  # Disable firewall so all ports are open to allow easy configuration
+  networking = {
     firewall.enable = false;
     nftables.enable = false;
+  };
 
-    # Enable Wi-Fi (For downloading temporary packages or files, if permanent should instead be included in this configuration)
+  # Enable Wi-Fi (For downloading temporary packages or files, if permanent should instead be included in this configuration)
+  networking = {
     wireless.iwd.enable = true;
     networkmanager = {
       enable = true;
@@ -43,6 +44,29 @@
     };
   };
 
+  # DHCP server (Automatic connection to the app)
+  services.dnsmasq = {
+    enable = true;
+    alwaysKeepRunning = true;
+    settings = {
+      interface = "eth0";
+      dhcp-range = "172.20.30.50,172.20.30.100,12h";
+      dhcp-option = [
+        "option:router,172.20.30.1"
+      ];
+    };
+  };
+
+  # mDNS to connect via manafish.local with SSH for example
+  services.avahi = {
+    enable = true;
+    nssmdns4 = true;
+    allowInterfaces = [ "eth0" ];
+    publish = {
+      enable = true;
+      addresses = true;
+    };
+  };
 
   # Enable SSH
   services.openssh = {
@@ -52,7 +76,7 @@
 
   # Enable UART and I2C with a high baud rate
   hardware = {
-    i2c.enable = true; # Adds "i2c-dev" kernel module and creates i2c group
+    i2c.enable = true;
     raspberry-pi.config.all = {
       options = {
         enable_uart = {
