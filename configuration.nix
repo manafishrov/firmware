@@ -23,6 +23,7 @@
   # Set the hostname and IP of the Pi
   networking = {
     hostName = "manafish";
+    useDHCP = false;
     interfaces.eth0.ipv4.addresses = [{
       address = "10.10.10.10";
       prefixLength = 24;
