@@ -51,9 +51,6 @@
     settings = {
       interface = "eth0";
       dhcp-range = "172.20.30.50,172.20.30.100,12h";
-      dhcp-option = [
-        "option:router,172.20.30.1"
-      ];
     };
   };
 
