@@ -45,7 +45,7 @@
     };
   };
 
-  # mDNS to connect via manafish.local with SSH for example
+  # mDNS to connect via manafish.local
   services.avahi = {
     enable = true;
     nssmdns4 = true;
@@ -62,10 +62,16 @@
     settings.PasswordAuthentication = true;
   };
 
-  # Enable UART and I2C with a high baud rate
+  # Enable V2 Camera by default, UART and I2C with a high baud rate
   hardware = {
     i2c.enable = true;
     raspberry-pi.config.all = {
+      dt-overlays = {
+        imx219 = {
+          enable = true;
+          params = {};
+        };
+      };
       options = {
         enable_uart = {
           enable = true;
