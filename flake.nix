@@ -8,9 +8,15 @@
     ];
   };
 
-  inputs.nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi?shallow=1";
+  inputs = {
+    nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi?shallow=1";
+    home-manager = {
+      url = "github:nix-community/home-manager?shallow=1";
+      inputs.nixpkgs.follows = "nixos-raspberrypi/nixpkgs";
+    };
+  };
 
-  outputs = { self, nixos-raspberrypi, ... }:
+  outputs = { self, nixos-raspberrypi, home-manager, ... }:
   let
     cameras = [
       "ov5647"
@@ -42,6 +48,7 @@
       };
       modules = [
         nixos-raspberrypi.nixosModules.sd-image
+        home-manager.nixosModules.default
         ./configuration.nix
       ];
     };

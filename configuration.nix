@@ -1,4 +1,4 @@
-{ pkgs, cameraModule, ... }:
+{ pkgs, lib, cameraModule, ... }:
 {
   # Nix state version
   system.stateVersion = "25.05";
@@ -109,40 +109,49 @@
     };
   };
 
-  # Packages
+  # System packages
   environment.systemPackages = with pkgs; [
     rpi.libcamera
     rpi.rpicam-apps
     i2c-tools
-    neovim
-    nano
-    (python3.withPackages (pypkgs: with pypkgs; [
-      pip
-      numpy
-      websockets
-      smbus2
-    ]))
   ];
 
-  # Adding these packages to the library path is required for installing packages with pip (So people can install their own packages)
-  environment.sessionVariables = {
-    LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
-      pkgs.stdenv.cc.cc.lib
-      pkgs.libz
-      pkgs.zlib
-      pkgs.openssl
-      pkgs.python3
-    ];
-  };
-
-  # Copy firmware files to pi's home directory
-  system.activationScripts.copyFirmwareFiles = {
-    deps = [ "users" ];
-    text = ''
-      cp -r ${./src}/* /home/pi/
-      ln -sf ${./LICENSE} /home/pi/LICENSE
-      chown -R pi:pi /home/pi/*
-    '';
+  # Copy firmware files to pi's home directory and setup user packages
+  home-manager = {
+    useUserPackages = true;
+    useGlobalPkgs = true;
+    users.pi = {
+      home = {
+        stateVersion = "25.05";
+        packages = with pkgs; [
+          neovim
+          nano
+          (python3.withPackages (pypkgs: with pypkgs; [
+            pip
+            numpy
+            websockets
+            smbus2
+          ]))
+        ];
+        sessionVariables = {
+          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
+            pkgs.stdenv.cc.cc.lib
+            pkgs.libz
+            pkgs.zlib
+            pkgs.openssl
+            pkgs.python3
+          ];
+        };
+        file.LICENSE.source = ./LICENSE;
+        activation.copyFirmwareFiles = lib.hm.dag.entryAfter ["writeBoundary"] ''
+          tmpdir=$(mktemp -d)
+          cp -r ${./src}/* $tmpdir/
+          chmod -R u+w $tmpdir/*
+          cp -rf $tmpdir/* $HOME/
+          rm -rf $tmpdir
+        '';
+      };
+    };
   };
 
   # Firmware service
