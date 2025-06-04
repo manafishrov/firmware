@@ -1,4 +1,4 @@
-{ pkgs, ... }:
+{ pkgs, cameraModule, ... }:
 {
   # Nix state version
   system.stateVersion = "25.05";
@@ -61,12 +61,12 @@
     settings.PasswordAuthentication = true;
   };
 
-  # Enable V2 Camera by default, UART and I2C with a high baud rate
+  # Enable camera, UART and I2C with a high baud rate
   hardware = {
     i2c.enable = true;
     raspberry-pi.config.all = {
       dt-overlays = {
-        imx477 = {
+        ${cameraModule} = {
           enable = true;
           params = {};
         };
@@ -78,6 +78,10 @@
         };
       };
       base-dt-params = {
+        camera_auto_detect = {
+          enable = true;
+          value = false;
+        };
         i2c_arm = {
           enable = true;
           value = "on";

@@ -4,45 +4,81 @@
       "https://nixos-raspberrypi.cachix.org"
     ];
     extra-trusted-public-keys = [
-      "nixos-raspberrypi.cachix.org-1:4iMO9LXa8BqhU+Rpg6LQKiGa2lsNh/j2oiYLNOQ5sPI="
+      "nixos-raspberrypi.cachix.org-1:4iMO9LXa8BqhU+Rpg6LQKiGa2lsNOQ5sPI="
     ];
   };
 
   inputs.nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi?shallow=1";
 
   outputs = { self, nixos-raspberrypi, ... }:
+  let
+    cameras = [
+      "ov5647"
+      "imx219"
+      "imx477"
+    ];
+
+    piVersions = [
+      {
+        name = "pi3";
+        module = nixos-raspberrypi.nixosModules.raspberry-pi-3.base;
+      }
+      {
+        name = "pi4";
+        module = nixos-raspberrypi.nixosModules.raspberry-pi-4.base;
+      }
+    ];
+
+    supportedSystems = [
+      "aarch64-linux"
+      "x86_64-linux"
+      "aarch64-darwin"
+    ];
+
+    mkCamera = camera: {
+      specialArgs = { 
+        inherit nixos-raspberrypi;
+        cameraModule = camera;
+      };
+      modules = [
+        nixos-raspberrypi.nixosModules.sd-image
+        ./configuration.nix
+      ];
+    };
+
+    mkConfigurations = let
+      mkConfig = pi: camera: {
+        name = "manafish-${pi.name}-${camera}";
+        value = nixos-raspberrypi.lib.nixosSystem (mkCamera camera // {
+          modules = [ pi.module ] ++ (mkCamera camera).modules;
+        });
+      };
+    in
+      builtins.listToAttrs (builtins.concatMap 
+        (pi: map (camera: mkConfig pi camera) cameras) 
+        piVersions
+      );
+
+    mkPackages = system: let
+      mkPackage = pi: camera: {
+        name = "${pi.name}-${camera}";
+        value = self.nixosConfigurations."manafish-${pi.name}-${camera}".config.system.build.sdImage;
+      };
+    in
+      builtins.listToAttrs (builtins.concatMap 
+        (pi: map (camera: mkPackage pi camera) cameras) 
+        piVersions
+      );
+  in
   {
-    nixosConfigurations = {
-      manafish-pi3 = nixos-raspberrypi.lib.nixosSystem {
-        specialArgs = { inherit nixos-raspberrypi; };
-        modules = [
-          nixos-raspberrypi.nixosModules.sd-image
-          nixos-raspberrypi.nixosModules.raspberry-pi-3.base
-          ./configuration.nix
-        ];
-      };
-      manafish-pi4 = nixos-raspberrypi.lib.nixosSystem {
-        specialArgs = { inherit nixos-raspberrypi; };
-        modules = [
-          nixos-raspberrypi.nixosModules.sd-image
-          nixos-raspberrypi.nixosModules.raspberry-pi-4.base
-          ./configuration.nix
-        ];
-      };
-    };
-    packages = {
-      aarch64-linux = {
-        pi3 = self.nixosConfigurations.manafish-pi3.config.system.build.sdImage;
-        pi4 = self.nixosConfigurations.manafish-pi4.config.system.build.sdImage;
-      };
-      x86_64-linux = {
-        pi3 = self.nixosConfigurations.manafish-pi3.config.system.build.sdImage;
-        pi4 = self.nixosConfigurations.manafish-pi4.config.system.build.sdImage;
-      };
-      aarch64-darwin = {
-        pi3 = self.nixosConfigurations.manafish-pi3.config.system.build.sdImage;
-        pi4 = self.nixosConfigurations.manafish-pi4.config.system.build.sdImage;
-      };
-    };
+    nixosConfigurations = mkConfigurations;
+
+    packages = builtins.listToAttrs (map 
+      (system: {
+        name = system;
+        value = mkPackages system;
+      })
+      supportedSystems
+    );
   };
 }
