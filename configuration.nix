@@ -66,7 +66,7 @@
     i2c.enable = true;
     raspberry-pi.config.all = {
       dt-overlays = {
-        imx219 = {
+        imx477 = {
           enable = true;
           params = {};
         };
