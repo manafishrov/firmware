@@ -24,7 +24,7 @@ CAMERAS: Dict[int, Tuple[str, str]] = {
     11: ("ov9281", "OmniVision OV9281"),
 }
 
-CONFIG_FILE = Path("/boot/config.txt")
+CONFIG_FILE = Path("/boot/firmware/config.txt")
 
 
 def print_colored(text: str, color: str) -> None:
