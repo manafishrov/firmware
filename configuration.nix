@@ -1,4 +1,4 @@
-{ pkgs, hm, cameraModule, ... }:
+{ pkgs, home-manager, cameraModule, ... }:
 {
   # Nix state version
   system.stateVersion = "25.05";
@@ -143,7 +143,7 @@
           ];
         };
         file.LICENSE.source = ./LICENSE;
-        activation.copyFirmwareFiles = hm.dag.entryAfter ["writeBoundary"] ''
+        activation.copyFirmwareFiles = home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
           tmpdir=$(mktemp -d)
           cp -r ${./src}/* $tmpdir/
           chmod -R u+w $tmpdir/*
