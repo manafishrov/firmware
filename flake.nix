@@ -42,14 +42,17 @@
     ];
 
     mkCamera = camera: {
-      specialArgs = { 
+      specialArgs = {
         inherit nixos-raspberrypi;
-        inherit home-manager;
         cameraModule = camera;
       };
       modules = [
         nixos-raspberrypi.nixosModules.sd-image
-        home-manager.nixosModules.default
+        (home-manager.nixosModules.home-manager {
+          extraSpecialArgs = {
+            inherit (home-manager.lib) hm;
+          };
+        })
         ./configuration.nix
       ];
     };
