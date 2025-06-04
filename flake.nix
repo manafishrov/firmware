@@ -44,6 +44,7 @@
     mkCamera = camera: {
       specialArgs = { 
         inherit nixos-raspberrypi;
+        inherit home-manager;
         cameraModule = camera;
       };
       modules = [
