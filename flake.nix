@@ -11,7 +11,7 @@
   inputs = {
     nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi?shallow=1";
     home-manager = {
-      url = "github:nix-community/home-manager?shallow=1";
+      url = "github:nix-community/home-manager/release-25.05?shallow=1";
       inputs.nixpkgs.follows = "nixos-raspberrypi/nixpkgs";
     };
   };
