@@ -46,14 +46,14 @@ class ThrusterController:
     def get_thrust_allocation_matrix(self):
         # Columns: [forward, side, up, pitch, yaw, roll]
         return np.array([
-            [ 1,  1, 0,  0,  0.25,  0],
-            [ 1, -1, 0,  0, -0.25,  0],
+            [ 1,  1, 0,  0,  0.4,  0],
+            [ 1, -1, 0,  0, -0.4,  0],
             [ 0,  0, 1,  1,   0,    1],
             [ 0,  0, 1,  1,   0,   -1],
             [ 0,  0, 1, -1,   0,    1],
             [ 0,  0, 1, -1,   0,   -1],
-            [-1,  1, 0,  0, -0.25,  0],
-            [-1, -1, 0,  0,  0.25,  0],
+            [-1,  1, 0,  0, -0.4,  0],
+            [-1, -1, 0,  0,  0.4,  0],
         ])
 
     def thrust_allocation(self, input_vector):
@@ -84,7 +84,7 @@ class ThrusterController:
             print(f"Thrust vectors sent per second: {1 / self.time_delay:.2f}")
         except Exception as e:
             print(f"Error sending thrust vector via PCA9685_fast: {e}")
-            
+
         finally:
             self._sending = False
 
