@@ -2,6 +2,7 @@ import numpy as np
 import asyncio
 import regulator
 import PCA9685_fast as PCA9685
+import time
 
 class ThrusterController:
     def __init__(self, imu, PID_enabled = False, regulator_controller=None, bus_num=1, address=0x40, freq=50):
@@ -16,6 +17,9 @@ class ThrusterController:
         # State
         self.prev_thrust_vector = None
         self._sending = False
+
+        self.last_send_time = time.time()
+        self.time_delay = 0.1
 
         # PWM DRIVER SETUP
         print(f"Resetting all PCA9685 devices on bus {bus_num}")
@@ -71,6 +75,16 @@ class ThrusterController:
             loop = asyncio.get_running_loop()
             await loop.run_in_executor(None, self.pwm.set_all_pwm_scaled, thrust_vector)
             self.prev_thrust_vector = thrust_vector.copy()
+
+            curret_time = time.time()
+            cuurent_time_delay = curret_time - self.last_send_time
+            self.time_delay = 0.9 * self.time_delay + 0.1 * cuurent_time_delay
+            self.last_send_time = curret_time
+
+            print(f"Thrust vectors sent per second: {1 / self.time_delay:.2f}")
+        except Exception as e:
+            print(f"Error sending thrust vector via PCA9685_fast: {e}")
+            
         finally:
             self._sending = False
 
