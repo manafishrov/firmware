@@ -4,12 +4,14 @@ import regulator
 import PCA9685_fast as PCA9685
 
 class ThrusterController:
-    def __init__(self, imu, regulator_controller=None, bus_num=1, address=0x40, freq=50):
+    def __init__(self, imu, PID_enabled = False, regulator_controller=None, bus_num=1, address=0x40, freq=50):
         # Use your PIDController instance (or make one if none provided)
         if regulator_controller is None:
             self.regulator = regulator.PIDController(imu)
         else:
             self.regulator = regulator_controller
+
+        self.PID_enabled = PID_enabled
 
         # State
         self.prev_thrust_vector = None
@@ -93,11 +95,11 @@ class ThrusterController:
         self._sending = True
         asyncio.create_task(self._async_send(reordered))
 
-    def run_thrusters(self, direction_vector, PID_enabled=False):
+    def run_thrusters(self, direction_vector):
         # direction_vector: [forward, side, up, pitch, yaw, roll]
         direction_vector = self.tuning_correction(direction_vector)
 
-        if PID_enabled:
+        if self.PID_enabled:
             direction_vector = self.regulator.regulate_pitch_roll(direction_vector)
 
         thrust_vector = self.thrust_allocation(direction_vector)

@@ -90,14 +90,26 @@ async def handle_client(websocket):
                         )
 
                     elif msg_type == "ControlInput":
-                        if isinstance(payload, list) and len(payload) == 6:
-                            if messageNr < 200:
-                                thruster_ctrl.run_thrusters(payload, PID_enabled=False)
-                            else:
-                                thruster_ctrl.run_thrusters(payload, PID_enabled=True)
+                        if isinstance(payload, list) and len(payload) == 6:                         
+                            thruster_ctrl.run_thrusters(payload)
+                            
+                            if not thruster_ctrl.PID_enabled and messageNr < 300: # THIS WILL BE REMOVED WHEN WE HAVE THE OPTION TO ENABLE PID IN APP
+                                logging.info(f"ENABLING PID CONTROL (300 messages received)")
+                                thruster_ctrl.PID_enabled = True
+
                             # logging.info(f"Received control input: {payload}")
                         else:
                             logging.warning(f"Invalid control input format: {payload}")
+
+                    elif msg_type == "Setting":
+                        if payload == "enable_PID":
+                            thruster_ctrl.PID_enabled = True
+                            logging.info("PID control enabled")
+                        elif payload == "disable_PID":
+                            thruster_ctrl.PID_enabled = False
+                            logging.info("PID control disabled")
+                        else:
+                            logging.warning(f"Unknown setting: {payload}")
 
                     else:
                         logging.info(f"Received message: {msg_data}")
