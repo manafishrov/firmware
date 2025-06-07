@@ -1,4 +1,9 @@
 { pkgs, home-manager, cameraModule, ... }:
+let
+  pico-sdk-with-submodules = pkgs.pico-sdk.override {
+    withSubmodules = true;
+  };
+in
 {
   # Nix state version
   system.stateVersion = "25.05";
@@ -110,11 +115,34 @@
   };
 
   # System packages
-  environment.systemPackages = with pkgs; [
-    rpi.libcamera
-    rpi.rpicam-apps
-    i2c-tools
-  ];
+  environment = {
+    systemPackages = with pkgs; [
+      rpi.libcamera
+      rpi.rpicam-apps
+      i2c-tools
+      cmake
+      gnumake
+      gcc-arm-embedded
+      picotool
+      pico-sdk-with-submodules
+      (python3.withPackages (pypkgs: with pypkgs; [
+        pip
+        numpy
+        websockets
+        smbus2
+      ]))
+    ];
+    sessionVariables = {
+      PICO_SDK_PATH = "${pico-sdk-with-submodules}/lib/pico-sdk";
+      LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
+        pkgs.stdenv.cc.cc.lib
+        pkgs.libz
+        pkgs.zlib
+        pkgs.openssl
+        pkgs.python3
+      ];
+    };
+  };
 
   # Copy firmware files to pi's home directory and setup user packages
   home-manager = {
@@ -126,22 +154,7 @@
         packages = with pkgs; [
           neovim
           nano
-          (python3.withPackages (pypkgs: with pypkgs; [
-            pip
-            numpy
-            websockets
-            smbus2
-          ]))
         ];
-        sessionVariables = {
-          LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
-            pkgs.stdenv.cc.cc.lib
-            pkgs.libz
-            pkgs.zlib
-            pkgs.openssl
-            pkgs.python3
-          ];
-        };
         file.LICENSE.source = ./LICENSE;
         activation.copyFirmwareFiles = home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
           cp -r ${./src}/* $tmpdir/
@@ -150,7 +163,7 @@
     };
   };
 
-  # Firmware service
+  # Services
   systemd.services.manafish-firmware = {
     enable = false;
     wantedBy = [ "multi-user.target" ];
