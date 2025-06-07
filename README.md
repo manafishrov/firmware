@@ -23,7 +23,10 @@ ls -lh result/sd-image
 
 This will include the size of the image in the output. The image is compressed with zstd.
 
-Then we need to plug in the SD card and find out what the device path is for the SD card.
+## Flashing the SD Card
+
+We need to plug in the SD card and find out what the device path is for the SD card.
+
 On linux:
 
 ```sh
@@ -36,13 +39,24 @@ On darwin:
 diskutil list
 ```
 
-On linux it is usually `/dev/sdX` where `X` is a letter, for example `/dev/sdb`. On macOS it is usually `/dev/diskX` where `X` is a number for example `/dev/disk6`.
+On linux it is usually `/dev/sdX` where `X` is a letter, for example `/dev/sdb`. On darwon it is usually `/dev/diskX` where `X` is a number for example `/dev/disk6`.
 
 To flash the image to the SD card you can use the following command, make sure to replace `/dev/XXX` with the correct device path for your SD card:
 
 ```sh
 zstd -dc result/sd-image/*.zst | sudo dd of=/dev/XXX bs=4M status=progress oflag=sync
 ```
+
+### Windows
+
+Flashing the SD card on windows is a little more complicated. It is not possible to build the image on Windows and the commands will not work. Instead start by downloading the image you want to use form the release page on GitHub. The image will be in a `.zst` file format.
+
+Make sure you have 7-Zip installed, and right-click the `sd-image` zst file and select "Extract Here" to extract the image file.
+
+Next make sure you have Rufus installed, and open it.
+Select the SD card from the "Device" dropdown.
+Click "Select" and choose the extracted .img file.
+Click "Start" to begin flashing the SD card.
 
 ## Configure Your Mac/PC's Ethernet Connection
 
