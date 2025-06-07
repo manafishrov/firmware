@@ -30,7 +30,19 @@ Lastly, run `make` to build the firmware:
 make
 ```
 
-After the build completes successfully, you will find the `pico.uf2` file inside the `build` directory. This is the file you will flash onto the Pico.
+After the build completes successfully, you will find the `pico.uf2` file inside the `build` directory. This is the file you will flash onto the Pico. For subequent builds, you can skip the `cmake` step and just run `make` to rebuild the firmware in the `build` directory.
+
+## Flash
+
+We need to have `picotool` installed to flash the firmware onto the Pico.
+
+To flash the firmware use the following command inside the `build` directory (after youhave built the firmware):
+
+```sh
+picotool load -f -x build/pico.uf2
+```
+
+This should work regardless of it the Pico is in BOOTSEL mode or not.
 
 ## View firmware serial output
 
@@ -39,7 +51,7 @@ The firmware uses USB CDC to send log messages (`printf` statements) back to the
 First find the Pico's serial address:
 
 ```sh
-ls /dev/ttyACM* # use ls /dev/tty.usbmodem* on macOS
+ls /dev/ttyACM* # use ls /dev/tty.usbmodem* on darwin
 ```
 
 Then, use `screen` to connect to the Pico's serial address:
