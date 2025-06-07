@@ -1,6 +1,11 @@
 # Manafish Firmware
 
-To build the SD image you need to have nix installed and proper emulation support for the aarch64-linux platform. Also add the caches for the `nixos-raspberrypi` flake to the build system.
+The Manafish firmware is designed to run on Raspberry Pi devices, specifically the Raspberry Pi 3 and 4. It provides the firmware for controlling and using the Manafish ROV.
+For the Raspberry Pico part of the firmware that controls the thrusters see [here](pico/README.md).
+
+## Building the SD Image
+
+To build the SD image you need to have `nix` installed and proper emulation support for the aarch64-linux platform. Also add the caches for the `nixos-raspberrypi` flake to the build system so the build finishes in a reasonable time.
 
 Build the SD image:
 
