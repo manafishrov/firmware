@@ -18,6 +18,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     pico_stdio_usb
     hardware_pio
     hardware_clocks
+    hardware_pwm
 )
 
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
