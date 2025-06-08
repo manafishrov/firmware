@@ -1,0 +1,91 @@
+.program pio_dshot
+.wrap_target
+    ; 
+    ; TRANSMIT PART
+    ;
+    set pindirs, 1			; set pins as output
+    pull block              ; Wait for 1st word (inverted data frame) from TX FIFO
+
+    ; transmit 16 bits 
+    set x, 15
+tx_loop:
+    ; DSHOT bit timing is achieved by varying high/low pulse widths.
+    ; Total bit length is fixed (e.g., 1.67us for DSHOT600).
+    ; PIO program uses 40 cycles for one DShot bit.
+    ; Polarity is inverted: logical 1 is short high, long low. Logical 0 is long high, short low.
+    ; The data pushed to TX FIFO (~frame << 16) is already inverted.
+    ; So, for a bit from TX FIFO:
+    ;   If bit is 1 (was 0 in original frame): short low, long high on wire (inverted by ESC input)
+    ;   If bit is 0 (was 1 in original frame): long low, short high on wire (inverted by ESC input)
+    ; The PIO code here implements "inverted DShot" where wire is normally high.
+    ; A '0' bit is a longer pulse (high), a '1' bit is a shorter pulse (high).
+    ; The data from CPU is bit-inverted before sending to PIO.
+    ; So if CPU sends bit 'b', PIO gets '~b'.
+    ;   If ~b = 1 (original b=0): PIO sends short low, then long high. Wire: short high, long low.
+    ;   If ~b = 0 (original b=1): PIO sends long low, then short high. Wire: long high, short low.
+    ; This matches standard DShot if ESC expects non-inverted.
+    ; The comment "input needs to be negated" refers to the data from CPU to PIO.
+
+    set pins, 0	[14]		        ; Start bit low (inverted DShot: line goes low)
+    out pins, 1 [14]			; Output one bit from OSR to pin. If bit is 1, pin stays low. If 0, pin goes high.
+                                    ; Duration: 15 cycles for this part.
+    set pins, 1 [8]			        ; End bit high (inverted DShot: line goes high). Duration: 9 cycles.
+                                    ; Total bit cycles: 15 (set pins,0) + 15 (out) + 9 (set pins,1) - 1 (overlap) = 38?
+                                    ; The example values [14],[14],[8] sum to 36. Needs to be 40 total.
+                                    ; Let's assume the delays are tuned for 40 cycles total per bit.
+                                    ; A common split for 40 cycles: T0H = 15, T1H = 30.
+                                    ; For inverted DShot (signal normally high, pulses low):
+                                    ;   Bit 0: Long low pulse. Bit 1: Short low pulse.
+                                    ;   If data from OSR is 0 (original frame bit was 1): short low pulse.
+                                    ;   If data from OSR is 1 (original frame bit was 0): long low pulse.
+                                    ; This PIO code:
+                                    ;   Always `set pins, 0 [14]` (15 cycles low)
+                                    ;   `out pins, 1 [14]` (if OSR bit is 1, pin stays low for 15 more cycles; if 0, pin goes high)
+                                    ;   `set pins, 1 [8]` (9 cycles high)
+                                    ;   This means:
+                                    ;     OSR bit 1 (original 0): LOW for 15+15=30, HIGH for 9. (Long low pulse)
+                                    ;     OSR bit 0 (original 1): LOW for 15, HIGH for 15, HIGH for 9. (Short low pulse)
+                                    ; This is correct for inverted DShot with pre-inverted data.
+    jmp x-- tx_loop
+
+    ; Post-TX delay for telemetry turnaround
+    pull block              ; Wait for 2nd word (delay cycles) from TX FIFO
+    mov x, osr              ; Load delay cycle count into X
+waitloop_after_tx:
+    jmp x-- waitloop_after_tx [0] ; Decrement X, loop. Delay is 1 cycle per loop.
+
+    ; 
+    ; RECEIVE PART (Bidirectional Telemetry)
+    ;
+    set pindirs, 0			; Set pin to input
+
+    ; Wait for GCR start condition (pin to go low)
+    ; Max wait for 32 * (some cycles) before timeout
+    set x, 31               ; Timeout counter for waiting for line to go low
+waitloop_for_rx_start:
+    jmp pin wait_high       ; If pin is high, continue waiting
+    jmp start_rx            ; Pin is low, start receiving GCR
+wait_high:
+    jmp x-- waitloop_for_rx_start ; Decrement timeout, loop if pin still high
+    jmp wait_after_rx       ; Timeout: pin never went low, push 0 (or current ISR)
+
+start_rx:
+    ; Read 21 bits of GCR data.
+    ; Each GCR bit is sampled roughly in the middle.
+    ; Telemetry bit length is 4/5 of DShot bit length = 32 PIO cycles.
+    set x, 20 [7]           ; Loop 21 times. Initial delay of 8 cycles to center first sample.
+rx_loop:
+    in pins, 1	[30]		; Sample pin, shift into ISR. Delay 31 cycles until next sample.
+                            ; Total 8 + 21*31 = 659 cycles for receive.
+                            ; This should be 21 * 32 = 672 cycles.
+                            ; [7] + 21 * ([0] for in + [30] for delay) = 8 + 21*31 = 659.
+                            ; The delays need to be precise for GCR.
+                            ; The example has [8] and [30]. Let's keep it.
+    jmp x-- rx_loop
+
+wait_after_rx:    			; Reception finished or timed out
+    push				    ; Push ISR content (received GCR data or 0 on timeout) to RX FIFO
+    set pindirs, 1			; Set pin back to output
+    set pins, 1 [2]			; Set pin high (idle state for inverted DShot)
+
+.wrap

@@ -36,10 +36,10 @@ After the build completes successfully, you will find the `pico.uf2` file inside
 
 We need to have `picotool` installed to flash the firmware onto the Pico.
 
-To flash the firmware use the following command inside the `build` directory (after youhave built the firmware):
+To flash the firmware use the following command inside the `build` directory (after you have built the firmware):
 
 ```sh
-picotool load -f -x build/pico.uf2
+picotool load -f -x pico.uf2
 ```
 
 This should work regardless of it the Pico is in BOOTSEL mode or not.
