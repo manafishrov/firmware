@@ -5,7 +5,7 @@
 #include "pico/time.h"
 #include "dshot.h"
 
-#define MOTOR_PIN 10
+#define MOTOR_PIN 21
 
 #define DSHOT_PIO pio0
 #define DSHOT_SM 0

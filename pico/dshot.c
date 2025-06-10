@@ -226,6 +226,7 @@ static uint16_t dshot_compute_frame(uint16_t throttle, int telemetry) {
 	value = (throttle << 1) | telemetry;
 
 	crc = (value ^ (value >> 4) ^ (value >> 8));
+	crc = ~crc;
 
 	return (value << 4) | (crc & 0x0F);
 }
