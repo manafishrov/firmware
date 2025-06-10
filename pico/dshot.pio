@@ -1,0 +1,37 @@
+.program pio_dshot
+.wrap_target
+    set pindirs, 1
+    pull
+
+    set x, 15
+tx_loop:
+    set pins, 0	[14]
+    out pins, 1 [14]
+    set pins, 1 [8]
+    jmp x-- tx_loop
+
+    pull
+    mov x, osr
+waitloop_after_tx:
+    jmp x-- waitloop_after_tx
+
+    set pindirs, 0
+
+     set x, 31
+waitloop_for_rx:
+     jmp !x wait_after_rx
+     jmp x-- c
+c:   jmp pin waitloop_for_rx
+
+start_rx:
+    set x, 20 [8]
+rx_loop:
+    in pins, 1	[30]
+    jmp x-- rx_loop
+
+wait_after_rx:
+    push
+    set pindirs, 1
+    set pins, 1 [2]
+
+.wrap
