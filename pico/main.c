@@ -5,7 +5,8 @@
 #include "pico/time.h"
 #include "dshot.h"
 
-#define MOTOR_PIN 21
+#define MOTOR_PIN_BASE 18
+#define NUM_MOTORS 4
 
 #define DSHOT_PIO pio0
 #define DSHOT_SM 0
@@ -35,16 +36,18 @@ void telemetry_callback(
     enum dshot_telemetry_type type,
     int value
 ) {
+    printf("Channel %d, Type %d, Value %d\n", channel, type, value);
 }
 
 int main() {
     stdio_init_all();
     sleep_ms(4000);
 
-    printf("Pico DShot ROV Ramping Test\n");
-    printf("----------------------------------\n");
+    printf("Pico DShot ROV Ramping Test - 4 Thrusters\n");
+    printf("------------------------------------------\n");
+    printf("Testing thrusters on pins 18, 19, 20, 21\n");
     printf(
-        "Power on ESC now. Arming with neutral signal for %d seconds...\n",
+        "Power on ESCs now. Arming with neutral signal for %d seconds...\n",
         ARMING_DURATION_S
     );
 
@@ -54,8 +57,8 @@ int main() {
         DSHOT_SPEED,
         DSHOT_PIO,
         DSHOT_SM,
-        MOTOR_PIN,
-        1
+        MOTOR_PIN_BASE,
+        NUM_MOTORS
     );
     dshot_register_telemetry_cb(&controller, telemetry_callback, NULL);
 
@@ -131,7 +134,10 @@ int main() {
             current_throttle = 148 - (uint16_t)(100 * progress);
             break;
         }
-        dshot_throttle(&controller, 0, current_throttle);
+
+        for (int i = 0; i < NUM_MOTORS; i++) {
+            dshot_throttle(&controller, i, current_throttle);
+        }
         dshot_loop(&controller);
     }
 
