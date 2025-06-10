@@ -18,7 +18,6 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
     pico_stdio_usb
     hardware_clocks
     hardware_pio
-    hardware_pwm
 )
 
 pico_add_extra_outputs(${CMAKE_PROJECT_NAME})
