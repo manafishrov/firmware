@@ -1,19 +1,17 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
-#include "hardware/pio.h"
+#include "hardware/pwm.h"
 #include "hardware/clocks.h"
 #include "pico/time.h"
-#include "dshot.h"
 
-#define MOTOR_PIN 10
+#define MOTOR_PIN 21
 
-#define DSHOT_PIO pio0
-#define DSHOT_SM 0
-#define DSHOT_SPEED 600
+#define PWM_CLOCK_DIVIDER 125.0f
+#define PWM_WRAP 20000
 
-#define DSHOT_THROTTLE_NEUTRAL 1048
-#define DSHOT_THROTTLE_MAX_FORWARD 2047
-#define DSHOT_THROTTLE_MAX_REVERSE 48
+#define MIN_PULSE_US 1000
+#define NEUTRAL_PULSE_US 1488
+#define MAX_PULSE_US 2000
 
 #define ARMING_DURATION_S 12
 #define RAMP_DURATION_MS 4000
@@ -29,40 +27,35 @@ enum test_state {
     STATE_DONE
 };
 
-void telemetry_callback(
-    void *context,
-    int channel,
-    enum dshot_telemetry_type type,
-    int value
-) {
+void set_motor_pulse(uint slice_num, uint chan, uint16_t pulse_us) {
+    if (pulse_us > PWM_WRAP) {
+        pulse_us = PWM_WRAP;
+        printf("Warning: Pulse width %u us capped at WRAP value %u us.\n", pulse_us, PWM_WRAP);
+    }
+    pwm_set_chan_level(slice_num, chan, pulse_us);
 }
 
 int main() {
     stdio_init_all();
     sleep_ms(4000);
 
-    printf("Pico DShot ROV Ramping Test\n");
+    printf("Pico PWM ROV Ramping Test\n");
     printf("----------------------------------\n");
-    printf(
-        "Power on ESC now. Arming with neutral signal for %d seconds...\n",
-        ARMING_DURATION_S
-    );
+    printf("Power on ESC now. Arming with minimum signal for %d seconds...\n", ARMING_DURATION_S);
 
-    struct dshot_controller controller;
-    dshot_controller_init(
-        &controller,
-        DSHOT_SPEED,
-        DSHOT_PIO,
-        DSHOT_SM,
-        MOTOR_PIN,
-        1
-    );
-    dshot_register_telemetry_cb(&controller, telemetry_callback, NULL);
+    gpio_set_function(MOTOR_PIN, GPIO_FUNC_PWM);
+    uint slice_num = pwm_gpio_to_slice_num(MOTOR_PIN);
+    uint chan = pwm_gpio_to_channel(MOTOR_PIN);
+
+    pwm_config config = pwm_get_default_config();
+    pwm_config_set_clkdiv(&config, PWM_CLOCK_DIVIDER);
+    pwm_config_set_wrap(&config, PWM_WRAP);
+    pwm_init(slice_num, &config, true);
 
     enum test_state current_state = STATE_ARMING;
     uint64_t state_start_time = time_us_64();
     uint64_t current_state_duration = (uint64_t)ARMING_DURATION_S * 1000000;
-    uint16_t current_throttle = DSHOT_THROTTLE_NEUTRAL;
+    uint16_t current_pulse = MIN_PULSE_US;
 
     while (true) {
         uint64_t now = time_us_64();
@@ -114,25 +107,28 @@ int main() {
 
         switch (current_state) {
         case STATE_ARMING:
+            current_pulse = MIN_PULSE_US;
+            break;
         case STATE_PAUSE_1:
         case STATE_DONE:
-            current_throttle = DSHOT_THROTTLE_NEUTRAL;
+            current_pulse = NEUTRAL_PULSE_US;
             break;
         case STATE_RAMP_FORWARD_UP:
-            current_throttle = DSHOT_THROTTLE_NEUTRAL + (uint16_t)(100 * progress);
+            current_pulse = NEUTRAL_PULSE_US + (uint16_t)((MAX_PULSE_US - NEUTRAL_PULSE_US) * progress);
             break;
         case STATE_RAMP_FORWARD_DOWN:
-            current_throttle = (DSHOT_THROTTLE_NEUTRAL + 100) - (uint16_t)(100 * progress);
+            current_pulse = MAX_PULSE_US - (uint16_t)((MAX_PULSE_US - NEUTRAL_PULSE_US) * progress);
             break;
         case STATE_RAMP_REVERSE_UP:
-            current_throttle = (48) + (uint16_t)(100 * progress);
+            current_pulse = NEUTRAL_PULSE_US - (uint16_t)((NEUTRAL_PULSE_US - MIN_PULSE_US) * progress);
             break;
         case STATE_RAMP_REVERSE_DOWN:
-            current_throttle = 148 - (uint16_t)(100 * progress);
+            current_pulse = MIN_PULSE_US + (uint16_t)((NEUTRAL_PULSE_US - MIN_PULSE_US) * progress);
             break;
         }
-        dshot_throttle(&controller, 0, current_throttle);
-        dshot_loop(&controller);
+
+        set_motor_pulse(slice_num, chan, current_pulse);
+        sleep_ms(1);
     }
 
     return 0;
