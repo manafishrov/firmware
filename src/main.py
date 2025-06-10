@@ -71,7 +71,7 @@ async def handle_client(websocket):
     imu_task = asyncio.create_task(update_imu_reading())
 
     try:
-        messageNr = 0  # the WORST fix but it seems to be necessary, cuts out 3/4 of the messages
+        messageNr = 0  # the WORST fix but it seems to be necessary, cuts out 3/4 of the messages, REMOVE WHEN WE HAVE PICO
         async for message in websocket:
             messageNr += 1
             if messageNr % 4 == 0:

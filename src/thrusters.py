@@ -78,7 +78,7 @@ class ThrusterController:
 
             curret_time = time.time()
             cuurent_time_delay = curret_time - self.last_send_time
-            self.time_delay = 0.9 * self.time_delay + 0.1 * cuurent_time_delay
+            self.time_delay = 0.5 * self.time_delay + 0.5 * cuurent_time_delay
             self.last_send_time = curret_time
 
             print(f"Thrust vectors sent per second: {1 / self.time_delay:.2f}")
