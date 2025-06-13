@@ -72,14 +72,19 @@ class ThrusterController:
 
     async def _async_send(self, thrust_vector):
         try:
-            loop = asyncio.get_running_loop()
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+            
             await loop.run_in_executor(None, self.pwm.set_all_pwm_scaled, thrust_vector)
             self.prev_thrust_vector = thrust_vector.copy()
 
-            curret_time = time.time()
-            cuurent_time_delay = curret_time - self.last_send_time
-            self.time_delay = 0.5 * self.time_delay + 0.5 * cuurent_time_delay
-            self.last_send_time = curret_time
+            current_time = time.time()
+            current_time_delay = current_time - self.last_send_time
+            self.time_delay = 0.5 * self.time_delay + 0.5 * current_time_delay
+            self.last_send_time = current_time
 
             print(f"Thrust vectors sent per second: {1 / self.time_delay:.2f}")
         except Exception as e:
