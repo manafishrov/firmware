@@ -5,15 +5,16 @@ For the Raspberry Pico part of the firmware that controls the thrusters see [her
 
 ## Building the SD Image
 
-To build the SD image you need to have `nix` installed and proper emulation support for the aarch64-linux platform. Also add the caches for the `nixos-raspberrypi` flake to the build system so the build finishes in a reasonable time.
-
-Build the SD image:
+To build the SD image you need to have `nix` installed and proper emulation support for the aarch64-linux platform. Also add the caches for the `nixos-raspberrypi` flake to the build system so the build finishes in a reasonable time. Run the command for the specific Pi and camera module you want to use:
 
 ```sh
-nix build .#pi3
+nix build .#pi3-ov5647
+nix build .#pi3-imx219
+nix build .#pi3-imx477
+nix build .#pi4-ov5647
+nix build .#pi4-imx219
+nix build .#pi4-imx477
 ```
-
-or `.#pi4` for Raspberry Pi 4
 
 When you have built the image you can list it out with the following command:
 

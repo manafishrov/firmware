@@ -46,7 +46,7 @@
     ];
 
     mkCamera = camera: {
-      specialArgs = { 
+      specialArgs = {
         inherit nixos-raspberrypi;
         inherit home-manager;
         cameraModule = camera;
@@ -66,8 +66,8 @@
         });
       };
     in
-      builtins.listToAttrs (builtins.concatMap 
-        (pi: map (camera: mkConfig pi camera) cameras) 
+      builtins.listToAttrs (builtins.concatMap
+        (pi: map (camera: mkConfig pi camera) cameras)
         piVersions
       );
 
@@ -77,15 +77,15 @@
         value = self.nixosConfigurations."manafish-${pi.name}-${camera}".config.system.build.sdImage;
       };
     in
-      builtins.listToAttrs (builtins.concatMap 
-        (pi: map (camera: mkPackage pi camera) cameras) 
+      builtins.listToAttrs (builtins.concatMap
+        (pi: map (camera: mkPackage pi camera) cameras)
         piVersions
       );
   in
   {
     nixosConfigurations = mkConfigurations;
 
-    packages = builtins.listToAttrs (map 
+    packages = builtins.listToAttrs (map
       (system: {
         name = system;
         value = mkPackages system;
