@@ -1,98 +1,171 @@
 #include <stdio.h>
 #include "pico/stdlib.h"
-#include "hardware/pwm.h"
+#include "hardware/pio.h"
 #include "hardware/clocks.h"
 #include "pico/time.h"
+#include "dshot.h"
 
-#define MOTOR_PIN 10
+#define MOTOR_PIN_BASE 18
+#define NUM_MOTORS 4
 
-#define PWM_CLOCK_DIVIDER 125.0f
-#define PWM_WRAP 20000
+#define DSHOT_PIO pio0
+#define DSHOT_SM 0
+#define DSHOT_SPEED 600
 
-#define MIN_PULSE_US 1000
-#define NEUTRAL_PULSE_US 1488
-#define MAX_PULSE_US 2000
-#define TEST_SPIN_PULSE_US 1550
-#define TEST_SPIN_REVERSE_PULSE_US 1400
+#define DSHOT_THROTTLE_NEUTRAL 1048
+#define DSHOT_THROTTLE_MAX_FORWARD 2047
+#define DSHOT_THROTTLE_MAX_REVERSE 48
 
-#define INITIAL_SERIAL_WAIT_MS 2000
-#define STARTUP_DELAY_MS 10000
-#define ARMING_DURATION_MS 5000
-#define POST_NEUTRAL_DELAY_MS 7000
-#define TEST_SPIN_DURATION_MS 3000
-#define POST_SPIN_DELAY_MS 2000
+#define ARMING_DURATION_S 12
+#define RAMP_DURATION_MS 2000
+#define PAUSE_DURATION_MS 1000
 
-void set_motor_pulse(uint slice_num, uint chan, uint16_t pulse_us) {
-    if (pulse_us > PWM_WRAP) {
-        pulse_us = PWM_WRAP;
-        printf("Warning: Pulse width %u us capped at WRAP value %u us.\n", pulse_us, PWM_WRAP);
-    }
-    pwm_set_chan_level(slice_num, chan, pulse_us);
-    printf("Set motor pulse to: %u us\n", pulse_us);
+enum test_state {
+    STATE_ARMING,
+    STATE_MOTOR_TEST,
+    STATE_DONE
+};
+
+enum motor_test_phase {
+    PHASE_RAMP_FORWARD_UP,
+    PHASE_RAMP_FORWARD_DOWN,
+    PHASE_PAUSE_1,
+    PHASE_RAMP_REVERSE_UP,
+    PHASE_RAMP_REVERSE_DOWN,
+    PHASE_PAUSE_2
+};
+
+void telemetry_callback(
+    void *context,
+    int channel,
+    enum dshot_telemetry_type type,
+    int value
+) {
+    printf("Channel %d, Type %d, Value %d\n", channel, type, value);
 }
 
 int main() {
     stdio_init_all();
-    sleep_ms(INITIAL_SERIAL_WAIT_MS);
+    sleep_ms(4000);
 
-    printf("Pico PWM Motor Control Firmware\n");
-    printf("---------------------------------\n");
-    printf("System clock: %lu Hz\n", clock_get_hz(clk_sys));
-    printf("MOTOR_PIN: GPIO %d\n", MOTOR_PIN);
+    printf("Pico DShot ROV Individual Motor Test\n");
+    printf("------------------------------------\n");
+    printf("Testing thrusters on pins 18, 19, 20, 21 individually\n");
+    printf(
+        "Power on ESCs now. Arming with neutral signal for %d seconds...\n",
+        ARMING_DURATION_S
+    );
 
-    printf("Main logic will start in %d seconds...\n", STARTUP_DELAY_MS / 1000);
-    sleep_ms(STARTUP_DELAY_MS);
-    printf("Startup delay complete. Initializing motor control.\n");
+    struct dshot_controller controller;
+    dshot_controller_init(
+        &controller,
+        DSHOT_SPEED,
+        DSHOT_PIO,
+        DSHOT_SM,
+        MOTOR_PIN_BASE,
+        NUM_MOTORS
+    );
+    dshot_register_telemetry_cb(&controller, telemetry_callback, NULL);
 
-    printf("Configuring PWM for GPIO %d...\n", MOTOR_PIN);
-    gpio_set_function(MOTOR_PIN, GPIO_FUNC_PWM);
-    uint slice_num = pwm_gpio_to_slice_num(MOTOR_PIN);
-    uint chan = pwm_gpio_to_channel(MOTOR_PIN);
-    printf("PWM Slice: %u, Channel: %u\n", slice_num, chan);
-
-    pwm_config config = pwm_get_default_config();
-    pwm_config_set_clkdiv(&config, PWM_CLOCK_DIVIDER);
-    pwm_config_set_wrap(&config, PWM_WRAP);
-    pwm_init(slice_num, &config, false);
-    printf("PWM configured: Divider=%.1f, Wrap=%u (for 50Hz with 1us resolution)\n",
-           PWM_CLOCK_DIVIDER, PWM_WRAP);
-
-    printf("Starting ESC arming sequence...\n");
-    printf("Sending MIN_PULSE (%u us) for %d ms.\n", MIN_PULSE_US, ARMING_DURATION_MS);
-    pwm_set_chan_level(slice_num, chan, MIN_PULSE_US);
-    pwm_set_enabled(slice_num, true);
-    sleep_ms(ARMING_DURATION_MS);
-    printf("Arming sequence complete.\n");
-
-    printf("Setting motor to NEUTRAL_PULSE (%u us).\n", NEUTRAL_PULSE_US);
-    set_motor_pulse(slice_num, chan, NEUTRAL_PULSE_US);
-    printf("Motor at neutral. Waiting %d ms before test spin.\n", POST_NEUTRAL_DELAY_MS);
-    sleep_ms(POST_NEUTRAL_DELAY_MS);
-
-    printf("Starting test spin FORWARD...\n");
-    printf("Setting motor to TEST_SPIN_PULSE_US (%u us) for %d ms.\n", TEST_SPIN_PULSE_US, TEST_SPIN_DURATION_MS);
-    set_motor_pulse(slice_num, chan, TEST_SPIN_PULSE_US);
-    sleep_ms(TEST_SPIN_DURATION_MS);
-    printf("Test spin forward complete.\n");
-
-    printf("Returning motor to NEUTRAL_PULSE (%u us).\n", NEUTRAL_PULSE_US);
-    set_motor_pulse(slice_num, chan, NEUTRAL_PULSE_US);
-    printf("Motor at neutral. Waiting %d ms before reverse test spin.\n", POST_SPIN_DELAY_MS);
-    sleep_ms(POST_SPIN_DELAY_MS);
-
-    printf("Starting test spin REVERSE...\n");
-    printf("Setting motor to TEST_SPIN_REVERSE_PULSE_US (%u us) for %d ms.\n", TEST_SPIN_REVERSE_PULSE_US, TEST_SPIN_DURATION_MS);
-    set_motor_pulse(slice_num, chan, TEST_SPIN_REVERSE_PULSE_US);
-    sleep_ms(TEST_SPIN_DURATION_MS);
-    printf("Test spin reverse complete.\n");
-
-    printf("Returning motor to NEUTRAL_PULSE (%u us).\n", NEUTRAL_PULSE_US);
-    set_motor_pulse(slice_num, chan, NEUTRAL_PULSE_US);
-
-    printf("Firmware test sequence complete. Motor at neutral. Listening for commands (not implemented).\n");
+    enum test_state current_state = STATE_ARMING;
+    enum motor_test_phase current_phase = PHASE_RAMP_FORWARD_UP;
+    uint64_t state_start_time = time_us_64();
+    uint64_t current_state_duration = (uint64_t)ARMING_DURATION_S * 1000000;
+    uint16_t current_throttle = DSHOT_THROTTLE_NEUTRAL;
+    int current_motor = 0;
+    int phase_durations[] = {
+        RAMP_DURATION_MS,
+        RAMP_DURATION_MS,
+        PAUSE_DURATION_MS,
+        RAMP_DURATION_MS,
+        RAMP_DURATION_MS,
+        PAUSE_DURATION_MS
+    };
 
     while (true) {
-        tight_loop_contents();
+        uint64_t now = time_us_64();
+        uint64_t elapsed_in_state = now - state_start_time;
+
+        if (elapsed_in_state >= current_state_duration) {
+            state_start_time = now;
+            switch (current_state) {
+            case STATE_ARMING:
+                current_state = STATE_MOTOR_TEST;
+                current_phase = PHASE_RAMP_FORWARD_UP;
+                current_state_duration = phase_durations[current_phase] * 1000;
+                printf("Arming complete. Testing Motor %d (Pin %d)...\n", 
+                       current_motor, MOTOR_PIN_BASE + current_motor);
+                printf("  Phase: FORWARD UP\n");
+                break;
+
+            case STATE_MOTOR_TEST:
+                current_phase++;
+                if (current_phase >= 6) {
+                    current_motor++;
+                    current_phase = PHASE_RAMP_FORWARD_UP;
+                    if (current_motor >= NUM_MOTORS) {
+                        current_state = STATE_DONE;
+                        current_state_duration = -1;
+                        printf("All motor tests complete. Idling at neutral.\n");
+                        break;
+                    } else {
+                        printf("Testing Motor %d (Pin %d)...\n", 
+                               current_motor, MOTOR_PIN_BASE + current_motor);
+                    }
+                }
+                current_state_duration = phase_durations[current_phase] * 1000;
+                const char* phase_names[] = {
+                    "FORWARD UP", "FORWARD DOWN", "PAUSE", 
+                    "REVERSE UP", "REVERSE DOWN", "PAUSE"
+                };
+                printf("  Phase: %s\n", phase_names[current_phase]);
+                break;
+            case STATE_DONE:
+                break;
+            }
+            elapsed_in_state = now - state_start_time;
+        }
+
+        float progress = (float)elapsed_in_state / (float)current_state_duration;
+        if (progress > 1.0f) {
+            progress = 1.0f;
+        }
+
+        switch (current_state) {
+        case STATE_ARMING:
+        case STATE_DONE:
+            current_throttle = DSHOT_THROTTLE_NEUTRAL;
+            break;
+        case STATE_MOTOR_TEST:
+            switch (current_phase) {
+            case PHASE_RAMP_FORWARD_UP:
+                current_throttle = DSHOT_THROTTLE_NEUTRAL + (uint16_t)(100 * progress);
+                break;
+            case PHASE_RAMP_FORWARD_DOWN:
+                current_throttle = (DSHOT_THROTTLE_NEUTRAL + 100) - (uint16_t)(100 * progress);
+                break;
+            case PHASE_PAUSE_1:
+            case PHASE_PAUSE_2:
+                current_throttle = DSHOT_THROTTLE_NEUTRAL;
+                break;
+            case PHASE_RAMP_REVERSE_UP:
+                current_throttle = (48) + (uint16_t)(100 * progress);
+                break;
+            case PHASE_RAMP_REVERSE_DOWN:
+                current_throttle = 148 - (uint16_t)(100 * progress);
+                break;
+            }
+            break;
+        }
+
+        for (int i = 0; i < NUM_MOTORS; i++) {
+            if (current_state == STATE_MOTOR_TEST && i == current_motor) {
+                dshot_throttle(&controller, i, current_throttle);
+            } else {
+                dshot_throttle(&controller, i, DSHOT_THROTTLE_NEUTRAL);
+            }
+        }
+        dshot_loop(&controller);
     }
 
     return 0;
