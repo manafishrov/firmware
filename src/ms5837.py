@@ -230,3 +230,20 @@ class MS5837_30BA(MS5837):
 class MS5837_02BA(MS5837):
     def __init__(self, bus=1):
         MS5837.__init__(self, MODEL_02BA, bus)
+
+
+if __name__ == "__main__":
+    print("Testing MS5837_30BA sensor, printing values at 1Hz")
+    sensor = MS5837_30BA()
+    if sensor.init():
+        print("Sensor initialized successfully.")
+        while True:
+            if sensor.read():
+                print(f"Temperature: {sensor.temperature(UNITS_Centigrade)} °C")
+                print(f"Depth: {sensor.depth()} m")
+                print(f"Altitude: {sensor.altitude()} m")
+            else:
+                print("Failed to read sensor data.")
+            sleep(1)
+    else:
+        print("Failed to initialize sensor.")
