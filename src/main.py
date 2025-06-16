@@ -3,17 +3,24 @@ import json
 import time
 import websockets
 import logging
-from config import get_ip_address, get_device_controls_port
+from config import get_ip_address, get_device_controls_port, get_pressure_fluid
 
 from imu import IMU
 from thrusters import ThrusterController
+import ms5837
 
 # Initialize logging
 logging.basicConfig(level=logging.INFO)
 
-# Instantiate IMU sensor and Thruster controller
+# Instantiate IMU sensor and Thruster controller and Pressure sensor
 imu_sensor = IMU()
 thruster_ctrl = ThrusterController(imu_sensor)
+pressure_sensor = ms5837.MS5837_30BA()
+
+if get_pressure_fluid() == "freshwater":
+    pressure_sensor.setFluidDensity(ms5837.DENSITY_FRESHWATER)  # SHOULD BE CHANGABLE IN SETTINGS
+elif get_pressure_fluid() == "saltwater":
+    pressure_sensor.setFluidDensity(ms5837.DENSITY_SALTWATER) 
 
 
 async def handle_client(websocket):
@@ -39,6 +46,7 @@ async def handle_client(websocket):
             try:
                 if counter % 1 == 0:
                     desired_pitch, desired_roll = thruster_ctrl.get_desired_pitch_roll()
+                    pressure_sensor.read()
                     status_msg = {
                         "message_type": "Status",
                         "payload": {
@@ -46,6 +54,8 @@ async def handle_client(websocket):
                             "roll": imu_sensor.current_roll,
                             "desired_pitch": desired_pitch,
                             "desired_roll": desired_roll,
+                            "depth": pressure_sensor.depth(), #Given in meters below surface
+                            "temperature": pressure_sensor.temperature(ms5837.UNITS_Centigrade),
                             "water_detected": False,
                         },
                     }

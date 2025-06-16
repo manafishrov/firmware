@@ -79,3 +79,8 @@ def get_CF_alpha():
 
 def get_GYRO_HPF_tau():
     return float(load_config()['imu']['GYRO_HPF_tau'])
+
+# Pressure Sensor
+def get_pressure_fluid():
+    return load_config()['pressure']['fluid']
+
