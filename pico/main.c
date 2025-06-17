@@ -12,27 +12,29 @@
 #define DSHOT_SM 0
 #define DSHOT_SPEED 600
 
-#define DSHOT_THROTTLE_NEUTRAL 1048
+#define DSHOT_THROTTLE_NEUTRAL 0
+#define DSHOT_THROTTLE_MIN_FORWARD 1048
 #define DSHOT_THROTTLE_MAX_FORWARD 2047
-#define DSHOT_THROTTLE_MAX_REVERSE 48
+#define DSHOT_THROTTLE_MIN_REVERSE 48
+#define DSHOT_THROTTLE_MAX_REVERSE 1047
 
-#define ARMING_DURATION_S 12
+#define ARMING_DURATION_S 15
 #define RAMP_DURATION_MS 2000
 #define PAUSE_DURATION_MS 1000
 
 enum test_state {
     STATE_ARMING,
-    STATE_MOTOR_TEST,
+    STATE_ALL_MOTORS_FORWARD,
+    STATE_ALL_MOTORS_REVERSE,
+    STATE_INDIVIDUAL_MOTOR_FORWARD,
+    STATE_INDIVIDUAL_MOTOR_REVERSE,
     STATE_DONE
 };
 
 enum motor_test_phase {
-    PHASE_RAMP_FORWARD_UP,
-    PHASE_RAMP_FORWARD_DOWN,
-    PHASE_PAUSE_1,
-    PHASE_RAMP_REVERSE_UP,
-    PHASE_RAMP_REVERSE_DOWN,
-    PHASE_PAUSE_2
+    PHASE_RAMP_UP,
+    PHASE_RAMP_DOWN,
+    PHASE_PAUSE
 };
 
 void telemetry_callback(
@@ -68,99 +70,177 @@ int main() {
     dshot_register_telemetry_cb(&controller, telemetry_callback, NULL);
 
     enum test_state current_state = STATE_ARMING;
-    enum motor_test_phase current_phase = PHASE_RAMP_FORWARD_UP;
+    enum motor_test_phase current_phase = PHASE_RAMP_UP;
     uint64_t state_start_time = time_us_64();
     uint64_t current_state_duration = (uint64_t)ARMING_DURATION_S * 1000000;
     uint16_t current_throttle = DSHOT_THROTTLE_NEUTRAL;
-    int current_motor = 0;
-    int phase_durations[] = {
-        RAMP_DURATION_MS,
-        RAMP_DURATION_MS,
-        PAUSE_DURATION_MS,
+    int current_motor_idx = 0;
+
+    int phase_durations_ms[] = {
         RAMP_DURATION_MS,
         RAMP_DURATION_MS,
         PAUSE_DURATION_MS
     };
 
+    const uint16_t MAX_FORWARD_50_PERCENT = DSHOT_THROTTLE_MIN_FORWARD + (DSHOT_THROTTLE_MAX_FORWARD - DSHOT_THROTTLE_MIN_FORWARD) / 2;
+    const uint16_t MAX_REVERSE_50_PERCENT = DSHOT_THROTTLE_MIN_REVERSE + (DSHOT_THROTTLE_MAX_REVERSE - DSHOT_THROTTLE_MIN_REVERSE) / 2;
+
+
     while (true) {
         uint64_t now = time_us_64();
-        uint64_t elapsed_in_state = now - state_start_time;
+        uint64_t elapsed_in_state_us = now - state_start_time;
 
-        if (elapsed_in_state >= current_state_duration) {
+        if (current_state_duration > 0 && elapsed_in_state_us >= current_state_duration) {
             state_start_time = now;
-            switch (current_state) {
-            case STATE_ARMING:
-                current_state = STATE_MOTOR_TEST;
-                current_phase = PHASE_RAMP_FORWARD_UP;
-                current_state_duration = phase_durations[current_phase] * 1000;
-                printf("Arming complete. Testing Motor %d (Pin %d)...\n", 
-                       current_motor, MOTOR_PIN_BASE + current_motor);
-                printf("  Phase: FORWARD UP\n");
-                break;
+            elapsed_in_state_us = 0;
 
-            case STATE_MOTOR_TEST:
-                current_phase++;
-                if (current_phase >= 6) {
-                    current_motor++;
-                    current_phase = PHASE_RAMP_FORWARD_UP;
-                    if (current_motor >= NUM_MOTORS) {
-                        current_state = STATE_DONE;
-                        current_state_duration = -1;
-                        printf("All motor tests complete. Idling at neutral.\n");
-                        break;
+            bool transition_to_next_phase = true;
+
+            switch (current_state) {
+                case STATE_ARMING:
+                    current_state = STATE_ALL_MOTORS_FORWARD;
+                    current_phase = PHASE_RAMP_UP;
+                    current_state_duration = (uint64_t)phase_durations_ms[current_phase] * 1000;
+                    printf("Arming complete. Testing all motors forward.\n");
+                    printf("  Phase: RAMP UP\n");
+                    transition_to_next_phase = false;
+                    break;
+
+                case STATE_ALL_MOTORS_FORWARD:
+                    if (current_phase == PHASE_RAMP_UP) {
+                        current_phase = PHASE_RAMP_DOWN;
+                        printf("  Phase: RAMP DOWN\n");
+                    } else if (current_phase == PHASE_RAMP_DOWN) {
+                        current_phase = PHASE_PAUSE;
+                        printf("  Phase: PAUSE\n");
                     } else {
-                        printf("Testing Motor %d (Pin %d)...\n", 
-                               current_motor, MOTOR_PIN_BASE + current_motor);
+                        current_state = STATE_ALL_MOTORS_REVERSE;
+                        current_phase = PHASE_RAMP_UP;
+                        printf("Testing all motors reverse.\n");
+                        printf("  Phase: RAMP UP\n");
                     }
+                    break;
+
+                case STATE_ALL_MOTORS_REVERSE:
+                    if (current_phase == PHASE_RAMP_UP) {
+                        current_phase = PHASE_RAMP_DOWN;
+                        printf("  Phase: RAMP DOWN\n");
+                    } else if (current_phase == PHASE_RAMP_DOWN) {
+                        current_phase = PHASE_PAUSE;
+                        printf("  Phase: PAUSE\n");
+                    } else {
+                        current_state = STATE_INDIVIDUAL_MOTOR_FORWARD;
+                        current_phase = PHASE_RAMP_UP;
+                        current_motor_idx = 0;
+                        printf("Testing Motor %d (Pin %d) forward.\n", current_motor_idx, MOTOR_PIN_BASE + current_motor_idx);
+                        printf("  Phase: RAMP UP\n");
+                    }
+                    break;
+
+                case STATE_INDIVIDUAL_MOTOR_FORWARD:
+                    if (current_phase == PHASE_RAMP_UP) {
+                        current_phase = PHASE_RAMP_DOWN;
+                        printf("  Phase: RAMP DOWN\n");
+                    } else if (current_phase == PHASE_RAMP_DOWN) {
+                        current_phase = PHASE_PAUSE;
+                        printf("  Phase: PAUSE\n");
+                    } else {
+                        current_state = STATE_INDIVIDUAL_MOTOR_REVERSE;
+                        current_phase = PHASE_RAMP_UP;
+                        printf("Testing Motor %d (Pin %d) reverse.\n", current_motor_idx, MOTOR_PIN_BASE + current_motor_idx);
+                        printf("  Phase: RAMP UP\n");
+                    }
+                    break;
+
+                case STATE_INDIVIDUAL_MOTOR_REVERSE:
+                    if (current_phase == PHASE_RAMP_UP) {
+                        current_phase = PHASE_RAMP_DOWN;
+                        printf("  Phase: RAMP DOWN\n");
+                    } else if (current_phase == PHASE_RAMP_DOWN) {
+                        current_phase = PHASE_PAUSE;
+                        printf("  Phase: PAUSE\n");
+                    } else {
+                        current_motor_idx++;
+                        if (current_motor_idx < NUM_MOTORS) {
+                            current_state = STATE_INDIVIDUAL_MOTOR_FORWARD;
+                            current_phase = PHASE_RAMP_UP;
+                            printf("Testing Motor %d (Pin %d) forward.\n", current_motor_idx, MOTOR_PIN_BASE + current_motor_idx);
+                            printf("  Phase: RAMP UP\n");
+                        } else {
+                            current_state = STATE_DONE;
+                            printf("All motor tests complete. Idling at neutral.\n");
+                            current_state_duration = 0;
+                            transition_to_next_phase = false;
+                        }
+                    }
+                    break;
+
+                case STATE_DONE:
+                    transition_to_next_phase = false;
+                    break;
+            }
+            if (transition_to_next_phase && current_state != STATE_DONE) {
+                 current_state_duration = (uint64_t)phase_durations_ms[current_phase] * 1000;
+            }
+        }
+
+        float progress = 0.0f;
+        if (current_state_duration > 0) {
+            progress = (float)elapsed_in_state_us / (float)current_state_duration;
+            if (progress > 1.0f) {
+                progress = 1.0f;
+            }
+             if (progress < 0.0f) {
+                progress = 0.0f;
+            }
+        }
+
+
+        current_throttle = DSHOT_THROTTLE_NEUTRAL;
+
+        switch (current_state) {
+            case STATE_ARMING:
+                break;
+            case STATE_ALL_MOTORS_FORWARD:
+                if (current_phase == PHASE_RAMP_UP) {
+                    current_throttle = DSHOT_THROTTLE_MIN_FORWARD + (uint16_t)((MAX_FORWARD_50_PERCENT - DSHOT_THROTTLE_MIN_FORWARD) * progress);
+                } else if (current_phase == PHASE_RAMP_DOWN) {
+                    current_throttle = MAX_FORWARD_50_PERCENT - (uint16_t)((MAX_FORWARD_50_PERCENT - DSHOT_THROTTLE_MIN_FORWARD) * progress);
                 }
-                current_state_duration = phase_durations[current_phase] * 1000;
-                const char* phase_names[] = {
-                    "FORWARD UP", "FORWARD DOWN", "PAUSE", 
-                    "REVERSE UP", "REVERSE DOWN", "PAUSE"
-                };
-                printf("  Phase: %s\n", phase_names[current_phase]);
+                break;
+            case STATE_ALL_MOTORS_REVERSE:
+                if (current_phase == PHASE_RAMP_UP) {
+                    current_throttle = DSHOT_THROTTLE_MIN_REVERSE + (uint16_t)((MAX_REVERSE_50_PERCENT - DSHOT_THROTTLE_MIN_REVERSE) * progress);
+                } else if (current_phase == PHASE_RAMP_DOWN) {
+                    current_throttle = MAX_REVERSE_50_PERCENT - (uint16_t)((MAX_REVERSE_50_PERCENT - DSHOT_THROTTLE_MIN_REVERSE) * progress);
+                }
+                break;
+            case STATE_INDIVIDUAL_MOTOR_FORWARD:
+                if (current_phase == PHASE_RAMP_UP) {
+                    current_throttle = DSHOT_THROTTLE_MIN_FORWARD + (uint16_t)((MAX_FORWARD_50_PERCENT - DSHOT_THROTTLE_MIN_FORWARD) * progress);
+                } else if (current_phase == PHASE_RAMP_DOWN) {
+                    current_throttle = MAX_FORWARD_50_PERCENT - (uint16_t)((MAX_FORWARD_50_PERCENT - DSHOT_THROTTLE_MIN_FORWARD) * progress);
+                }
+                break;
+            case STATE_INDIVIDUAL_MOTOR_REVERSE:
+                 if (current_phase == PHASE_RAMP_UP) {
+                    current_throttle = DSHOT_THROTTLE_MIN_REVERSE + (uint16_t)((MAX_REVERSE_50_PERCENT - DSHOT_THROTTLE_MIN_REVERSE) * progress);
+                } else if (current_phase == PHASE_RAMP_DOWN) {
+                    current_throttle = MAX_REVERSE_50_PERCENT - (uint16_t)((MAX_REVERSE_50_PERCENT - DSHOT_THROTTLE_MIN_REVERSE) * progress);
+                }
                 break;
             case STATE_DONE:
                 break;
-            }
-            elapsed_in_state = now - state_start_time;
         }
-
-        float progress = (float)elapsed_in_state / (float)current_state_duration;
-        if (progress > 1.0f) {
-            progress = 1.0f;
-        }
-
-        switch (current_state) {
-        case STATE_ARMING:
-        case STATE_DONE:
-            current_throttle = DSHOT_THROTTLE_NEUTRAL;
-            break;
-        case STATE_MOTOR_TEST:
-            switch (current_phase) {
-            case PHASE_RAMP_FORWARD_UP:
-                current_throttle = DSHOT_THROTTLE_NEUTRAL + (uint16_t)(100 * progress);
-                break;
-            case PHASE_RAMP_FORWARD_DOWN:
-                current_throttle = (DSHOT_THROTTLE_NEUTRAL + 100) - (uint16_t)(100 * progress);
-                break;
-            case PHASE_PAUSE_1:
-            case PHASE_PAUSE_2:
-                current_throttle = DSHOT_THROTTLE_NEUTRAL;
-                break;
-            case PHASE_RAMP_REVERSE_UP:
-                current_throttle = (48) + (uint16_t)(100 * progress);
-                break;
-            case PHASE_RAMP_REVERSE_DOWN:
-                current_throttle = 148 - (uint16_t)(100 * progress);
-                break;
-            }
-            break;
-        }
-
         for (int i = 0; i < NUM_MOTORS; i++) {
-            if (current_state == STATE_MOTOR_TEST && i == current_motor) {
+            if (current_state == STATE_ALL_MOTORS_FORWARD || current_state == STATE_ALL_MOTORS_REVERSE) {
                 dshot_throttle(&controller, i, current_throttle);
+            } else if (current_state == STATE_INDIVIDUAL_MOTOR_FORWARD || current_state == STATE_INDIVIDUAL_MOTOR_REVERSE) {
+                if (i == current_motor_idx) {
+                    dshot_throttle(&controller, i, current_throttle);
+                } else {
+                    dshot_throttle(&controller, i, DSHOT_THROTTLE_NEUTRAL);
+                }
             } else {
                 dshot_throttle(&controller, i, DSHOT_THROTTLE_NEUTRAL);
             }
