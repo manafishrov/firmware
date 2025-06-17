@@ -154,6 +154,29 @@ in
         numpy
         websockets
         smbus2
+      ] ++ [
+        (pkgs.python3Packages.buildPythonPackage {
+          pname = "bmi270";
+          version = "0.4.3";
+          src = pkgs.fetchFromGitHub {
+            owner = "CoRoLab-Berlin";
+            repo = "bmi270_python";
+            rev = "main";
+            hash = "";
+          };
+          doCheck = false;
+        })
+        (pkgs.python3Packages.buildPythonPackage {
+          pname = "ms5837";
+          version = "0.1.0";
+          src = pkgs.fetchFromGitHub {
+            owner = "bluerobotics";
+            repo = "ms5837-python";
+            rev = "master";
+            hash = "";
+          };
+          doCheck = false;
+        })
       ]))
     ];
     sessionVariables = {
