@@ -5,20 +5,24 @@
 #include "pico/time.h"
 #include "dshot.h"
 
-#define MOTOR_PIN_BASE 18
-#define NUM_MOTORS 4
+#define MOTOR0_PIN_BASE 18
+#define MOTOR1_PIN_BASE 6
+#define NUM_MOTORS_0 4
+#define NUM_MOTORS_1 4
+#define NUM_MOTORS (NUM_MOTORS_0 + NUM_MOTORS_1)
 
 #define DSHOT_PIO pio0
-#define DSHOT_SM 0
+#define DSHOT_SM_0 0
+#define DSHOT_SM_1 1
 #define DSHOT_SPEED 300
 
 #define DSHOT_THROTTLE_NEUTRAL 0
-#define DSHOT_THROTTLE_MIN_FORWARD 1048 + 30
+#define DSHOT_THROTTLE_MIN_FORWARD 1048
 #define DSHOT_THROTTLE_MAX_FORWARD 2047
-#define DSHOT_THROTTLE_MIN_REVERSE 48 + 30
+#define DSHOT_THROTTLE_MIN_REVERSE 48
 #define DSHOT_THROTTLE_MAX_REVERSE 1047
 
-#define ARMING_DURATION_S 15
+#define ARMING_DURATION_S 10
 #define RAMP_DURATION_MS 6000
 #define PAUSE_DURATION_MS 500
 
@@ -52,22 +56,32 @@ int main() {
 
     printf("Pico DShot ROV Individual Motor Test\n");
     printf("------------------------------------\n");
-    printf("Testing thrusters on pins 18, 19, 20, 21 individually\n");
+    printf("Testing thrusters on pins 18, 19, 20, 21 and 6, 7, 8, 9 individually\n");
     printf(
         "Power on ESCs now. Arming with neutral signal for %d seconds...\n",
         ARMING_DURATION_S
     );
 
-    struct dshot_controller controller;
+    struct dshot_controller controller0;
+    struct dshot_controller controller1;
     dshot_controller_init(
-        &controller,
+        &controller0,
         DSHOT_SPEED,
         DSHOT_PIO,
-        DSHOT_SM,
-        MOTOR_PIN_BASE,
-        NUM_MOTORS
+        DSHOT_SM_0,
+        MOTOR0_PIN_BASE,
+        NUM_MOTORS_0
     );
-    dshot_register_telemetry_cb(&controller, telemetry_callback, NULL);
+    dshot_register_telemetry_cb(&controller0, telemetry_callback, NULL);
+    dshot_controller_init(
+        &controller1,
+        DSHOT_SPEED,
+        DSHOT_PIO,
+        DSHOT_SM_1,
+        MOTOR1_PIN_BASE,
+        NUM_MOTORS_1
+    );
+    dshot_register_telemetry_cb(&controller1, telemetry_callback, NULL);
 
     enum test_state current_state = STATE_ARMING;
     enum motor_test_phase current_phase = PHASE_RAMP_UP;
@@ -132,7 +146,7 @@ int main() {
                         current_state = STATE_INDIVIDUAL_MOTOR_FORWARD;
                         current_phase = PHASE_RAMP_UP;
                         current_motor_idx = 0;
-                        printf("Testing Motor %d (Pin %d) forward.\n", current_motor_idx, MOTOR_PIN_BASE + current_motor_idx);
+                        printf("Testing Motor %d (Pin %d) forward.\n", current_motor_idx, (current_motor_idx < NUM_MOTORS_0 ? MOTOR0_PIN_BASE + current_motor_idx : MOTOR1_PIN_BASE + (current_motor_idx - NUM_MOTORS_0)));
                         printf("  Phase: RAMP UP\n");
                     }
                     break;
@@ -147,7 +161,7 @@ int main() {
                     } else {
                         current_state = STATE_INDIVIDUAL_MOTOR_REVERSE;
                         current_phase = PHASE_RAMP_UP;
-                        printf("Testing Motor %d (Pin %d) reverse.\n", current_motor_idx, MOTOR_PIN_BASE + current_motor_idx);
+                        printf("Testing Motor %d (Pin %d) reverse.\n", current_motor_idx, (current_motor_idx < NUM_MOTORS_0 ? MOTOR0_PIN_BASE + current_motor_idx : MOTOR1_PIN_BASE + (current_motor_idx - NUM_MOTORS_0)));
                         printf("  Phase: RAMP UP\n");
                     }
                     break;
@@ -164,7 +178,7 @@ int main() {
                         if (current_motor_idx < NUM_MOTORS) {
                             current_state = STATE_INDIVIDUAL_MOTOR_FORWARD;
                             current_phase = PHASE_RAMP_UP;
-                            printf("Testing Motor %d (Pin %d) forward.\n", current_motor_idx, MOTOR_PIN_BASE + current_motor_idx);
+                            printf("Testing Motor %d (Pin %d) forward.\n", current_motor_idx, (current_motor_idx < NUM_MOTORS_0 ? MOTOR0_PIN_BASE + current_motor_idx : MOTOR1_PIN_BASE + (current_motor_idx - NUM_MOTORS_0)));
                             printf("  Phase: RAMP UP\n");
                         } else {
                             current_state = STATE_DONE;
@@ -233,19 +247,29 @@ int main() {
                 break;
         }
         for (int i = 0; i < NUM_MOTORS; i++) {
+            struct dshot_controller* ctrl;
+            int channel;
+            if (i < NUM_MOTORS_0) {
+                ctrl = &controller0;
+                channel = i;
+            } else {
+                ctrl = &controller1;
+                channel = i - NUM_MOTORS_0;
+            }
             if (current_state == STATE_ALL_MOTORS_FORWARD || current_state == STATE_ALL_MOTORS_REVERSE) {
-                dshot_throttle(&controller, i, current_throttle);
+                dshot_throttle(ctrl, channel, current_throttle);
             } else if (current_state == STATE_INDIVIDUAL_MOTOR_FORWARD || current_state == STATE_INDIVIDUAL_MOTOR_REVERSE) {
                 if (i == current_motor_idx) {
-                    dshot_throttle(&controller, i, current_throttle);
+                    dshot_throttle(ctrl, channel, current_throttle);
                 } else {
-                    dshot_throttle(&controller, i, DSHOT_THROTTLE_NEUTRAL);
+                    dshot_throttle(ctrl, channel, DSHOT_THROTTLE_NEUTRAL);
                 }
             } else {
-                dshot_throttle(&controller, i, DSHOT_THROTTLE_NEUTRAL);
+                dshot_throttle(ctrl, channel, DSHOT_THROTTLE_NEUTRAL);
             }
         }
-        dshot_loop(&controller);
+        dshot_loop(&controller0);
+        dshot_loop(&controller1);
     }
 
     return 0;
