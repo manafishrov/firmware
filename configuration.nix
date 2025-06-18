@@ -162,7 +162,7 @@ in
             owner = "CoRoLab-Berlin";
             repo = "bmi270_python";
             rev = "main";
-            hash = "";
+            hash = "sha256-IxkMWWcrsglFV5HGDMK0GBx5o0svNfRXqhW8/ZWpsUk=";
           };
           doCheck = false;
         })
@@ -173,7 +173,7 @@ in
             owner = "bluerobotics";
             repo = "ms5837-python";
             rev = "master";
-            hash = "";
+            hash = "sha256-a6P3zHAw5YPlgiznX2lHJs2EI3xwPOqI49lO+m+f9iw=";
           };
           doCheck = false;
         })
