@@ -38,7 +38,7 @@ async def handle_client(websocket):
                 await asyncio.sleep(1)
             except Exception as e:
                 logging.error(f"Heartbeat error: {e}")
-                break
+                
 
     async def send_status_updates():
         counter = 0
@@ -65,7 +65,7 @@ async def handle_client(websocket):
 
             except Exception as e:
                 logging.error(f"Status update error: {e}")
-                break
+                
 
     async def update_imu_reading():
         while True:
