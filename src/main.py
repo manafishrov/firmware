@@ -129,6 +129,10 @@ async def handle_client(websocket):
     except websockets.exceptions.ConnectionClosed as e:
         logging.info(f"Client disconnected: {e}")
     finally:
+        logging.info("Closing connection and stopping thrusters")
+        for i in range(10):
+            thruster_ctrl.run_thrusters([0, 0, 0, 0, 0, 0])
+            time.sleep(0.1)
         heartbeat_task.cancel()
         status_task.cancel()
         imu_task.cancel()
