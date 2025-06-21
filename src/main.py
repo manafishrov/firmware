@@ -103,8 +103,8 @@ async def handle_client(websocket):
                         if isinstance(payload, list) and len(payload) == 6:                         
                             thruster_ctrl.run_thrusters(payload)
                             
-                            if not thruster_ctrl.PID_enabled and messageNr < 300: # THIS WILL BE REMOVED WHEN WE HAVE THE OPTION TO ENABLE PID IN APP
-                                logging.info(f"ENABLING PID CONTROL (300 messages received)")
+                            if not thruster_ctrl.PID_enabled and payload[2] > 0.5: # THIS WILL BE REMOVED WHEN WE HAVE THE OPTION TO ENABLE PID IN APP
+                                logging.info(f"ENABLING PID CONTROL (UP signal received)")
                                 thruster_ctrl.PID_enabled = True
 
                             # logging.info(f"Received control input: {payload}")
