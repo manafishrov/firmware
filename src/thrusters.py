@@ -46,14 +46,14 @@ class ThrusterController:
     def get_thrust_allocation_matrix(self):
         # Columns: [forward, side, up, pitch, yaw, roll]
         return np.array([
-            [ 1,  1, 0,  0,  0.4,  0],
-            [ 1, -1, 0,  0, -0.4,  0],
+            [ 1,  1, 0,  0,  0.6,  0],
+            [ 1, -1, 0,  0, -0.6,  0],
             [ 0,  0, 1,  1,   0,    1],
             [ 0,  0, 1,  1,   0,   -1],
             [ 0,  0, 1, -1,   0,    1],
             [ 0,  0, 1, -1,   0,   -1],
-            [-1,  1, 0,  0, -0.4,  0],
-            [-1, -1, 0,  0,  0.4,  0],
+            [-1,  1, 0,  0, -0.6,  0],
+            [-1, -1, 0,  0,  0.6,  0],
         ])
 
     def thrust_allocation(self, input_vector):
@@ -64,7 +64,7 @@ class ThrusterController:
         return thrust_vector * magnitude
 
     def correct_spin_direction(self, thrust_vector):
-        spin_directions = np.array([-1, 1, -1, 1, -1, 1, -1, -1])
+        spin_directions = np.array([-1, 1, -1, 1, -1, 1, 1, -1])
         return thrust_vector * spin_directions
 
     def print_thrust_vector(self, thrust_vector):
