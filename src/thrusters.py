@@ -114,6 +114,12 @@ class ThrusterController:
         self._sending = True
         asyncio.create_task(self._async_send(reordered))
 
+    def cap_current(self, thrust_vector, max_activation):
+        # A function that limits the motors to prevent getting a current that will make the BMS shut down the battery
+        total_activation = np.sum(np.abs(thrust_vector))
+        if total_activation > max_activation:
+            thrust_vector *= max_activation / total_activation
+
     def run_thrusters(self, direction_vector):
         # direction_vector: [forward, side, up, pitch, yaw, roll]
         direction_vector = self.tuning_correction(direction_vector)
@@ -124,6 +130,8 @@ class ThrusterController:
         thrust_vector = self.thrust_allocation(direction_vector)
         thrust_vector = self.correct_spin_direction(thrust_vector)
         thrust_vector = self.adjust_magnitude(thrust_vector, 0.3)
+        thrust_vector = self.cap_current(thrust_vector, 2) #THIS NEEDS TO BE TUNED
+
         thrust_vector = np.clip(thrust_vector, -1, 1)
 
         self.send_thrust_vector(thrust_vector)
