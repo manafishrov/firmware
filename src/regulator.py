@@ -121,14 +121,16 @@ class PIDController:
         self.integral_value_roll  = np.clip(self.integral_value_roll, -100, 100)
 
         # Derivative via exponential moving average
-        self.current_dt_pitch = (
-            self.EMA_lambda * self.current_dt_pitch
-            + (1 - self.EMA_lambda) * (current_pitch - self.previous_pitch) / delta_t
-        )
-        self.current_dt_roll = (
-            self.EMA_lambda * self.current_dt_roll
-            + (1 - self.EMA_lambda) * (current_roll - self.previous_roll) / delta_t
-        )
+        # self.current_dt_pitch = (
+        #     self.EMA_lambda * self.current_dt_pitch
+        #     + (1 - self.EMA_lambda) * (current_pitch - self.previous_pitch) / delta_t
+        # )
+        # self.current_dt_roll = (
+        #     self.EMA_lambda * self.current_dt_roll
+        #     + (1 - self.EMA_lambda) * (current_roll - self.previous_roll) / delta_t
+        # )
+
+        self.current_dt_pitch, self.current_dt_roll = self.imu.get_pitch_roll_gyro()
 
         # PID outputs
         pitch_actuation = self.PID(current_pitch, target_pitch, self.integral_value_pitch, self.current_dt_pitch, "pitch")
