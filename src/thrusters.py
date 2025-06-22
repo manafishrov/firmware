@@ -132,7 +132,7 @@ class ThrusterController:
         thrust_vector = self.thrust_allocation(direction_vector)
         thrust_vector = self.correct_spin_direction(thrust_vector)
         thrust_vector = self.adjust_magnitude(thrust_vector, 0.3)
-        thrust_vector = self.cap_current(thrust_vector, 3) #THIS NEEDS TO BE TUNED
+        thrust_vector = self.cap_current(thrust_vector, 2.5) #THIS NEEDS TO BE TUNED
 
         thrust_vector = np.clip(thrust_vector, -1, 1)
 

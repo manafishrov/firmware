@@ -147,6 +147,10 @@ class PIDController:
             act_pitch = -pitch_actuation
         act_roll = -roll_actuation
 
+        # Clip actuation values to [-2, 2] to prevent overshadowing user input
+        act_pitch = np.clip(act_pitch, -2, 2)
+        act_roll = np.clip(act_roll, -2, 2)
+
         # Return new direction vector
         return np.array([
             direction_vector[0],
