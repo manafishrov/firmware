@@ -120,6 +120,8 @@ class ThrusterController:
         if total_activation > max_activation:
             thrust_vector *= max_activation / total_activation
 
+        return thrust_vector
+
     def run_thrusters(self, direction_vector):
         # direction_vector: [forward, side, up, pitch, yaw, roll]
         direction_vector = self.tuning_correction(direction_vector)
