@@ -119,6 +119,8 @@ class ThrusterController:
         total_activation = np.sum(np.abs(thrust_vector))
         if total_activation > max_activation:
             thrust_vector *= max_activation / total_activation
+            print(f"Thrust vector capped at ration {max_activation / total_activation:.2f}")
+
 
         return thrust_vector
 
