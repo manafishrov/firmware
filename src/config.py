@@ -58,7 +58,7 @@ def get_Kp_pitch():
 def get_Ki_pitch():
     return float(load_config()['regulator']['Ki_pitch'])
 def get_Kd_pitch():
-    return float(load_config()['regulator']['Kd_pitch'])
+    return float(load_config()['regulator']['Kd_pitch']) # HAS TO BE NEGATIVE.... WEIRD
 
 def get_Kp_roll():
     return float(load_config()['regulator']['Kp_roll'])
