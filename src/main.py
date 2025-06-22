@@ -16,6 +16,8 @@ logging.basicConfig(level=logging.INFO)
 imu_sensor = IMU()
 thruster_ctrl = ThrusterController(imu_sensor)
 pressure_sensor = ms5837.MS5837_30BA()
+if not pressure_sensor.init():
+    raise RuntimeError("Could not initialize MS5837 pressure sensor")
 
 if get_pressure_fluid() == "freshwater":
     pressure_sensor.setFluidDensity(ms5837.DENSITY_FRESHWATER)  # SHOULD BE CHANGABLE IN SETTINGS
