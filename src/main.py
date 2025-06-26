@@ -36,7 +36,8 @@ async def handle_client(websocket):
                     "payload": {"timestamp": int(time.time())},
                 }
                 await websocket.send(json.dumps(heartbeat_msg))
-                logging.info("Sent heartbeat")
+                
+                logging.info(f"Sent heartbeat - Scaledown: {thruster_ctrl.scaledown_factor}")
                 await asyncio.sleep(1)
             except Exception as e:
                 logging.error(f"Heartbeat error: {e}")

@@ -21,6 +21,8 @@ class ThrusterController:
         self.last_send_time = time.time()
         self.time_delay = 0.1
 
+        self.scaledown_factor = 1
+
         # PWM DRIVER SETUP
         print(f"Resetting all PCA9685 devices on bus {bus_num}")
         PCA9685.software_reset(bus_num=bus_num)
@@ -64,7 +66,7 @@ class ThrusterController:
         return thrust_vector * magnitude
 
     def correct_spin_direction(self, thrust_vector):
-        spin_directions = np.array([-1, 1, -1, 1, -1, 1, 1, -1])
+        spin_directions = np.array([-1, 1, -1, 1, -1, 1, -1, 1])
         return thrust_vector * spin_directions
 
     def print_thrust_vector(self, thrust_vector):
@@ -86,7 +88,7 @@ class ThrusterController:
             self.time_delay = 0.5 * self.time_delay + 0.5 * current_time_delay
             self.last_send_time = current_time
 
-            print(f"Thrust vectors sent per second: {1 / self.time_delay:.2f}")
+            #print(f"Thrust vectors sent per second: {1 / self.time_delay:.2f}")
         except Exception as e:
             print(f"Error sending thrust vector via PCA9685_fast: {e}")
 
@@ -119,8 +121,7 @@ class ThrusterController:
         total_activation = np.sum(np.abs(thrust_vector))
         if total_activation > max_activation:
             thrust_vector *= max_activation / total_activation
-            print(f"Thrust vector capped at ration {max_activation / total_activation:.2f}")
-
+            self.scaledown_factor = max_activation/total_activation
 
         return thrust_vector
 
@@ -134,7 +135,7 @@ class ThrusterController:
         thrust_vector = self.thrust_allocation(direction_vector)
         thrust_vector = self.correct_spin_direction(thrust_vector)
         thrust_vector = self.adjust_magnitude(thrust_vector, 0.3)
-        thrust_vector = self.cap_current(thrust_vector, 2.5) #THIS NEEDS TO BE TUNED
+        thrust_vector = self.cap_current(thrust_vector, 1.5) #THIS NEEDS TO BE TUNED
 
         thrust_vector = np.clip(thrust_vector, -1, 1)
 
