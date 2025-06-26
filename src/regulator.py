@@ -130,6 +130,7 @@ class PIDController:
         #     + (1 - self.EMA_lambda) * (current_roll - self.previous_roll) / delta_t
         # )
 
+        # New, much better way of calculating derivative
         self.current_dt_pitch, self.current_dt_roll = self.imu.get_pitch_roll_gyro()
 
         # PID outputs

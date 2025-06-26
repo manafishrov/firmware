@@ -3,6 +3,7 @@ import asyncio
 import regulator
 import PCA9685_fast as PCA9685
 import time
+import config
 
 class ThrusterController:
     def __init__(self, imu, PID_enabled = False, regulator_controller=None, bus_num=1, address=0x40, freq=50):
@@ -135,7 +136,7 @@ class ThrusterController:
         thrust_vector = self.thrust_allocation(direction_vector)
         thrust_vector = self.correct_spin_direction(thrust_vector)
         thrust_vector = self.adjust_magnitude(thrust_vector, 0.3)
-        thrust_vector = self.cap_current(thrust_vector, 1.5) #THIS NEEDS TO BE TUNED
+        thrust_vector = self.cap_current(thrust_vector, config.get_thruster_thrust_magnitude_limit()) #THIS NEEDS TO BE TUNED
 
         thrust_vector = np.clip(thrust_vector, -1, 1)
 
