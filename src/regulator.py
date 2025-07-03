@@ -87,7 +87,7 @@ class PIDController:
 
     def regulate_to_absolute(self, direction_vector, target_pitch, target_roll, delta_t):
         # Read actual orientation
-        current_pitch, current_roll = self.imu.get_pitch_roll() # TODO: Place update call here
+        current_pitch, current_roll = self.imu.get_pitch_roll() 
 
         # Update integral error (with anti-windup clipping)
         self.integral_value_pitch += (target_pitch - current_pitch) * delta_t

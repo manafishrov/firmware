@@ -49,7 +49,6 @@ async def handle_client(websocket):
             try:
                 if counter % 1 == 0:
                     desired_pitch, desired_roll = thruster_ctrl.get_desired_pitch_roll()
-                    pressure_sensor.read()
                     status_msg = {
                         "message_type": "Status",
                         "payload": {
@@ -74,14 +73,24 @@ async def handle_client(websocket):
         while True:
             try:
                 imu_sensor.update_pitch_roll()
-                await asyncio.sleep(0.05)
+                await asyncio.sleep(0.02)  # Update rate of 50Hz
             except Exception as e:
                 logging.error(f"IMU update error: {e}")
+                await asyncio.sleep(3)
+
+    async def update_pressure_sensor():
+        while True:
+            try:
+                pressure_sensor.read()
+                await asyncio.sleep(0.1)  # Update rate of 10Hz
+            except Exception as e:
+                logging.error(f"Pressure sensor update error: {e}")
                 await asyncio.sleep(3)
 
     heartbeat_task = asyncio.create_task(send_heartbeat())
     status_task = asyncio.create_task(send_status_updates())
     imu_task = asyncio.create_task(update_imu_reading())
+    pressure_task = asyncio.create_task(update_pressure_sensor())
 
     try:
         messageNr = 0  # the WORST fix but it seems to be necessary, cuts out 3/4 of the messages, REMOVE WHEN WE HAVE PICO
@@ -139,6 +148,7 @@ async def handle_client(websocket):
         heartbeat_task.cancel()
         status_task.cancel()
         imu_task.cancel()
+        pressure_task.cancel()
 
 
 async def main():
