@@ -77,6 +77,25 @@ def get_Ki_depth():
 def get_Kd_depth():
     return float(load_config()['regulator']['Kd_depth'])
 
+def get_forward_speed_coefficient():
+    return float(load_config()['regulator']['forward_speed_coefficient'])
+
+def get_upward_speed_coefficient():
+    return float(load_config()['regulator']['upward_speed_coefficient'])
+
+def get_sideways_speed_coefficient():
+    return float(load_config()['regulator']['sideways_speed_coefficient'])
+
+def get_pitch_turn_coefficient():
+    return float(load_config()['regulator']['pitch_turn_coefficient'])
+
+def get_yaw_turn_coefficient():
+    return float(load_config()['regulator']['yaw_turn_coefficient'])
+
+def get_roll_turn_coefficient():
+    return float(load_config()['regulator']['roll_turn_coefficient'])
+
+
 def get_turn_speed():
     return float(load_config()['regulator']['turn_speed'])
 

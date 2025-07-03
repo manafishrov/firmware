@@ -23,6 +23,10 @@ class DepthHoldController:
         self.Ki_depth = config.get_Ki_depth()
         self.Kd_depth = config.get_Kd_depth()
 
+        self.forward_speed_coefficient = config.get_forward_speed_coefficient()
+        self.upward_speed_coefficient = config.get_upward_speed_coefficient()
+        self.sideways_speed_coefficient = config.get_sideways_speed_coefficient()
+        
         self.pressure_sensor = pressure_sensor
         self.imu = imu
 
