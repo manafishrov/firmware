@@ -23,7 +23,6 @@ class PIDController:
         self.Ki_roll = config.get_Ki_roll() 
         self.Kd_roll = config.get_Kd_roll()
         self.turn_speed = config.get_turn_speed()
-        self.EMA_lambda = config.get_EMA_lambda()
 
         self.imu = imu
 

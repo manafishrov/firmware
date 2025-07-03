@@ -73,9 +73,6 @@ def get_Kd_roll():
 def get_turn_speed():
     return float(load_config()['regulator']['turn_speed'])
 
-def get_EMA_lambda():
-    return float(load_config()['regulator']['EMA_lambda'])
-
 # imu
 def get_CF_alpha():
     return float(load_config()['imu']['CF_alpha'])
