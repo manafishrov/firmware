@@ -3,39 +3,26 @@ import time
 
 import config
 
-class PIDController:
-    def __init__(self, imu):
+class DepthHoldController:
+    def __init__(self, pressure_sensor):
         # Desired and last-known states
-        self.desired_pitch = 0
-        self.desired_roll = 0
+        self.desired_depth = 0
 
-        self.integral_value_pitch = 0
-        self.integral_value_roll = 0
+        self.integral_value_depth = 0
 
         # Timing
         self.last_called_time = time.time()
 
         # TUNING PARAMETERS (loaded from config)
-        self.Kp_pitch = config.get_Kp_pitch()
-        self.Ki_pitch = config.get_Ki_pitch()
-        self.Kd_pitch = config.get_Kd_pitch()
+        self.Kp_depth = config.get_Kp_depth()
+        self.Ki_depth = config.get_Ki_depth()
+        self.Kd_depth = config.get_Kd_depth()
 
-        self.Kp_roll = config.get_Kp_roll()
-        self.Ki_roll = config.get_Ki_roll() 
-        self.Kd_roll = config.get_Kd_roll()
-
-        self.turn_speed = config.get_turn_speed()
-
-        self.imu = imu
+        self.pressure_sensor = pressure_sensor
 
     def PID(self, current_value, desired_value, integral_value, derivative_value, type):
-        # Convert all values to radians (necessary for ziegler–nichols method)
-        current_value = np.radians(current_value)
-        desired_value = np.radians(desired_value)
-        integral_value = np.radians(integral_value)
-        derivative_value = np.radians(derivative_value)
 
-        error = desired_value - current_value
+        error = desired_value - current_value #CAME THIS FAR
 
         if type == "pitch":
             Kp = self.Kp_pitch

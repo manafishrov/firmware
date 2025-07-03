@@ -70,6 +70,13 @@ def get_Ki_roll():
 def get_Kd_roll():
     return float(load_config()['regulator']['Kd_roll'])
 
+def get_Kp_depth():
+    return float(load_config()['regulator']['Kp_depth'])
+def get_Ki_depth():
+    return float(load_config()['regulator']['Ki_depth'])
+def get_Kd_depth():
+    return float(load_config()['regulator']['Kd_depth'])
+
 def get_turn_speed():
     return float(load_config()['regulator']['turn_speed'])
 
