@@ -25,11 +25,11 @@ def get_device_controls_port():
     return load_config()['network']['device_controls_port']
 
 # Thrusters
-def get_thruster_magnitude():
-    return float(load_config()['thrusters']['magnitude'])
+def get_user_max_thrust():
+    return float(load_config()['thrusters']['user_max_thrust'])
 
-def get_thruster_thrust_magnitude_limit():
-    return float(load_config()['thrusters']['thrust_magnitude_limit'])
+def get_regulator_max_thrust():
+    return float(load_config()['thrusters']['regulator_max_thrust'])
 
 def get_thruster1_pin():
     return int(load_config()['thrusters']['thruster1_pin'])

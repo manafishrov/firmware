@@ -118,11 +118,11 @@ class ThrusterController:
         # direction_vector: [forward, side, up, pitch, yaw, roll]
         direction_vector = self.tuning_correction(direction_vector)
 
-        direction_vector *= 0.3
+        direction_vector *= config.get_user_max_thrust()
 
         if self.PID_enabled:
             regulator_actuation = self.regulator.regulate_pitch_roll(direction_vector)
-            regulator_actuation = np.clip(regulator_actuation, -0.3, 0.3)  # Limit regulator output to prevent excessive actuation
+            regulator_actuation = np.clip(regulator_actuation, -config.get_regulator_max_thrust(), config.get_regulator_max_thrust())  # Limit regulator output to prevent excessive actuation
             direction_vector = direction_vector + regulator_actuation
             
         thrust_vector = self.thrust_allocation(direction_vector)
