@@ -143,10 +143,11 @@ class PIDController:
 
         # Build actuation, inverting pitch if upside-down
         if current_roll >= 90 or current_roll <= -90:
-            act_pitch = pitch_actuation
+            act_pitch = -pitch_actuation
         else:
             act_pitch = -pitch_actuation
-        act_roll = -roll_actuation
+        
+        act_roll = roll_actuation
 
         # Clip actuation values to [-2, 2] to prevent overshadowing user input
         act_pitch = np.clip(act_pitch, -1, 1)
