@@ -22,8 +22,6 @@ class ThrusterController:
         self.last_send_time = time.time()
         self.time_delay = 0.1
 
-        self.scaledown_factor = 1
-
         # PWM DRIVER SETUP
         print(f"Resetting all PCA9685 devices on bus {bus_num}")
         PCA9685.software_reset(bus_num=bus_num)
@@ -62,9 +60,6 @@ class ThrusterController:
     def thrust_allocation(self, input_vector):
         thrust_vector = self.thrust_allocation_matrix @ input_vector
         return thrust_vector.astype(np.float64)
-
-    def adjust_magnitude(self, thrust_vector, magnitude):
-        return thrust_vector * magnitude
 
     def correct_spin_direction(self, thrust_vector):
         spin_directions = np.array([-1, 1, -1, 1, -1, 1, -1, 1])
@@ -117,26 +112,21 @@ class ThrusterController:
         self._sending = True
         asyncio.create_task(self._async_send(reordered))
 
-    def cap_current(self, thrust_vector, max_activation):
-        # A function that limits the motors to prevent getting a current that will make the BMS shut down the battery
-        total_activation = np.sum(np.abs(thrust_vector))
-        if total_activation > max_activation:
-            thrust_vector *= max_activation / total_activation
-            self.scaledown_factor = max_activation/total_activation
-
         return thrust_vector
 
     def run_thrusters(self, direction_vector):
         # direction_vector: [forward, side, up, pitch, yaw, roll]
         direction_vector = self.tuning_correction(direction_vector)
 
-        if self.PID_enabled:
-            direction_vector = self.regulator.regulate_pitch_roll(direction_vector)
+        direction_vector *= 0.3
 
+        if self.PID_enabled:
+            regulator_actuation = self.regulator.regulate_pitch_roll(direction_vector)
+            regulator_actuation = np.clip(regulator_actuation, -0.3, 0.3)  # Limit regulator output to prevent excessive actuation
+            direction_vector = direction_vector + regulator_actuation
+            
         thrust_vector = self.thrust_allocation(direction_vector)
         thrust_vector = self.correct_spin_direction(thrust_vector)
-        thrust_vector = self.adjust_magnitude(thrust_vector, 0.3)
-        thrust_vector = self.cap_current(thrust_vector, config.get_thruster_thrust_magnitude_limit()) #THIS NEEDS TO BE TUNED
 
         thrust_vector = np.clip(thrust_vector, -1, 1)
 

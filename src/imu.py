@@ -88,7 +88,7 @@ class IMU:
     
     def get_pitch_roll_gyro(self):
         gyr = self.sensor.get_gyr_data()
-        return np.degrees(gyr[1]), np.degrees(gyr[0])
+        return -np.degrees(gyr[1]), np.degrees(gyr[0])
 
     def get_yaw_gyro(self):
         gyr = self.sensor.get_gyr_data()
