@@ -26,7 +26,7 @@ class DepthHoldController:
         self.forward_speed_coefficient = config.get_forward_speed_coefficient()
         self.upward_speed_coefficient = config.get_upward_speed_coefficient()
         self.sideways_speed_coefficient = config.get_sideways_speed_coefficient()
-        
+
         self.pressure_sensor = pressure_sensor
         self.imu = imu
 
@@ -63,10 +63,39 @@ class DepthHoldController:
         actuation = self.PID(current_depth, self.desired_depth, self.integral_value_depth, self.current_dt_depth)
         
         # Use IMU data to map actuation onto direction vector containing [forward, side, up, pitch, yaw, roll]
-        #TODO: Implement this, the hard part....
         pitch, roll = self.imu.get_pitch_roll()
 
-        # Return new direction vector
-        return np.array([0, 0, 0, act_pitch, 0, act_roll])
+        # This vector represents desired direction in global coordinates
+        b = np.array([0, 0, actuation])
+
+
+        cp, sp = np.cos(np.deg2rad(pitch)), np.sin(np.deg2rad(pitch))
+        cr, sr = np.cos(np.deg2rad(roll)),    np.sin(np.deg2rad(roll))
+
+        # In this matrix columns are equal to the vector form of which way each of the directions we can move take us
+        # First column is forward, second is side, third is up
+        A = np.array([
+        [cp, sp*sr,    -sp*cr],
+        [0,  cr,       sr],
+        [sp, cp*(-sr), cp*cr]
+        ])
+
+        speed_coefficients = np.diag([
+            self.forward_speed_coefficient,
+            self.sideways_speed_coefficient,
+            self.upward_speed_coefficient
+        ])
+
+        A = A @ speed_coefficients
+
+        # Solve for direction vector "x"
+        try:
+            x = np.linalg.solve(A, b)
+        except np.linalg.LinAlgError as e:
+            print(f"Error solving linear system for depth hold thrust allocation: {e}, using least squares instead.")
+            x, *_ = np.linalg.lstsq(A, b, rcond=None)
+
+        # Return new direction vector (formatted as [forward, side, up, pitch, yaw, roll])
+        return np.array([x[0], x[1], x[2], 0, 0, 0])
 
     
