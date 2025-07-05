@@ -27,6 +27,12 @@ class DepthHoldController:
         self.upward_speed_coefficient = config.get_upward_speed_coefficient()
         self.sideways_speed_coefficient = config.get_sideways_speed_coefficient()
 
+        # Normalizing speed coeficcients so that their units don't affect PID values
+        speed_coeficcient_sum = 1/3 * (self.forward_speed_coefficient + self.sideways_speed_coefficient + self.upward_speed_coefficient)
+        self.forward_speed_coefficient /= speed_coeficcient_sum
+        self.sideways_speed_coefficient /= speed_coeficcient_sum
+        self.upward_speed_coefficient/= speed_coeficcient_sum
+
         self.pressure_sensor = pressure_sensor
         self.imu = imu
 
@@ -35,7 +41,7 @@ class DepthHoldController:
         self.integral_value_depth = 0
 
     def PID(self, current_value, desired_value, integral_value, derivative_value):
-        error = desired_value - current_value
+        error = -(desired_value - current_value)
         return self.Kp_depth * error + self.Ki_depth * integral_value - self.Kd_depth * derivative_value
 
     def regulate_depth(self):

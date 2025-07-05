@@ -1,19 +1,24 @@
 import numpy as np
 import asyncio
 import regulator
+import regulator_depth_hold
 import PCA9685_fast as PCA9685
 import time
 import config
 
 class ThrusterController:
-    def __init__(self, imu, PID_enabled = False, regulator_controller=None, bus_num=1, address=0x40, freq=50):
+    def __init__(self, imu, pressure_sensor, regulator_controller=None, bus_num=1, address=0x40, freq=50):
         # Use your PIDController instance (or make one if none provided)
         if regulator_controller is None:
             self.regulator = regulator.PIDController(imu)
         else:
             self.regulator = regulator_controller
 
-        self.PID_enabled = PID_enabled
+        # Initialize depth hold controller
+        self.depth_regulator = regulator_depth_hold.DepthHoldController(pressure_sensor, imu)
+
+        self.PID_enabled = False
+        self.depth_hold_enabled = False
 
         # State
         self.prev_thrust_vector = None
@@ -67,6 +72,19 @@ class ThrusterController:
 
     def print_thrust_vector(self, thrust_vector):
         print(f"Thrust vector: {thrust_vector}")
+
+    def change_cooridinate_system(self, direction_vector, pitch, roll):
+        pitch_g, yaw_g, roll_g = direction_vector[3], direction_vector[4], direction_vector[5]
+
+        # Convert from [forward, side, up, pitch, yaw, roll] to [forward, side, up, pitch, yaw, roll]
+        cp, sp = np.cos(np.deg2rad(pitch)), np.sin(np.deg2rad(pitch))
+        cr, sr = np.cos(np.deg2rad(roll)), np.sin(np.deg2rad(roll))
+
+        pitch_l =  cr*pitch_g + sr*cp*yaw_g
+        roll_l  = -sp*yaw_g   + 1*roll_g
+        yaw_l   = -sr*pitch_g + cr*cp*yaw_g
+
+        return np.array([direction_vector[0], direction_vector[1], direction_vector[2], pitch_l, yaw_l, roll_l])
 
     async def _async_send(self, thrust_vector):
         try:
@@ -122,12 +140,26 @@ class ThrusterController:
 
         if self.PID_enabled:
             regulator_actuation = self.regulator.regulate_pitch_roll(direction_vector)
-            regulator_actuation = regulator_actuation/np.max(regulator_actuation) #Scaling to prevent values overstepping the max
+            max = np.max(np.abs(regulator_actuation))
+            if max > config.get_regulator_max_thrust():
+                regulator_actuation = regulator_actuation * config.get_regulator_max_thrust()/max
+
+            direction_vector = direction_vector + regulator_actuation
+
+        if self.depth_hold_enabled:
+            depth_actuation = self.depth_regulator.regulate_depth()
+            max = np.max(np.abs(depth_actuation))
+            if max > config.get_regulator_max_thrust():
+                depth_actuation = depth_actuation * config.get_regulator_max_thrust()/max
+
             direction_vector = direction_vector + regulator_actuation
             
+        if self.PID_enabled:
+            pitch, roll = self.imu.get_pitch_roll()
+            direction_vector = self.change_cooridinate_system(direction_vector, pitch, roll)
+
         thrust_vector = self.thrust_allocation(direction_vector)
         thrust_vector = self.correct_spin_direction(thrust_vector)
-
         thrust_vector = np.clip(thrust_vector, -1, 1)
 
         self.send_thrust_vector(thrust_vector)
