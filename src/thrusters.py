@@ -20,6 +20,10 @@ class ThrusterController:
         self.PID_enabled = False
         self.depth_hold_enabled = False
 
+        self.ptc = config.get_pitch_turn_coefficient()
+        self.ytc = config.get_yaw_turn_coefficient()
+        self.rtc = config.get_roll_turn_coefficient()
+
         # State
         self.prev_thrust_vector = None
         self._sending = False
@@ -80,9 +84,13 @@ class ThrusterController:
         cp, sp = np.cos(np.deg2rad(pitch)), np.sin(np.deg2rad(pitch))
         cr, sr = np.cos(np.deg2rad(roll)), np.sin(np.deg2rad(roll))
 
-        pitch_l =  cr*pitch_g + sr*cp*yaw_g
-        roll_l  = -sp*yaw_g   + 1*roll_g
-        yaw_l   = -sr*pitch_g + cr*cp*yaw_g
+        try:
+            pitch_l =  cr*pitch_g  + sr*cp*yaw_g * (self.ytc/self.ptc)  # Here we scale so pitch matches yaw
+            roll_l  =  roll_g      - sp*yaw_g    * (self.ytc/self.rtc)  # Here we scale so roll matches yaw
+            yaw_l   =  cr*cp*yaw_g - sr*pitch_g  * (self.ptc/self.ytc)  # Here we scale so yaw matches pitch
+        except ZeroDivisionError:
+            pitch_l, yaw_l, roll_l = pitch_g, yaw_g, roll_g
+            print("Regulator coordinate system change failed because one of the turn coefficients is 0")
 
         return np.array([direction_vector[0], direction_vector[1], direction_vector[2], pitch_l, yaw_l, roll_l])
 
