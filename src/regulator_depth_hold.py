@@ -27,11 +27,21 @@ class DepthHoldController:
         self.upward_speed_coefficient = config.get_upward_speed_coefficient()
         self.sideways_speed_coefficient = config.get_sideways_speed_coefficient()
 
-        # Normalizing speed coeficcients so that their units don't affect PID values
-        speed_coeficcient_sum = 1/3 * (self.forward_speed_coefficient + self.sideways_speed_coefficient + self.upward_speed_coefficient)
-        self.forward_speed_coefficient /= speed_coeficcient_sum
-        self.sideways_speed_coefficient /= speed_coeficcient_sum
-        self.upward_speed_coefficient/= speed_coeficcient_sum
+        if self.upward_speed_coefficient == 0:
+            print("Depth hold will not work when upward speed coefficient is 0! Unexpected behaviour likely to occur.")
+            self.upward_speed_coefficient = 1
+
+        # Normalizing speed coeficcients, scale so that upwards becomes 1 and their ratio stays the same
+        # FOR SETTINGS: Upwards can not be 0
+        self.forward_speed_coefficient /= self.upward_speed_coefficient
+        self.sideways_speed_coefficient /= self.upward_speed_coefficient
+        self.upward_speed_coefficient = 1
+
+        # If any are 0, set them to a value to avoid zero division error
+        if self.forward_speed_coefficient < 0.1:
+            self.forward_speed_coefficient = 0.1
+        if self.sideways_speed_coefficient < 0.1:
+            self.sideways_speed_coefficient = 0.1
 
         self.pressure_sensor = pressure_sensor
         self.imu = imu
