@@ -26,6 +26,10 @@ class PIDController:
 
         self.turn_speed = config.get_turn_speed()
 
+        self.ptc = config.get_pitch_turn_coefficient()
+        self.ytc = config.get_yaw_turn_coefficient()
+        self.rtc = config.get_roll_turn_coefficient()
+
         self.imu = imu
 
     def PID(self, current_value, desired_value, integral_value, derivative_value, type):
@@ -47,6 +51,22 @@ class PIDController:
             Kd = self.Kd_roll
 
         return Kp * error + Ki * integral_value - Kd * derivative_value
+    
+    def change_cooridinate_system(self, direction_vector, pitch, roll):
+        pitch_g, yaw_g, roll_g = direction_vector[3], direction_vector[4], direction_vector[5]
+
+        cp, sp = np.cos(np.deg2rad(pitch)), np.sin(np.deg2rad(pitch))
+        cr, sr = np.cos(np.deg2rad(roll)), np.sin(np.deg2rad(roll))
+
+        try:
+            pitch_l =  cr*pitch_g  + sr*cp*yaw_g * (self.ytc/self.ptc)  # Here we scale so pitch matches yaw
+            roll_l  =  roll_g      - sp*yaw_g    * (self.ytc/self.rtc)  # Here we scale so roll matches yaw
+            yaw_l   =  cr*cp*yaw_g - sr*pitch_g  * (self.ptc/self.ytc)  # Here we scale so yaw matches pitch
+        except ZeroDivisionError:
+            pitch_l, yaw_l, roll_l = pitch_g, yaw_g, roll_g
+            print("Regulator coordinate system change failed because one of the turn coefficients is 0")
+
+        return np.array([direction_vector[0], direction_vector[1], direction_vector[2], pitch_l, yaw_l, roll_l])
 
     def update_desired_pitch_roll(self, pitch_change, roll_change, current_roll, delta_t):
 
@@ -105,13 +125,13 @@ class PIDController:
 
         # Build actuation, inverting pitch if upside-down
         if current_roll >= 90 or current_roll <= -90:
-            act_pitch = -pitch_actuation
-        else:
-            act_pitch = -pitch_actuation
+            pitch_actuation = -pitch_actuation
         
-        act_roll = roll_actuation
+        direction_vector = [0, 0, 0, pitch_actuation, direction_vector[4], roll_actuation]
+
+        direction_vector = self.change_cooridinate_system(direction_vector, current_pitch, current_roll)
 
         # Return new direction vector
-        return np.array([0, 0, 0, act_pitch, 0, act_roll])
+        return direction_vector
 
     

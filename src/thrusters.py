@@ -20,10 +20,6 @@ class ThrusterController:
         self.PID_enabled = False
         self.depth_hold_enabled = False
 
-        self.ptc = config.get_pitch_turn_coefficient()
-        self.ytc = config.get_yaw_turn_coefficient()
-        self.rtc = config.get_roll_turn_coefficient()
-
         # State
         self.prev_thrust_vector = None
         self._sending = False
@@ -76,23 +72,6 @@ class ThrusterController:
 
     def print_thrust_vector(self, thrust_vector):
         print(f"Thrust vector: {thrust_vector}")
-
-    def change_cooridinate_system(self, direction_vector, pitch, roll):
-        pitch_g, yaw_g, roll_g = direction_vector[3], direction_vector[4], direction_vector[5]
-
-        # Convert from [forward, side, up, pitch, yaw, roll] to [forward, side, up, pitch, yaw, roll]
-        cp, sp = np.cos(np.deg2rad(pitch)), np.sin(np.deg2rad(pitch))
-        cr, sr = np.cos(np.deg2rad(roll)), np.sin(np.deg2rad(roll))
-
-        try:
-            pitch_l =  cr*pitch_g  + sr*cp*yaw_g * (self.ytc/self.ptc)  # Here we scale so pitch matches yaw
-            roll_l  =  roll_g      - sp*yaw_g    * (self.ytc/self.rtc)  # Here we scale so roll matches yaw
-            yaw_l   =  cr*cp*yaw_g - sr*pitch_g  * (self.ptc/self.ytc)  # Here we scale so yaw matches pitch
-        except ZeroDivisionError:
-            pitch_l, yaw_l, roll_l = pitch_g, yaw_g, roll_g
-            print("Regulator coordinate system change failed because one of the turn coefficients is 0")
-
-        return np.array([direction_vector[0], direction_vector[1], direction_vector[2], pitch_l, yaw_l, roll_l])
 
     async def _async_send(self, thrust_vector):
         try:
@@ -152,7 +131,9 @@ class ThrusterController:
             if max > config.get_regulator_max_thrust():
                 regulator_actuation = regulator_actuation * config.get_regulator_max_thrust()/max
 
-            direction_vector = direction_vector + regulator_actuation
+            # Combining direction vector and actuation vector
+            # Small confusion point here with the scaling of yaw changing when stabilization enabled, but oh well..
+            direction_vector = [direction_vector[0], direction_vector[1], direction_vector[2], regulator_actuation[3], regulator_actuation[4], regulator_actuation[5]]
 
         if self.depth_hold_enabled:
             depth_actuation = self.depth_regulator.regulate_depth()
@@ -162,10 +143,6 @@ class ThrusterController:
 
             direction_vector = direction_vector + regulator_actuation
             
-        if self.PID_enabled:
-            pitch, roll = self.imu.get_pitch_roll()
-            direction_vector = self.change_cooridinate_system(direction_vector, pitch, roll)
-
         thrust_vector = self.thrust_allocation(direction_vector)
         thrust_vector = self.correct_spin_direction(thrust_vector)
         thrust_vector = np.clip(thrust_vector, -1, 1)
