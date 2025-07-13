@@ -110,8 +110,8 @@ in
     settings = {
       streams.cam =
         "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline -o - --framerate 30 "
-        + "--width ${builtins.elemAt (builtins.splitString "x" streamingResolution) 0} "
-        + "--height ${builtins.elemAt (builtins.splitString "x" streamingResolution) 1}";
+        + "--width ${builtins.elemAt (pkgs.lib.splitString "x" streamingResolution) 0} "
+        + "--height ${builtins.elemAt (pkgs.lib.splitString "x" streamingResolution) 1}";
       api = {
         listen = ":1984";
         origin = "*";
@@ -142,12 +142,21 @@ in
         (pkgs.python3Packages.buildPythonPackage {
           pname = "bmi270";
           version = "0.4.3";
+          format = "other";
           src = pkgs.fetchFromGitHub {
             owner = "CoRoLab-Berlin";
             repo = "bmi270_python";
-            rev = "main";
+            rev = "8309e687d6b346455833c5d0c2734eeb56e98789";
             hash = "sha256-IxkMWWcrsglFV5HGDMK0GBx5o0svNfRXqhW8/ZWpsUk=";
           };
+          buildPhase = ":";
+          installPhase = ''
+            runHook preInstall
+            install -d $out/${pkgs.python3.sitePackages}
+            cp -r src/bmi270 $out/${pkgs.python3.sitePackages}/
+            runHook postInstall
+          '';
+
           doCheck = false;
         })
         (pkgs.python3Packages.buildPythonPackage {
@@ -156,8 +165,8 @@ in
           src = pkgs.fetchFromGitHub {
             owner = "bluerobotics";
             repo = "ms5837-python";
-            rev = "master";
-            hash = "sha256-a6P3zHAw5YPlgiznX2lHJs2EI3xwPOqI49lA/xP+I49lO+m+f9iw=";
+            rev = "02996d71d2f08339b3d317b3f4da0a83781c706e";
+            hash = "sha256-LBwM9sTvr7IaBcY8PcsPZcAbNRWBa4hj7tUC4oOr4eM=";
           };
           doCheck = false;
         })
@@ -188,7 +197,7 @@ in
         ];
         file.LICENSE.source = ./LICENSE;
         activation.copyFirmwareFiles = home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
-          cp -r ${./src}/* $tmpdir/
+          cp -r ${./src}/* /home/pi/
         '';
       };
     };
