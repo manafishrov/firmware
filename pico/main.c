@@ -29,7 +29,6 @@
 #define UART_THROTTLE_MIN_REVERSE 0
 #define UART_THROTTLE_NEUTRAL 1000
 #define UART_THROTTLE_MAX_FORWARD 2000
-
 #define DSHOT_CMD_NEUTRAL 0
 #define DSHOT_CMD_MIN_REVERSE 48
 #define DSHOT_CMD_MAX_REVERSE 1047
@@ -38,6 +37,7 @@
 
 static uint16_t thruster_values[NUM_MOTORS] = {0};
 static absolute_time_t last_uart_time;
+static bool telemetry_enabled = false;
 
 uint16_t translate_throttle_to_dshot(uint16_t uart_throttle) {
     if (uart_throttle == UART_THROTTLE_NEUTRAL) {
@@ -53,6 +53,10 @@ uint16_t translate_throttle_to_dshot(uint16_t uart_throttle) {
 }
 
 void telemetry_callback(void *context, int channel, enum dshot_telemetry_type type, int value) {
+    if (!telemetry_enabled) {
+        return;
+    }
+
     uint8_t buf[6];
     buf[0] = (uint8_t)channel;
     buf[1] = (uint8_t)type;
@@ -102,6 +106,10 @@ int main() {
                 buf[idx++] = uart_getc(UART_ID);
             }
             if (idx == sizeof(buf)) {
+                if (!telemetry_enabled) {
+                    telemetry_enabled = true;
+                }
+
                 for (int i = 0; i < NUM_MOTORS; ++i) {
                     thruster_values[i] = ((uint16_t)buf[2*i+1] << 8) | buf[2*i];
                 }
