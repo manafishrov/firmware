@@ -26,8 +26,31 @@
 #define ARMING_DURATION_MS 10000
 #define UART_TIMEOUT_MS 200
 
+#define UART_THROTTLE_MIN_REVERSE 0
+#define UART_THROTTLE_NEUTRAL 1000
+#define UART_THROTTLE_MAX_FORWARD 2000
+
+#define DSHOT_CMD_NEUTRAL 0
+#define DSHOT_CMD_MIN_REVERSE 48
+#define DSHOT_CMD_MAX_REVERSE 1047
+#define DSHOT_CMD_MIN_FORWARD 1048
+#define DSHOT_CMD_MAX_FORWARD 2047
+
 static uint16_t thruster_values[NUM_MOTORS] = {0};
 static absolute_time_t last_uart_time;
+
+uint16_t translate_throttle_to_dshot(uint16_t uart_throttle) {
+    if (uart_throttle == UART_THROTTLE_NEUTRAL) {
+        return DSHOT_CMD_NEUTRAL;
+    }
+    if (uart_throttle > UART_THROTTLE_NEUTRAL && uart_throttle <= UART_THROTTLE_MAX_FORWARD) {
+        return (uart_throttle - UART_THROTTLE_NEUTRAL - 1) + DSHOT_CMD_MIN_FORWARD;
+    }
+    if (uart_throttle < UART_THROTTLE_NEUTRAL && uart_throttle >= UART_THROTTLE_MIN_REVERSE) {
+        return DSHOT_CMD_MAX_REVERSE - uart_throttle;
+    }
+    return DSHOT_CMD_NEUTRAL;
+}
 
 void telemetry_callback(void *context, int channel, enum dshot_telemetry_type type, int value) {
     uint8_t buf[6];
@@ -42,20 +65,6 @@ void uart_init_and_setup() {
     uart_init(UART_ID, UART_BAUD);
     gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
     gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
-}
-
-int uart_read_packet(uint8_t *buf, size_t len, uint32_t timeout_ms) {
-    absolute_time_t deadline = make_timeout_time_ms(timeout_ms);
-    size_t recvd = 0;
-    while (recvd < len) {
-        while (uart_is_readable(UART_ID) && recvd < len) {
-            buf[recvd++] = uart_getc(UART_ID);
-            last_uart_time = get_absolute_time();
-        }
-        if (recvd < len && absolute_time_diff_us(get_absolute_time(), deadline) < 0)
-            return 0;
-    }
-    return 1;
 }
 
 int main() {
@@ -73,12 +82,15 @@ int main() {
         for (int i = 0; i < NUM_MOTORS; i++) {
             struct dshot_controller* ctrl = (i < NUM_MOTORS_0) ? &controller0 : &controller1;
             int channel = (i < NUM_MOTORS_0) ? i : (i - NUM_MOTORS_0);
-            dshot_throttle(ctrl, channel, 0);
+            dshot_throttle(ctrl, channel, DSHOT_CMD_NEUTRAL);
         }
         dshot_loop(&controller0);
         dshot_loop(&controller1);
     }
-    for (int i = 0; i < NUM_MOTORS; ++i) thruster_values[i] = 0;
+
+    for (int i = 0; i < NUM_MOTORS; ++i) {
+        thruster_values[i] = UART_THROTTLE_NEUTRAL;
+    }
     last_uart_time = get_absolute_time();
 
     while (true) {
@@ -90,19 +102,26 @@ int main() {
                 buf[idx++] = uart_getc(UART_ID);
             }
             if (idx == sizeof(buf)) {
-                for (int i = 0; i < NUM_MOTORS; ++i)
+                for (int i = 0; i < NUM_MOTORS; ++i) {
                     thruster_values[i] = ((uint16_t)buf[2*i+1] << 8) | buf[2*i];
+                }
                 last_uart_time = get_absolute_time();
             }
         }
+
         if (absolute_time_diff_us(last_uart_time, get_absolute_time()) > UART_TIMEOUT_MS * 1000) {
-            for (int i = 0; i < NUM_MOTORS; ++i) thruster_values[i] = 0;
+            for (int i = 0; i < NUM_MOTORS; ++i) {
+                thruster_values[i] = UART_THROTTLE_NEUTRAL;
+            }
         }
+
         for (int i = 0; i < NUM_MOTORS; i++) {
             struct dshot_controller* ctrl = (i < NUM_MOTORS_0) ? &controller0 : &controller1;
             int channel = (i < NUM_MOTORS_0) ? i : (i - NUM_MOTORS_0);
-            dshot_throttle(ctrl, channel, thruster_values[i]);
+            uint16_t dshot_command = translate_throttle_to_dshot(thruster_values[i]);
+            dshot_throttle(ctrl, channel, dshot_command);
         }
+
         dshot_loop(&controller0);
         dshot_loop(&controller1);
     }
