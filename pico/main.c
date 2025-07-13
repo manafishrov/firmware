@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <string.h>
 #include "pico/stdlib.h"
-#include "hardware/uart.h"
 #include "hardware/pio.h"
 #include "hardware/clocks.h"
 #include "pico/time.h"
@@ -18,17 +17,12 @@
 #define DSHOT_SM_1 1
 #define DSHOT_SPEED 300
 
-#define UART_ID uart0
-#define UART_TX_PIN 0
-#define UART_RX_PIN 1
-#define UART_BAUD 115200
-
 #define ARMING_DURATION_MS 10000
-#define UART_TIMEOUT_MS 200
+#define COMM_TIMEOUT_MS 200
 
-#define UART_THROTTLE_MIN_REVERSE 0
-#define UART_THROTTLE_NEUTRAL 1000
-#define UART_THROTTLE_MAX_FORWARD 2000
+#define CMD_THROTTLE_MIN_REVERSE 0
+#define CMD_THROTTLE_NEUTRAL 1000
+#define CMD_THROTTLE_MAX_FORWARD 2000
 #define DSHOT_CMD_NEUTRAL 0
 #define DSHOT_CMD_MIN_REVERSE 48
 #define DSHOT_CMD_MAX_REVERSE 1047
@@ -36,44 +30,34 @@
 #define DSHOT_CMD_MAX_FORWARD 2047
 
 static uint16_t thruster_values[NUM_MOTORS] = {0};
-static absolute_time_t last_uart_time;
-static bool telemetry_enabled = false;
+static absolute_time_t last_comm_time;
 
-uint16_t translate_throttle_to_dshot(uint16_t uart_throttle) {
-    if (uart_throttle == UART_THROTTLE_NEUTRAL) {
+uint16_t translate_throttle_to_dshot(uint16_t cmd_throttle) {
+    if (cmd_throttle == CMD_THROTTLE_NEUTRAL) {
         return DSHOT_CMD_NEUTRAL;
     }
-    if (uart_throttle > UART_THROTTLE_NEUTRAL && uart_throttle <= UART_THROTTLE_MAX_FORWARD) {
-        return (uart_throttle - UART_THROTTLE_NEUTRAL - 1) + DSHOT_CMD_MIN_FORWARD;
+    if (cmd_throttle > CMD_THROTTLE_NEUTRAL && cmd_throttle <= CMD_THROTTLE_MAX_FORWARD) {
+        return (cmd_throttle - CMD_THROTTLE_NEUTRAL - 1) + DSHOT_CMD_MIN_FORWARD;
     }
-    if (uart_throttle < UART_THROTTLE_NEUTRAL && uart_throttle >= UART_THROTTLE_MIN_REVERSE) {
-        return DSHOT_CMD_MAX_REVERSE - uart_throttle;
+    if (cmd_throttle < CMD_THROTTLE_NEUTRAL && cmd_throttle >= CMD_THROTTLE_MIN_REVERSE) {
+        return DSHOT_CMD_MAX_REVERSE - cmd_throttle;
     }
     return DSHOT_CMD_NEUTRAL;
 }
 
 void telemetry_callback(void *context, int channel, enum dshot_telemetry_type type, int value) {
-    if (!telemetry_enabled) {
-        return;
-    }
-
     uint8_t buf[6];
     buf[0] = (uint8_t)channel;
     buf[1] = (uint8_t)type;
     int32_t v = value;
     memcpy(&buf[2], &v, 4);
-    uart_write_blocking(UART_ID, buf, 6);
-}
-
-void uart_init_and_setup() {
-    uart_init(UART_ID, UART_BAUD);
-    gpio_set_function(UART_TX_PIN, GPIO_FUNC_UART);
-    gpio_set_function(UART_RX_PIN, GPIO_FUNC_UART);
+    fwrite(buf, 1, 6, stdout);
+    fflush(stdout);
+    (void)context;
 }
 
 int main() {
     stdio_init_all();
-    uart_init_and_setup();
 
     struct dshot_controller controller0, controller1;
     dshot_controller_init(&controller0, DSHOT_SPEED, DSHOT_PIO, DSHOT_SM_0, MOTOR0_PIN_BASE, NUM_MOTORS_0);
@@ -93,34 +77,37 @@ int main() {
     }
 
     for (int i = 0; i < NUM_MOTORS; ++i) {
-        thruster_values[i] = UART_THROTTLE_NEUTRAL;
+        thruster_values[i] = CMD_THROTTLE_NEUTRAL;
     }
-    last_uart_time = get_absolute_time();
+    last_comm_time = get_absolute_time();
+
+    static uint8_t usb_buf[NUM_MOTORS * 2];
+    static size_t usb_idx = 0;
 
     while (true) {
-        uint8_t buf[NUM_MOTORS * 2];
-        if (uart_is_readable(UART_ID)) {
-            size_t idx = 0;
-            while (idx < sizeof(buf)) {
-                if (!uart_is_readable(UART_ID)) break;
-                buf[idx++] = uart_getc(UART_ID);
+        int c = getchar_timeout_us(0);
+        while (c != PICO_ERROR_TIMEOUT) {
+            if (usb_idx < sizeof(usb_buf)) {
+                usb_buf[usb_idx++] = (uint8_t)c;
+            } else {
+                usb_idx = 0; 
             }
-            if (idx == sizeof(buf)) {
-                if (!telemetry_enabled) {
-                    telemetry_enabled = true;
-                }
-
-                for (int i = 0; i < NUM_MOTORS; ++i) {
-                    thruster_values[i] = ((uint16_t)buf[2*i+1] << 8) | buf[2*i];
-                }
-                last_uart_time = get_absolute_time();
-            }
+            c = getchar_timeout_us(0);
         }
 
-        if (absolute_time_diff_us(last_uart_time, get_absolute_time()) > UART_TIMEOUT_MS * 1000) {
+        if (usb_idx >= sizeof(usb_buf)) {
             for (int i = 0; i < NUM_MOTORS; ++i) {
-                thruster_values[i] = UART_THROTTLE_NEUTRAL;
+                thruster_values[i] = ((uint16_t)usb_buf[2*i+1] << 8) | usb_buf[2*i];
             }
+            last_comm_time = get_absolute_time();
+            usb_idx = 0;
+        }
+
+        if (absolute_time_diff_us(last_comm_time, get_absolute_time()) > COMM_TIMEOUT_MS * 1000) {
+            for (int i = 0; i < NUM_MOTORS; ++i) {
+                thruster_values[i] = CMD_THROTTLE_NEUTRAL;
+            }
+            usb_idx = 0;
         }
 
         for (int i = 0; i < NUM_MOTORS; i++) {
