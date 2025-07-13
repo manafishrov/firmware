@@ -3,11 +3,6 @@ let
   pico-sdk-with-submodules = pkgs.pico-sdk.override {
     withSubmodules = true;
   };
-
-  streamingResolution =
-    if cameraModule == "imx219" then "1640x1232"
-    else if cameraModule == "imx477" then "2028x1520"
-    else "1280x960";
 in
 {
   # Nix state version
@@ -109,9 +104,7 @@ in
     enable = true;
     settings = {
       streams.cam =
-        "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline -o - --framerate 30 "
-        + "--width ${builtins.elemAt (pkgs.lib.splitString "x" streamingResolution) 0} "
-        + "--height ${builtins.elemAt (pkgs.lib.splitString "x" streamingResolution) 1}";
+        "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline -o -";
       api = {
         listen = ":1984";
         origin = "*";
