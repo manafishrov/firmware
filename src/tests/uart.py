@@ -5,6 +5,17 @@ import time
 UART_PORT = "/dev/serial0"
 BAUD = 115200
 NUM_MOTORS = 8
+PAUSE_DURATION_S = 2
+
+NEUTRAL = 1000
+FORWARD_RANGE = 1000
+REVERSE_RANGE = 1000
+
+TEN_PERCENT_FORWARD = NEUTRAL + int(FORWARD_RANGE * 0.10)
+TWENTY_FIVE_PERCENT_FORWARD = NEUTRAL + int(FORWARD_RANGE * 0.25)
+
+TEN_PERCENT_REVERSE = NEUTRAL - int(REVERSE_RANGE * 0.10)
+TWENTY_FIVE_PERCENT_REVERSE = NEUTRAL - int(REVERSE_RANGE * 0.25)
 
 
 def send_thrusters(ser, values):
@@ -27,30 +38,76 @@ def print_telemetry(pkt):
     print(f"TELEMETRY MOTOR {idx}: {tname} = {val}")
 
 
-if __name__ == "__main__":
-    ser = serial.Serial(UART_PORT, BAUD, timeout=0.1)
-    print("Testing all motors at once (full power for 2 seconds)...")
-    send_thrusters(ser, [1500] * NUM_MOTORS)
-    time.sleep(2)
-    print("Testing all motors off (neutral for 1 second)...")
-    send_thrusters(ser, [0] * NUM_MOTORS)
-    time.sleep(1)
-    print("Testing each motor individually for 1 second...")
-    for i in range(NUM_MOTORS):
-        vals = [0] * NUM_MOTORS
-        vals[i] = 1500
-        send_thrusters(ser, vals)
-        time.sleep(1)
-    print("Testing two motors at a time (motors 0 and 4, then 1 and 5)...")
-    for _ in range(2):
-        send_thrusters(ser, [1200, 0, 0, 0, 1200, 0, 0, 0])
-        time.sleep(1)
-        send_thrusters(ser, [0, 1300, 0, 0, 0, 1300, 0, 0])
-        time.sleep(1)
-    print("Neutral (off)")
-    send_thrusters(ser, [0] * NUM_MOTORS)
-    print("Listening for telemetry. Press Ctrl+C to quit.")
-    while True:
+def run_test_and_listen(ser, description, values, duration_s):
+    print(f"\n>>> STATUS: Running test: '{description}' for {duration_s}s.")
+    print(f"    Sending values: {values}")
+    send_thrusters(ser, values)
+
+    start_time = time.time()
+    while time.time() - start_time < duration_s:
         pkt = ser.read(6)
         if len(pkt) == 6:
             print_telemetry(pkt)
+
+
+def stop_and_pause(ser, duration_s):
+    print(f"\n>>> STATUS: Setting motors to neutral and pausing for {duration_s}s...")
+    send_thrusters(ser, [NEUTRAL] * NUM_MOTORS)
+    time.sleep(duration_s)
+
+
+if __name__ == "__main__":
+    ser = serial.Serial(UART_PORT, BAUD, timeout=0.1)
+    print("--- Starting Thruster Test Sequence (using 0-2000 range) ---")
+
+    run_test_and_listen(
+        ser,
+        "All motors 10% forward",
+        [TEN_PERCENT_FORWARD] * NUM_MOTORS,
+        2,
+    )
+    stop_and_pause(ser, PAUSE_DURATION_S)
+
+    run_test_and_listen(
+        ser,
+        "All motors 25% forward",
+        [TWENTY_FIVE_PERCENT_FORWARD] * NUM_MOTORS,
+        2,
+    )
+    stop_and_pause(ser, PAUSE_DURATION_S)
+
+    run_test_and_listen(
+        ser,
+        "All motors 10% reverse",
+        [TEN_PERCENT_REVERSE] * NUM_MOTORS,
+        2,
+    )
+    stop_and_pause(ser, PAUSE_DURATION_S)
+
+    run_test_and_listen(
+        ser,
+        "All motors 25% reverse",
+        [TWENTY_FIVE_PERCENT_REVERSE] * NUM_MOTORS,
+        2,
+    )
+    stop_and_pause(ser, PAUSE_DURATION_S)
+
+    print("\n>>> STATUS: Testing each motor individually at 25% forward.")
+    for i in range(NUM_MOTORS):
+        vals = [NEUTRAL] * NUM_MOTORS
+        vals[i] = TWENTY_FIVE_PERCENT_FORWARD
+        run_test_and_listen(ser, f"Motor {i} only", vals, 1)
+        stop_and_pause(ser, 0.5)
+
+    print("\n--- All tests complete. Motors are stopped. ---")
+    print("Listening for any final telemetry. Press Ctrl+C to quit.")
+    try:
+        while True:
+            pkt = ser.read(6)
+            if len(pkt) == 6:
+                print_telemetry(pkt)
+    except KeyboardInterrupt:
+        print("\nExiting.")
+    finally:
+        send_thrusters(ser, [NEUTRAL] * NUM_MOTORS)
+        ser.close()
