@@ -27,6 +27,11 @@ let
       cp pico.uf2 $out/
     '';
   };
+
+  streamingResolution =
+    if cameraModule == "imx219" then "1640x1232"
+    else if cameraModule == "imx477" then "2028x1520"
+    else "1280x960";
 in
 {
   # Nix state version
@@ -127,7 +132,10 @@ in
   services.go2rtc = {
     enable = true;
     settings = {
-      streams.cam = "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline -o -";
+      streams.cam =
+        "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline -o - --framerate 30 "
+        + "--width ${builtins.elemAt (builtins.splitString "x" streamingResolution) 0} "
+        + "--height ${builtins.elemAt (builtins.splitString "x" streamingResolution) 1}";
       api = {
         listen = ":1984";
         origin = "*";
@@ -173,7 +181,7 @@ in
             owner = "bluerobotics";
             repo = "ms5837-python";
             rev = "master";
-            hash = "sha256-a6P3zHAw5YPlgiznX2lHJs2EI3xwPOqI49lO+m+f9iw=";
+            hash = "sha256-a6P3zHAw5YPlgiznX2lHJs2EI3xwPOqI49lA/xP+I49lO+m+f9iw=";
           };
           doCheck = false;
         })
