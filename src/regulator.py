@@ -9,12 +9,6 @@ class PIDController:
         self.desired_pitch = 0
         self.desired_roll = 0
 
-        self.previous_pitch = 0
-        self.previous_roll = 0
-
-        self.current_dt_pitch = 0
-        self.current_dt_roll = 0
-
         self.integral_value_pitch = 0
         self.integral_value_roll = 0
 
@@ -25,32 +19,18 @@ class PIDController:
         self.Kp_pitch = config.get_Kp_pitch()
         self.Ki_pitch = config.get_Ki_pitch()
         self.Kd_pitch = config.get_Kd_pitch()
+
         self.Kp_roll = config.get_Kp_roll()
         self.Ki_roll = config.get_Ki_roll() 
         self.Kd_roll = config.get_Kd_roll()
+
         self.turn_speed = config.get_turn_speed()
-        self.EMA_lambda = config.get_EMA_lambda()
+
+        self.ptc = config.get_pitch_turn_coefficient()
+        self.ytc = config.get_yaw_turn_coefficient()
+        self.rtc = config.get_roll_turn_coefficient()
 
         self.imu = imu
-
-    # Setters for gains
-    def set_Kp_pitch(self, value):
-        self.Kp_pitch = value
-
-    def set_Ki_pitch(self, value):
-        self.Ki_pitch = value
-
-    def set_Kd_pitch(self, value):
-        self.Kd_pitch = value
-
-    def set_Kp_roll(self, value):
-        self.Kp_roll = value
-
-    def set_Ki_roll(self, value):
-        self.Ki_roll = value
-
-    def set_Kd_roll(self, value):
-        self.Kd_roll = value
 
     def PID(self, current_value, desired_value, integral_value, derivative_value, type):
         # Convert all values to radians (necessary for ziegler–nichols method)
@@ -71,6 +51,22 @@ class PIDController:
             Kd = self.Kd_roll
 
         return Kp * error + Ki * integral_value - Kd * derivative_value
+    
+    def change_cooridinate_system(self, direction_vector, pitch, roll):
+        pitch_g, yaw_g, roll_g = direction_vector[3], direction_vector[4], direction_vector[5]
+
+        cp, sp = np.cos(np.deg2rad(pitch)), np.sin(np.deg2rad(pitch))
+        cr, sr = np.cos(np.deg2rad(roll)), np.sin(np.deg2rad(roll))
+
+        try:
+            pitch_l =  cr*pitch_g  + sr*cp*yaw_g * (self.ytc/self.ptc)  # Here we scale so pitch matches yaw
+            roll_l  =  roll_g      - sp*yaw_g    * (self.ytc/self.rtc)  # Here we scale so roll matches yaw
+            yaw_l   =  cr*cp*yaw_g - sr*pitch_g  * (self.ptc/self.ytc)  # Here we scale so yaw matches pitch
+        except ZeroDivisionError:
+            pitch_l, yaw_l, roll_l = pitch_g, yaw_g, roll_g
+            print("Regulator coordinate system change failed because one of the turn coefficients is 0")
+
+        return np.array([direction_vector[0], direction_vector[1], direction_vector[2], pitch_l, yaw_l, roll_l])
 
     def update_desired_pitch_roll(self, pitch_change, roll_change, current_roll, delta_t):
 
@@ -83,7 +79,7 @@ class PIDController:
         if self.desired_roll > 180:
             self.desired_roll -= 360
         if self.desired_roll < -180:
-            self.desired_roll += 360
+            self.desired_roll += 360  
 
         # Keep desired_roll relative to current_roll for smooth wrapping
         if self.desired_roll - current_roll > 180:
@@ -111,7 +107,7 @@ class PIDController:
 
     def regulate_to_absolute(self, direction_vector, target_pitch, target_roll, delta_t):
         # Read actual orientation
-        current_pitch, current_roll = self.imu.get_pitch_roll()
+        current_pitch, current_roll = self.imu.get_pitch_roll() 
 
         # Update integral error (with anti-windup clipping)
         self.integral_value_pitch += (target_pitch - current_pitch) * delta_t
@@ -120,39 +116,22 @@ class PIDController:
         self.integral_value_pitch = np.clip(self.integral_value_pitch, -100, 100) #THIS VALUE MIGHT NEED TO BE TUNED
         self.integral_value_roll  = np.clip(self.integral_value_roll, -100, 100)
 
-        # Derivative via exponential moving average
-        self.current_dt_pitch = (
-            self.EMA_lambda * self.current_dt_pitch
-            + (1 - self.EMA_lambda) * (current_pitch - self.previous_pitch) / delta_t
-        )
-        self.current_dt_roll = (
-            self.EMA_lambda * self.current_dt_roll
-            + (1 - self.EMA_lambda) * (current_roll - self.previous_roll) / delta_t
-        )
+        # New, much better way of calculating derivative
+        self.current_dt_pitch, self.current_dt_roll = self.imu.get_pitch_roll_gyro()
 
         # PID outputs
         pitch_actuation = self.PID(current_pitch, target_pitch, self.integral_value_pitch, self.current_dt_pitch, "pitch")
         roll_actuation = self.PID(current_roll, target_roll, self.integral_value_roll, self.current_dt_roll, "roll")
 
-        # Save for next derivative calc
-        self.previous_pitch = current_pitch
-        self.previous_roll  = current_roll
-
         # Build actuation, inverting pitch if upside-down
         if current_roll >= 90 or current_roll <= -90:
-            act_pitch = pitch_actuation
-        else:
-            act_pitch = -pitch_actuation
-        act_roll = -roll_actuation
+            pitch_actuation = -pitch_actuation
+        
+        direction_vector = [0, 0, 0, pitch_actuation, direction_vector[4], roll_actuation]
+
+        direction_vector = self.change_cooridinate_system(direction_vector, current_pitch, current_roll)
 
         # Return new direction vector
-        return np.array([
-            direction_vector[0],
-            direction_vector[1],
-            direction_vector[2],
-            act_pitch,
-            direction_vector[4],
-            act_roll
-        ])
+        return direction_vector
 
     

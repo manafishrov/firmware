@@ -4,17 +4,6 @@ from thrusters import ThrusterController
 import time
 from scipy.optimize import curve_fit
 
-# We have a few options here in regards to calibration done before the relay auto-tuning:
-# 1. Slowly increase actuation until we are at angle 0, then use that as zero-point for a, then start 
-#    by low a amplitude and increase it until we get oscillations of about 30 deg.
-# 2. Set whatever we angle the system is naturally at as zero-point, calculate the desired angle applitude
-#    based on that
-
-# How the system behaves in roll is dependent on pitch vice versa, how to fix this:
-# 1. First find the zero-point of pitch AND roll, then use that as standby 
-#    value (this is problemtaic for systems where center of mass=center of buoyancy)
-# 2. Just do pitch first then roll, cause roll will probably rest at 0 if ROV is symmetric
-
 def relay_auto_tuning():
     print("Starting RELAY AUTO TUNING")
 

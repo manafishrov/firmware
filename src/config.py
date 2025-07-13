@@ -25,8 +25,11 @@ def get_device_controls_port():
     return load_config()['network']['device_controls_port']
 
 # Thrusters
-def get_thruster_magnitude():
-    return int(load_config()['thrusters']['magnitude'])
+def get_user_max_thrust():
+    return float(load_config()['thrusters']['user_max_thrust'])
+
+def get_regulator_max_thrust():
+    return float(load_config()['thrusters']['regulator_max_thrust'])
 
 def get_thruster1_pin():
     return int(load_config()['thrusters']['thruster1_pin'])
@@ -58,7 +61,7 @@ def get_Kp_pitch():
 def get_Ki_pitch():
     return float(load_config()['regulator']['Ki_pitch'])
 def get_Kd_pitch():
-    return float(load_config()['regulator']['Kd_pitch'])
+    return float(load_config()['regulator']['Kd_pitch']) # HAS TO BE NEGATIVE.... WEIRD
 
 def get_Kp_roll():
     return float(load_config()['regulator']['Kp_roll'])
@@ -67,11 +70,34 @@ def get_Ki_roll():
 def get_Kd_roll():
     return float(load_config()['regulator']['Kd_roll'])
 
+def get_Kp_depth():
+    return float(load_config()['regulator']['Kp_depth'])
+def get_Ki_depth():
+    return float(load_config()['regulator']['Ki_depth'])
+def get_Kd_depth():
+    return float(load_config()['regulator']['Kd_depth'])
+
+def get_forward_speed_coefficient():
+    return float(load_config()['regulator']['forward_speed_coefficient'])
+
+def get_upward_speed_coefficient():
+    return float(load_config()['regulator']['upward_speed_coefficient'])
+
+def get_sideways_speed_coefficient():
+    return float(load_config()['regulator']['sideways_speed_coefficient'])
+
+def get_pitch_turn_coefficient():
+    return float(load_config()['regulator']['pitch_turn_coefficient'])
+
+def get_yaw_turn_coefficient():
+    return float(load_config()['regulator']['yaw_turn_coefficient'])
+
+def get_roll_turn_coefficient():
+    return float(load_config()['regulator']['roll_turn_coefficient'])
+
+
 def get_turn_speed():
     return float(load_config()['regulator']['turn_speed'])
-
-def get_EMA_lambda():
-    return float(load_config()['regulator']['EMA_lambda'])
 
 # imu
 def get_CF_alpha():
