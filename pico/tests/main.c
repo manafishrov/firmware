@@ -5,8 +5,8 @@
 #include "pico/time.h"
 #include "dshot.h"
 
-#define MOTOR0_PIN_BASE 18
-#define MOTOR1_PIN_BASE 6
+#define MOTOR0_PIN_BASE 6
+#define MOTOR1_PIN_BASE 18
 #define NUM_MOTORS_0 4
 #define NUM_MOTORS_1 4
 #define NUM_MOTORS (NUM_MOTORS_0 + NUM_MOTORS_1)
@@ -56,7 +56,7 @@ int main() {
 
     printf("Pico DShot ROV Motor Test\n");
     printf("------------------------------------\n");
-    printf("Testing thrusters on pins 18, 19, 20, 21 and 6, 7, 8, 9\n");
+    printf("Testing thrusters on pins 6, 7, 8, 9 and 18, 19, 20, 21\n");
     printf(
         "Power on ESCs now. Arming with neutral signal for %d seconds...\n",
         ARMING_DURATION_S
