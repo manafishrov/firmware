@@ -3,30 +3,6 @@ let
   pico-sdk-with-submodules = pkgs.pico-sdk.override {
     withSubmodules = true;
   };
-  picoFirmware = pkgs.stdenv.mkDerivation {
-    name = "pico-firmware";
-    src = ./pico;
-    nativeBuildInputs = with pkgs; [
-      cmake
-      gnumake
-      gcc-arm-embedded
-    ];
-    buildInputs = [ pico-sdk-with-submodules ];
-
-    configurePhase = ''
-      export PICO_SDK_PATH=${pico-sdk-with-submodules}/lib/pico-sdk
-      mkdir build
-      cd build
-      cmake ..
-    '';
-
-    buildPhase = "make";
-
-    installPhase = ''
-      mkdir -p $out
-      cp pico.uf2 $out/
-    '';
-  };
 
   streamingResolution =
     if cameraModule == "imx219" then "1640x1232"
@@ -231,17 +207,6 @@ in
         ExecStart = "${pkgs.python3}/bin/python3 main.py";
         Restart = "always";
         RestartSec = "5";
-      };
-    };
-    pico-flash = {
-      enable = true;
-      wantedBy = [ "multi-user.target" ];
-      after = [ "dev-ttyACM0.device" ];
-      serviceConfig = {
-        Type = "oneshot";
-        User = "root";
-        ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.picotool}/bin/picotool info 2>&1 | grep -q \"Program: pico\" || ${pkgs.picotool}/bin/picotool load -f -x ${picoFirmware}/pico.uf2'";
-        RemainAfterExit = "yes";
       };
     };
   };
