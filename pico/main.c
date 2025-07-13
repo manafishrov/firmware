@@ -17,7 +17,6 @@
 #define DSHOT_SM_1 1
 #define DSHOT_SPEED 300
 
-#define ARMING_DURATION_MS 10000
 #define COMM_TIMEOUT_MS 200
 
 #define CMD_THROTTLE_MIN_REVERSE 0
@@ -64,17 +63,6 @@ int main() {
     dshot_register_telemetry_cb(&controller0, telemetry_callback, NULL);
     dshot_controller_init(&controller1, DSHOT_SPEED, DSHOT_PIO, DSHOT_SM_1, MOTOR1_PIN_BASE, NUM_MOTORS_1);
     dshot_register_telemetry_cb(&controller1, telemetry_callback, NULL);
-
-    absolute_time_t arm_until = make_timeout_time_ms(ARMING_DURATION_MS);
-    while (absolute_time_diff_us(get_absolute_time(), arm_until) > 0) {
-        for (int i = 0; i < NUM_MOTORS; i++) {
-            struct dshot_controller* ctrl = (i < NUM_MOTORS_0) ? &controller0 : &controller1;
-            int channel = (i < NUM_MOTORS_0) ? i : (i - NUM_MOTORS_0);
-            dshot_throttle(ctrl, channel, DSHOT_CMD_NEUTRAL);
-        }
-        dshot_loop(&controller0);
-        dshot_loop(&controller1);
-    }
 
     for (int i = 0; i < NUM_MOTORS; ++i) {
         thruster_values[i] = CMD_THROTTLE_NEUTRAL;
