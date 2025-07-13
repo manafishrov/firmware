@@ -131,6 +131,7 @@ in
         numpy
         websockets
         smbus2
+        pyserial
       ] ++ [
         (pkgs.python3Packages.buildPythonPackage {
           pname = "bmi270";
@@ -190,7 +191,11 @@ in
         ];
         file.LICENSE.source = ./LICENSE;
         activation.copyFirmwareFiles = home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
-          cp -r ${./src}/* /home/pi/
+          tmpdir=$(mktemp -d)
+          cp -r ${./src}/* $tmpdir/
+          chmod -R u+w $tmpdir/*
+          cp -rf $tmpdir/* $HOME/
+          rm -rf $tmpdir
         '';
       };
     };
