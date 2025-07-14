@@ -6,6 +6,12 @@ import sys
 import threading
 import queue
 
+TELEMETRY_START_BYTE = 0xA5
+TELEMETRY_PACKET_SIZE = 7
+
+INPUT_START_BYTE = 0x5A
+INPUT_PACKET_OVERHEAD = 2
+
 
 def find_pico_port():
     pico_ports = glob.glob("/dev/serial/by-id/usb-Raspberry_Pi_Pico*")
@@ -44,14 +50,21 @@ SIXTY_PERCENT_REVERSE = NEUTRAL - int(REVERSE_RANGE * 0.60)
 
 SEND_INTERVAL_MS = 50
 
-TELEM_TYPES = ["ERPM", "VOLTAGE", "CURRENT", "TEMPERATURE"]
-TELEMETRY_PACKET_SIZE = 6
+
+def calculate_checksum(data_bytes):
+    checksum = 0
+    for byte in data_bytes:
+        checksum ^= byte
+    return checksum
 
 
 def send_thrusters(ser_instance, values):
     assert len(values) == NUM_MOTORS, f"Expected {NUM_MOTORS} values, got {len(values)}"
-    pkt = struct.pack("<8H", *values)
-    ser_instance.write(pkt)
+    data_payload = struct.pack(f"<{NUM_MOTORS}H", *values)
+    packet_without_checksum = bytearray([INPUT_START_BYTE]) + data_payload
+    checksum = calculate_checksum(packet_without_checksum)
+    full_packet = packet_without_checksum + bytearray([checksum])
+    ser_instance.write(full_packet)
 
 
 def print_telemetry(pkt_bytes):
@@ -62,32 +75,59 @@ def print_telemetry(pkt_bytes):
         )
         return
 
-    motor_idx = pkt_bytes[0]
-    telem_type_code = pkt_bytes[1]
-    value = struct.unpack("<i", pkt_bytes[2:6])[0]
+    if pkt_bytes[0] != TELEMETRY_START_BYTE:
+        print(
+            f"Warning: Received telemetry packet with invalid start byte {pkt_bytes[0]:02x}, expected {TELEMETRY_START_BYTE:02x}: {pkt_bytes.hex()}",
+            file=sys.stderr,
+        )
+        return
 
-    telem_type_name = (
-        TELEM_TYPES[telem_type_code]
-        if telem_type_code < len(TELEM_TYPES)
-        else f"UNKNOWN_TYPE({telem_type_code})"
-    )
-    print(f"[Telemetry] Motor {motor_idx}: {telem_type_name} = {value}")
+    calculated_checksum = calculate_checksum(pkt_bytes[0 : TELEMETRY_PACKET_SIZE - 1])
+    received_checksum = pkt_bytes[TELEMETRY_PACKET_SIZE - 1]
+
+    if calculated_checksum != received_checksum:
+        print(
+            f"Warning: Telemetry checksum mismatch! Expected {calculated_checksum:02x}, got {received_checksum:02x}: {pkt_bytes.hex()}",
+            file=sys.stderr,
+        )
+        return
+
+    global_motor_id = pkt_bytes[1]
+    erpm_value = struct.unpack("<i", pkt_bytes[2:6])[0]
+
+    print(f"[Telemetry] Motor {global_motor_id}: ERPM = {erpm_value}")
 
 
 def telemetry_reader_thread(ser_instance, stop_event, data_queue):
     read_buffer = b""
     print(f"--- Telemetry listener thread started on {ser_instance.port} ---")
-    ser_instance.timeout = 0.01  # 10ms timeout
+    ser_instance.timeout = 0.01
 
     while not stop_event.is_set():
         try:
             new_bytes = ser_instance.read(ser_instance.in_waiting or 1)
             if new_bytes:
                 read_buffer += new_bytes
-                while len(read_buffer) >= TELEMETRY_PACKET_SIZE:
-                    packet = read_buffer[:TELEMETRY_PACKET_SIZE]
-                    data_queue.put(packet)
-                    read_buffer = read_buffer[TELEMETRY_PACKET_SIZE:]
+                while True:
+                    start_index = read_buffer.find(bytes([TELEMETRY_START_BYTE]))
+                    if start_index == -1:
+                        if len(read_buffer) > TELEMETRY_PACKET_SIZE * 2:
+                            read_buffer = b""
+                        break
+
+                    if start_index > 0:
+                        print(
+                            f"Telemetry: Discarding {start_index} bytes due to misalignment. Buffer: {read_buffer[:start_index].hex()}",
+                            file=sys.stderr,
+                        )
+                        read_buffer = read_buffer[start_index:]
+
+                    if len(read_buffer) >= TELEMETRY_PACKET_SIZE:
+                        packet = read_buffer[:TELEMETRY_PACKET_SIZE]
+                        data_queue.put(packet)
+                        read_buffer = read_buffer[TELEMETRY_PACKET_SIZE:]
+                    else:
+                        break
 
             time.sleep(0.001)
         except Exception as e:
@@ -142,7 +182,10 @@ def ramp_test(
 
     print(f"    Holding at {end_val} for {hold_duration_s}s...")
     run_test(
-        ser_instance, f"Hold at {end_val}", [end_val] * NUM_MOTORS, hold_duration_s
+        ser_instance,
+        f"Hold at {end_val}",
+        [end_val] * NUM_MOTORS,
+        hold_duration_s,
     )
 
     print("    Ramping Down...")
@@ -155,7 +198,6 @@ def ramp_test(
 
 
 def stop_and_pause(ser_instance, duration_s):
-    """Sets motors to neutral and pauses, processing telemetry during the pause."""
     print(f"\n>>> STATUS: Setting motors to neutral and pausing for {duration_s}s...")
     send_thrusters(ser_instance, [NEUTRAL] * NUM_MOTORS)
     start_time = time.time()
@@ -182,55 +224,78 @@ if __name__ == "__main__":
         telemetry_thread.start()
         time.sleep(0.1)
 
-        ramp_test(
-            ser,
-            "All motors ramp to 50% forward and back",
-            NEUTRAL,
-            FIFTY_PERCENT_FORWARD,
-            5,
-            10,
-        )
-        stop_and_pause(ser, 5)
-        ramp_test(
-            ser,
-            "All motors ramp to 50% reverse and back",
-            NEUTRAL,
-            FIFTY_PERCENT_REVERSE,
-            5,
-            10,
-        )
-        stop_and_pause(ser, 5)
-
-        print("\n>>> STATUS: Testing each motor individually with stepped throttles.")
+        print("\n>>> STATUS: Testing each motor individually with ramped throttles.")
         for i in range(NUM_MOTORS):
             print(f"\n--- Testing Motor {i} ---")
-            run_test(
-                ser,
-                f"Motor {i} at 10% forward",
-                [NEUTRAL] * i
-                + [TEN_PERCENT_FORWARD]
-                + [NEUTRAL] * (NUM_MOTORS - 1 - i),
-                5,
+
+            # Forward Ramp
+            print(f"\n    Forward Ramp for Motor {i} (50% throttle)")
+            for_motor_values = [NEUTRAL] * NUM_MOTORS
+            ramp_duration_s = 5
+            hold_duration_s = 2
+            total_ramp_steps = int(ramp_duration_s * 1000 / SEND_INTERVAL_MS)
+
+            print("        Ramping Up Forward...")
+            for step in range(total_ramp_steps + 1):
+                progress = step / total_ramp_steps
+                val = int(NEUTRAL + (FIFTY_PERCENT_FORWARD - NEUTRAL) * progress)
+                for_motor_values[i] = val
+                send_thrusters(ser, for_motor_values)
+                process_queued_telemetry(telemetry_data_queue)
+                time.sleep(SEND_INTERVAL_MS / 1000.0)
+
+            print(
+                f"        Holding at {FIFTY_PERCENT_FORWARD} for {hold_duration_s}s..."
             )
-            stop_and_pause(ser, 5)
+            for_motor_values[i] = FIFTY_PERCENT_FORWARD
             run_test(
-                ser,
-                f"Motor {i} at 30% forward",
-                [NEUTRAL] * i
-                + [THIRTY_PERCENT_FORWARD]
-                + [NEUTRAL] * (NUM_MOTORS - 1 - i),
-                5,
+                ser, f"Hold Motor {i} at 50% Forward", for_motor_values, hold_duration_s
             )
-            stop_and_pause(ser, 5)
+
+            print("        Ramping Down Forward...")
+            for step in range(total_ramp_steps + 1):
+                progress = step / total_ramp_steps
+                val = int(
+                    FIFTY_PERCENT_FORWARD - (FIFTY_PERCENT_FORWARD - NEUTRAL) * progress
+                )
+                for_motor_values[i] = val
+                send_thrusters(ser, for_motor_values)
+                process_queued_telemetry(telemetry_data_queue)
+                time.sleep(SEND_INTERVAL_MS / 1000.0)
+            stop_and_pause(ser, 2)
+
+            print(f"\n    Reverse Ramp for Motor {i} (50% throttle)")
+            for_motor_values = [NEUTRAL] * NUM_MOTORS
+            total_ramp_steps = int(ramp_duration_s * 1000 / SEND_INTERVAL_MS)
+
+            print("        Ramping Up Reverse...")
+            for step in range(total_ramp_steps + 1):
+                progress = step / total_ramp_steps
+                val = int(NEUTRAL + (FIFTY_PERCENT_REVERSE - NEUTRAL) * progress)
+                for_motor_values[i] = val
+                send_thrusters(ser, for_motor_values)
+                process_queued_telemetry(telemetry_data_queue)
+                time.sleep(SEND_INTERVAL_MS / 1000.0)
+
+            print(
+                f"        Holding at {FIFTY_PERCENT_REVERSE} for {hold_duration_s}s..."
+            )
+            for_motor_values[i] = FIFTY_PERCENT_REVERSE
             run_test(
-                ser,
-                f"Motor {i} at 60% forward",
-                [NEUTRAL] * i
-                + [SIXTY_PERCENT_FORWARD]
-                + [NEUTRAL] * (NUM_MOTORS - 1 - i),
-                5,
+                ser, f"Hold Motor {i} at 50% Reverse", for_motor_values, hold_duration_s
             )
-            stop_and_pause(ser, 5)
+
+            print("        Ramping Down Reverse...")
+            for step in range(total_ramp_steps + 1):
+                progress = step / total_ramp_steps
+                val = int(
+                    FIFTY_PERCENT_REVERSE - (FIFTY_PERCENT_REVERSE - NEUTRAL) * progress
+                )
+                for_motor_values[i] = val
+                send_thrusters(ser, for_motor_values)
+                process_queued_telemetry(telemetry_data_queue)
+                time.sleep(SEND_INTERVAL_MS / 1000.0)
+            stop_and_pause(ser, 2)
 
         print("\n--- All tests complete. Motors are stopped. ---")
 
@@ -243,11 +308,16 @@ if __name__ == "__main__":
     finally:
         if telemetry_thread and telemetry_thread.is_alive():
             telemetry_thread_stop_event.set()
-            telemetry_thread.join(timeout=1.0)
+            telemetry_thread.join(timeout=2.0)
 
         if ser and ser.is_open:
             print("Sending final neutral command and closing serial port.")
-            send_thrusters(ser, [NEUTRAL] * NUM_MOTORS)
-            ser.close()
+            try:
+                send_thrusters(ser, [NEUTRAL] * NUM_MOTORS)
+                time.sleep(0.1)
+            except Exception as e:
+                print(f"Error sending final neutral command: {e}", file=sys.stderr)
+            finally:
+                ser.close()
 
         sys.exit(0)
