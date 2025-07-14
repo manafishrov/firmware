@@ -191,11 +191,14 @@ in
         ];
         file.LICENSE.source = ./LICENSE;
         activation.copyFirmwareFiles = home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
-          tmpdir=$(mktemp -d)
-          cp -r ${./src}/* $tmpdir/
-          chmod -R u+w $tmpdir/*
-          cp -rf $tmpdir/* $HOME/
-          rm -rf $tmpdir
+          if [ ! -f "$HOME/.firmware_initialized" ]; then
+            tmpdir=$(mktemp -d)
+            cp -r ${./src}/* $tmpdir/
+            chmod -R u+w $tmpdir/*
+            cp -rf $tmpdir/* $HOME/
+            rm -rf $tmpdir
+            touch "$HOME/.firmware_initialized"
+          fi
         '';
       };
     };
