@@ -1,4 +1,4 @@
-# This script checks that the required packages for the firmware are available
+# This script checks that the required packages for the firmware are available.
 
 packages = [
     "pip",
