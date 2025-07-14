@@ -17,7 +17,7 @@ class PressureSensor:
         try:
             if self.sensor.read():
                 fluid_type = self.state.rov_config["fluidType"]
-                if fluid_type.lower() == "saltwater":
+                if fluid_type == "saltwater":
                     depth = self.sensor.depth(ms5837.DENSITY_SALTWATER)
                 else:
                     depth = self.sensor.depth(ms5837.DENSITY_FRESHWATER)

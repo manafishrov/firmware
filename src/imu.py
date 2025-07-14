@@ -33,10 +33,11 @@ class IMU:
 
     def _read_sensor_data(self):
         try:
-            acc = self.imu.get_acc_data()
-            gyr = self.imu.get_gyr_data()
-            temp = self.imu.get_temp_data()
-            return {"acc": acc, "gyr": gyr, "temp": temp}
+            return {
+                "acceleration": self.imu.get_acc_data(),
+                "gyroscope": self.imu.get_gyr_data(),
+                "temperature": self.imu.get_temp_data(),
+            }
         except Exception as e:
             print(f"ERROR in reading IMU data: {e}")
             return None
@@ -48,9 +49,9 @@ class IMU:
             try:
                 raw_data = await asyncio.to_thread(self._read_sensor_data)
                 if raw_data is not None:
-                    self.state.imu["acc"] = raw_data["acc"]
-                    self.state.imu["gyr"] = raw_data["gyr"]
-                    self.state.imu["temp"] = raw_data["temp"]
+                    self.state.imu["acceleration"] = raw_data["acceleration"]
+                    self.state.imu["gyroscope"] = raw_data["gyroscope"]
+                    self.state.imu["temperature"] = raw_data["temperature"]
 
                 await asyncio.sleep(READ_INTERVAL)
 
