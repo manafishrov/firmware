@@ -4,7 +4,7 @@ import ms5837
 import time
 
 
-def main():
+def main() -> None:
     print("Initializing MS5837 pressure sensor...")
     sensor = ms5837.MS5837_30BA()
 

@@ -1,12 +1,14 @@
 import asyncio
+from typing import Optional
 from rov_state import ROVState
+from .types import IMUData
 from bmi270.BMI270 import *
 
 
 class IMU:
     def __init__(self, state: ROVState):
-        self.state = state
-        self.imu = None
+        self.state: ROVState = state
+        self.imu: Optional[BMI270] = None
 
         try:
             imu = BMI270(I2C_PRIM_ADDR)
@@ -23,16 +25,18 @@ class IMU:
             imu.enable_acc_filter_perf()
             imu.enable_gyr_noise_perf()
             imu.enable_gyr_filter_perf()
-            return imu
+            self.imu = imu
         except Exception as e:
             # LOG + TOAST
             print(
                 f"ERROR: Failed to initialize BMI270 IMU. Is it connected? Error: {e}"
             )
-            return None
+            self.imu = None
 
-    def _read_sensor_data(self):
+    def _read_sensor_data(self) -> Optional[IMUData]:
         try:
+            if self.imu is None:
+                return None
             return {
                 "acceleration": self.imu.get_acc_data(),
                 "gyroscope": self.imu.get_gyr_data(),
@@ -42,7 +46,7 @@ class IMU:
             print(f"ERROR in reading IMU data: {e}")
             return None
 
-    async def start_reading_loop(self):
+    async def start_reading_loop(self) -> None:
         READ_INTERVAL = 1 / 60
 
         while True:

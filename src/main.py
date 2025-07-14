@@ -5,7 +5,7 @@ from pressure import PressureSensor
 from websocket_server import WebsocketServer
 
 
-async def main():
+async def main() -> None:
     state = ROVState()
 
     imu = IMU(state)

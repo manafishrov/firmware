@@ -1,17 +1,27 @@
 import json
 import os
+from .types import IMUData, PressureData, ROVConfig
 
 
 class ROVState:
-    def __init__(self):
+    config_path: str
+    rov_config: ROVConfig
+    imu: IMUData
+    pressure: PressureData
+
+    def __init__(self) -> None:
         self.config_path = os.path.join(os.path.dirname(__file__), "config.json")
         with open(self.config_path, "r") as f:
-            self.rov_config = json.load(f)
+            self.rov_config: ROVConfig = json.load(f)
 
-        self.imu = {"acceleration": 0, "gyroscope": 0, "temperature": 0}
-        self.pressure = {"pressure": 0, "temperature": 0, "depth": 0}
+        self.imu: IMUData = {"acceleration": 0.0, "gyroscope": 0.0, "temperature": 0.0}
+        self.pressure: PressureData = {
+            "pressure": 0.0,
+            "temperature": 0.0,
+            "depth": 0.0,
+        }
 
-    def set_config(self, config):
+    def set_config(self, config: ROVConfig) -> None:
         self.rov_config = config
         with open(self.config_path, "w") as f:
             json.dump(config, f, indent=2)

@@ -1,19 +1,23 @@
 import asyncio
+from typing import Optional
 import ms5837
 from rov_state import ROVState
+from .types import PressureData
 
 
 class PressureSensor:
     def __init__(self, state: ROVState):
-        self.state = state
-        self.sensor = ms5837.MS5837_30BA()
+        self.state: ROVState = state
+        self.sensor: ms5837.MS5837_30BA = ms5837.MS5837_30BA()
 
         try:
             self.sensor.init()
         except Exception as e:
-            print(f"ERROR: Failed to initialize MS5837 pressure sensor. Is it connected? Error: {e}")
+            print(
+                f"ERROR: Failed to initialize MS5837 pressure sensor. Is it connected? Error: {e}"
+            )
 
-    def _read_sensor_data(self):
+    def _read_sensor_data(self) -> Optional[PressureData]:
         try:
             if self.sensor.read():
                 fluid_type = self.state.rov_config["fluidType"]
@@ -33,7 +37,7 @@ class PressureSensor:
             print(f"ERROR in reading MS5837 data: {e}")
             return None
 
-    async def start_reading_loop(self):
+    async def start_reading_loop(self) -> None:
         READ_INTERVAL = 1 / 60
 
         while True:
@@ -47,4 +51,3 @@ class PressureSensor:
             except Exception as e:
                 print(f"ERROR in pressure sensor reading loop: {e}")
                 await asyncio.sleep(1)
-

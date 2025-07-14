@@ -18,7 +18,7 @@ INPUT_PACKET_OVERHEAD = 2
 current_test_motor_id = -1
 
 
-def find_pico_port():
+def find_pico_port() -> str:
     pico_ports = glob.glob("/dev/serial/by-id/usb-Raspberry_Pi_Pico*")
     if not pico_ports:
         pico_ports = glob.glob("/dev/ttyACM*")
@@ -56,14 +56,14 @@ SIXTY_PERCENT_REVERSE = NEUTRAL - int(REVERSE_RANGE * 0.60)
 SEND_INTERVAL_MS = 50
 
 
-def calculate_checksum(data_bytes):
+def calculate_checksum(data_bytes: bytes | bytearray) -> int:
     checksum = 0
     for byte in data_bytes:
         checksum ^= byte
     return checksum
 
 
-def send_thrusters(ser_instance, values):
+def send_thrusters(ser_instance: serial.Serial, values: list[int]) -> None:
     assert len(values) == NUM_MOTORS, f"Expected {NUM_MOTORS} values, got {len(values)}"
     data_payload = struct.pack(f"<{NUM_MOTORS}H", *values)
     packet_without_checksum = bytearray([INPUT_START_BYTE]) + data_payload
@@ -72,7 +72,7 @@ def send_thrusters(ser_instance, values):
     ser_instance.write(full_packet)
 
 
-def print_telemetry(pkt_bytes):
+def print_telemetry(pkt_bytes: bytes | bytearray) -> None:
     global current_test_motor_id
 
     if len(pkt_bytes) != TELEMETRY_PACKET_SIZE:
@@ -94,7 +94,9 @@ def print_telemetry(pkt_bytes):
         print(f"[Telemetry] Motor {global_motor_id}: ERPM = {erpm_value}")
 
 
-def telemetry_reader_thread(ser_instance, stop_event, data_queue):
+def telemetry_reader_thread(
+    ser_instance: serial.Serial, stop_event: threading.Event, data_queue: queue.Queue
+) -> None:
     read_buffer = b""
     print(f"--- Telemetry listener thread started on {ser_instance.port} ---")
     ser_instance.timeout = 0.01
@@ -130,7 +132,7 @@ def telemetry_reader_thread(ser_instance, stop_event, data_queue):
     print("--- Telemetry listener thread stopped ---")
 
 
-def process_queued_telemetry(data_queue):
+def process_queued_telemetry(data_queue: queue.Queue) -> None:
     while not data_queue.empty():
         try:
             pkt = data_queue.get_nowait()
@@ -139,7 +141,9 @@ def process_queued_telemetry(data_queue):
             break
 
 
-def run_test(ser_instance, description, values, duration_s):
+def run_test(
+    ser_instance: serial.Serial, description: str, values: list[int], duration_s: float
+) -> None:
     print(f"\n>>> STATUS: Running test: '{description}' for {duration_s}s.")
     print(f"    Sending values: {values}")
 
@@ -157,8 +161,13 @@ def run_test(ser_instance, description, values, duration_s):
 
 
 def ramp_test(
-    ser_instance, description, start_val, end_val, ramp_duration_s, hold_duration_s
-):
+    ser_instance: serial.Serial,
+    description: str,
+    start_val: int,
+    end_val: int,
+    ramp_duration_s: float,
+    hold_duration_s: float,
+) -> None:
     print(
         f"\n>>> STATUS: Running ramp test: '{description}' (Ramp: {ramp_duration_s}s, Hold: {hold_duration_s}s)"
     )
@@ -189,7 +198,7 @@ def ramp_test(
         time.sleep(SEND_INTERVAL_MS / 1000.0)
 
 
-def stop_and_pause(ser_instance, duration_s):
+def stop_and_pause(ser_instance: serial.Serial, duration_s: float) -> None:
     print(f"\n>>> STATUS: Setting motors to neutral and pausing for {duration_s}s...")
     send_thrusters(ser_instance, [NEUTRAL] * NUM_MOTORS)
     start_time = time.time()
