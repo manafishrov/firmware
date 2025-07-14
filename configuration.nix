@@ -20,7 +20,7 @@ in
   # Login credentials
   users.users.pi = {
     isNormalUser = true;
-    extraGroups = [ "wheel" "networkmanager" "video" "i2c" "dialout" ];
+    extraGroups = [ "wheel" "networkmanager" "video" "i2c" "plugdev" ];
     password = "manafish";
     home = "/home/pi";
   };
