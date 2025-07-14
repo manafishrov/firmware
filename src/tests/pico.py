@@ -13,6 +13,9 @@ INPUT_START_BYTE = 0x5A
 INPUT_PACKET_OVERHEAD = 2
 
 
+current_test_motor_id = -1
+
+
 def find_pico_port():
     pico_ports = glob.glob("/dev/serial/by-id/usb-Raspberry_Pi_Pico*")
     if not pico_ports:
@@ -68,34 +71,25 @@ def send_thrusters(ser_instance, values):
 
 
 def print_telemetry(pkt_bytes):
+    global current_test_motor_id
+
     if len(pkt_bytes) != TELEMETRY_PACKET_SIZE:
-        print(
-            f"Warning: Received malformed telemetry packet size {len(pkt_bytes)}: {pkt_bytes.hex()}",
-            file=sys.stderr,
-        )
         return
 
     if pkt_bytes[0] != TELEMETRY_START_BYTE:
-        print(
-            f"Warning: Received telemetry packet with invalid start byte {pkt_bytes[0]:02x}, expected {TELEMETRY_START_BYTE:02x}: {pkt_bytes.hex()}",
-            file=sys.stderr,
-        )
         return
 
     calculated_checksum = calculate_checksum(pkt_bytes[0 : TELEMETRY_PACKET_SIZE - 1])
     received_checksum = pkt_bytes[TELEMETRY_PACKET_SIZE - 1]
 
     if calculated_checksum != received_checksum:
-        print(
-            f"Warning: Telemetry checksum mismatch! Expected {calculated_checksum:02x}, got {received_checksum:02x}: {pkt_bytes.hex()}",
-            file=sys.stderr,
-        )
         return
 
     global_motor_id = pkt_bytes[1]
     erpm_value = struct.unpack("<i", pkt_bytes[2:6])[0]
 
-    print(f"[Telemetry] Motor {global_motor_id}: ERPM = {erpm_value}")
+    if global_motor_id == current_test_motor_id:
+        print(f"[Telemetry] Motor {global_motor_id}: ERPM = {erpm_value}")
 
 
 def telemetry_reader_thread(ser_instance, stop_event, data_queue):
@@ -116,10 +110,6 @@ def telemetry_reader_thread(ser_instance, stop_event, data_queue):
                         break
 
                     if start_index > 0:
-                        print(
-                            f"Telemetry: Discarding {start_index} bytes due to misalignment. Buffer: {read_buffer[:start_index].hex()}",
-                            file=sys.stderr,
-                        )
                         read_buffer = read_buffer[start_index:]
 
                     if len(read_buffer) >= TELEMETRY_PACKET_SIZE:
@@ -226,9 +216,9 @@ if __name__ == "__main__":
 
         print("\n>>> STATUS: Testing each motor individually with ramped throttles.")
         for i in range(NUM_MOTORS):
+            current_test_motor_id = i
             print(f"\n--- Testing Motor {i} ---")
 
-            # Forward Ramp
             print(f"\n    Forward Ramp for Motor {i} (50% throttle)")
             for_motor_values = [NEUTRAL] * NUM_MOTORS
             ramp_duration_s = 5
@@ -297,6 +287,7 @@ if __name__ == "__main__":
                 time.sleep(SEND_INTERVAL_MS / 1000.0)
             stop_and_pause(ser, 2)
 
+        current_test_motor_id = -1
         print("\n--- All tests complete. Motors are stopped. ---")
 
     except KeyboardInterrupt:
