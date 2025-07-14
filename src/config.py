@@ -31,6 +31,9 @@ def get_user_max_thrust():
 def get_regulator_max_thrust():
     return float(load_config()['thrusters']['regulator_max_thrust'])
 
+def get_joystick_tuning_factor():
+    return float(load_config()['thrusters']['joystick_tuning_factor'])
+
 def get_thruster1_pin():
     return int(load_config()['thrusters']['thruster1_pin'])
 

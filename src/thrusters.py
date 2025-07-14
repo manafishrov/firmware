@@ -38,6 +38,8 @@ class ThrusterController:
         # Prepare allocation matrix
         self.thrust_allocation_matrix = self.get_thrust_allocation_matrix()
 
+        self.joystick_tuning_factor = config.get_joystick_tuning_factor()
+
     def tuning_correction(self, direction_vector):
         correction_matrix = np.array([
             [1, 0, 0, 0, 0, 0],
@@ -69,6 +71,24 @@ class ThrusterController:
     def correct_spin_direction(self, thrust_vector):
         spin_directions = np.array([-1, 1, -1, 1, -1, 1, -1, 1])
         return thrust_vector * spin_directions
+    
+    def joystick_tuning(self, direction_vector):
+        a = self.joystick_tuning_factor
+
+        direction_vector = np.clip(direction_vector, -1, 1)
+        result = np.empty_like(direction_vector)
+
+        pos = direction_vector >= 0
+        neg = ~pos
+
+        # Apply positive exponential-like
+        result[pos] = (np.exp(a * direction_vector[pos]) - 1) / (np.exp(a) - 1)
+
+        # Apply negative mirrored version
+        result[neg] = -(np.exp(-a * direction_vector[neg]) - 1) / (np.exp(a) - 1)
+
+        return result
+
 
     def print_thrust_vector(self, thrust_vector):
         print(f"Thrust vector: {thrust_vector}")
@@ -121,6 +141,8 @@ class ThrusterController:
 
     def run_thrusters(self, direction_vector):
         # direction_vector: [forward, side, up, pitch, yaw, roll]
+        direction_vector = self.joystick_tuning(direction_vector)
+
         direction_vector = self.tuning_correction(direction_vector)
 
         direction_vector *= config.get_user_max_thrust()
