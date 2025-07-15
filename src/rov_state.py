@@ -8,6 +8,7 @@ class ROVState:
     rov_config: ROVConfig
     imu: IMUData
     pressure: PressureData
+    is_client_connected: bool
 
     def __init__(self) -> None:
         self.config_path = os.path.join(os.path.dirname(__file__), "config.json")
@@ -20,6 +21,7 @@ class ROVState:
             "temperature": 0.0,
             "depth": 0.0,
         }
+        self.is_client_connected: bool = False
 
     def set_config(self, config: ROVConfig) -> None:
         self.rov_config = config
