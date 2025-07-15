@@ -30,7 +30,7 @@ class Thrusters:
             await log_error(f"Error opening serial port: {e}")
             sys.exit(1)
 
-    def _scale_vector_by_user_max_power(self, direction_vector: list[float]) -> None:
+    def _scale_vector_with_user_max_power(self, direction_vector: list[float]) -> None:
         scale = self.state.rov_config["power"]["userMaxPower"]
         np.multiply(direction_vector, scale, out=direction_vector)
 
@@ -58,7 +58,7 @@ class Thrusters:
         return reordered
 
     def run_thrusters_with_regulator(self, direction_vector: list[float]) -> None:
-        self._scale_vector_by_user_max_power(direction_vector)
+        self._scale_vector_with_user_max_power(direction_vector)
         thrust_vector = self._create_thrust_vector_from_thruster_allocation(
             direction_vector
         )
