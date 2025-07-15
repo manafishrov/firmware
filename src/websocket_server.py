@@ -7,6 +7,8 @@ from websockets.exceptions import ConnectionClosed
 from rov_state import ROVState
 from websocket_handler import handle_message
 
+FIRMWARE_VERSION = "1.0.0"
+
 event_message_queue: asyncio.Queue = asyncio.Queue()
 
 
@@ -25,6 +27,28 @@ class WebsocketServer:
         self.client = websocket
         self.state.is_client_connected = True
         print(f"Client connected: {websocket.remote_address}. Status: Connected")
+
+        async def send_firmware_version_on_connect():
+            await asyncio.sleep(5)
+            if websocket.open:
+                try:
+                    version_message = {
+                        "type": "firmwareVersion",
+                        "payload": FIRMWARE_VERSION,
+                    }
+                    await websocket.send(json.dumps(version_message))
+                    print(
+                        f"Sent firmware version '{FIRMWARE_VERSION}' to {websocket.remote_address}"
+                    )
+                except ConnectionClosed:
+                    print(
+                        f"Client disconnected before firmware version could be sent to {websocket.remote_address}"
+                    )
+                except Exception as e:
+                    print(f"Error sending firmware version: {e}")
+
+        asyncio.create_task(send_firmware_version_on_connect())
+
         try:
             async for message in websocket:
                 try:
