@@ -1,9 +1,13 @@
 from rov_state import ROVState
-from log import log_error, log_info
+import asyncio
+from log import log_error
 import numpy as np
+import struct
 import serial
 import glob
 import sys
+import time
+import threading
 
 
 class Thrusters:
@@ -11,6 +15,84 @@ class Thrusters:
         self.state: ROVState = state
         self.erpms: list[float] = [0.0] * 8
         self.serial = None
+
+        self._telemetry_thread = None
+        self._telemetry_thread_stop = threading.Event()
+
+    def start_telemetry_listener(self):
+        if self._telemetry_thread is None or not self._telemetry_thread.is_alive():
+            self._telemetry_thread_stop.clear()
+            self._telemetry_thread = threading.Thread(
+                target=self._telemetry_reader, daemon=True
+            )
+            self._telemetry_thread.start()
+
+    def stop_telemetry_listener(self):
+        if self._telemetry_thread is not None:
+            self._telemetry_thread_stop.set()
+            self._telemetry_thread.join(timeout=2.0)
+
+    def _telemetry_reader(self):
+        TELEMETRY_START_BYTE = 0xA5
+        TELEMETRY_PACKET_SIZE = 7
+        try:
+            if self.serial is None:
+                return
+            self.serial.timeout = 0.01
+            read_buffer = b""
+            while not self._telemetry_thread_stop.is_set():
+                try:
+                    new_bytes = self.serial.read(self.serial.in_waiting or 1)
+                    if new_bytes:
+                        read_buffer += new_bytes
+                        while True:
+                            start_index = read_buffer.find(
+                                bytes([TELEMETRY_START_BYTE])
+                            )
+                            if start_index == -1:
+                                if len(read_buffer) > TELEMETRY_PACKET_SIZE * 2:
+                                    read_buffer = b""
+                                break
+                            if start_index > 0:
+                                read_buffer = read_buffer[start_index:]
+                            if len(read_buffer) >= TELEMETRY_PACKET_SIZE:
+                                packet = read_buffer[:TELEMETRY_PACKET_SIZE]
+                                if self._validate_and_update_erpm(packet):
+                                    pass
+                                read_buffer = read_buffer[TELEMETRY_PACKET_SIZE:]
+                            else:
+                                break
+                    time.sleep(0.001)
+                except Exception:
+                    break
+        except Exception:
+            pass
+
+    def _validate_and_update_erpm(self, pkt_bytes):
+        import struct
+
+        TELEMETRY_START_BYTE = 0xA5
+        TELEMETRY_PACKET_SIZE = 7
+        if len(pkt_bytes) != TELEMETRY_PACKET_SIZE:
+            return False
+        if pkt_bytes[0] != TELEMETRY_START_BYTE:
+            return False
+
+        def calculate_checksum(data_bytes):
+            checksum = 0
+            for byte in data_bytes:
+                checksum ^= byte
+            return checksum
+
+        calculated_checksum = calculate_checksum(pkt_bytes[: TELEMETRY_PACKET_SIZE - 1])
+        received_checksum = pkt_bytes[TELEMETRY_PACKET_SIZE - 1]
+        if calculated_checksum != received_checksum:
+            return False
+        global_motor_id = pkt_bytes[1]
+        erpm_value = struct.unpack("<i", pkt_bytes[2:6])[0]
+        if 0 <= global_motor_id < len(self.erpms):
+            self.erpms[global_motor_id] = erpm_value
+        return True
 
     async def _find_pico_port(self) -> str:
         pico_ports = glob.glob("/dev/serial/by-id/usb-Raspberry_Pi_Pico*")
@@ -26,6 +108,7 @@ class Thrusters:
         try:
             serial_port_path = await self._find_pico_port()
             self.serial = serial.Serial(serial_port_path, 115200, timeout=0.01)
+            self.start_telemetry_listener()
         except Exception as e:
             await log_error(f"Error opening serial port: {e}")
             sys.exit(1)
@@ -68,3 +151,39 @@ class Thrusters:
         thrust_vector = self._correct_spin_direction(thrust_vector)
         thrust_vector = np.clip(thrust_vector, -1, 1)
         thrust_vector = self._reorder_thrust_vector(thrust_vector)
+        INPUT_START_BYTE = 0x5A
+        NUM_MOTORS = 8
+        NEUTRAL = 1000
+        FORWARD_RANGE = 1000
+        REVERSE_RANGE = 1000
+
+        thrust_values = []
+        for val in thrust_vector:
+            if val >= 0:
+                thruster_val = int(NEUTRAL + val * FORWARD_RANGE)
+            else:
+                thruster_val = int(NEUTRAL + val * REVERSE_RANGE)
+            thrust_values.append(thruster_val)
+
+        thrust_values = (thrust_values + [NEUTRAL] * NUM_MOTORS)[:NUM_MOTORS]
+
+        def calculate_checksum(data_bytes: bytes | bytearray) -> int:
+            checksum = 0
+            for byte in data_bytes:
+                checksum ^= byte
+            return checksum
+
+        if self.serial is not None and self.serial.is_open:
+            data_payload = struct.pack(f"<{NUM_MOTORS}H", *thrust_values)
+            packet_without_checksum = bytearray([INPUT_START_BYTE]) + data_payload
+            checksum = calculate_checksum(packet_without_checksum)
+            full_packet = packet_without_checksum + bytearray([checksum])
+            try:
+                self.serial.write(full_packet)
+            except Exception as e:
+
+                asyncio.create_task(log_error(f"Error writing to thruster serial: {e}"))
+        else:
+            asyncio.create_task(
+                log_error("Thruster serial port not open when trying to send thrust.")
+            )
