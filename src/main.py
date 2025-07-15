@@ -19,6 +19,7 @@ async def main() -> None:
     await imu.initialize()
     pressure_sensor = PressureSensor(state)
     await pressure_sensor.initialize()
+    await state.thrusters.initialize()
 
     tasks = [
         imu.start_reading_loop(),

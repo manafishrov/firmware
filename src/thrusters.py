@@ -1,11 +1,34 @@
 from rov_state import ROVState
+from log import log_error, log_info
 import numpy as np
+import serial
+import glob
+import sys
 
 
 class Thrusters:
     def __init__(self, state: ROVState):
         self.state: ROVState = state
         self.erpms: list[float] = [0.0] * 8
+        self.serial = None
+
+    async def _find_pico_port(self) -> str:
+        pico_ports = glob.glob("/dev/serial/by-id/usb-Raspberry_Pi_Pico*")
+        if not pico_ports:
+            pico_ports = glob.glob("/dev/ttyACM*")
+        if pico_ports:
+            return pico_ports[0]
+        else:
+            await log_error("Error: Could not find Raspberry Pi Pico serial port.")
+            sys.exit(1)
+
+    async def initialize(self) -> None:
+        try:
+            serial_port_path = await self._find_pico_port()
+            self.serial = serial.Serial(serial_port_path, 115200, timeout=0.01)
+        except Exception as e:
+            await log_error(f"Error opening serial port: {e}")
+            sys.exit(1)
 
     def _scale_vector_by_user_max_power(self, direction_vector: list[float]) -> None:
         scale = self.state.rov_config["power"]["userMaxPower"]
