@@ -1,4 +1,4 @@
-# This script checks communication with the Raspberry Pi Pico and its firmware. It checks reading of telemetry data and sending of thruster commands by ramping up and down the throttle of each motor.
+# This script checks sending thruster values and reading telemetry data to/from the Raspberry Pi Pico and its firmware.
 
 import serial
 import struct
