@@ -44,17 +44,106 @@ async def handle_set_config(
 
 
 async def handle_movement_command(
-    payload: dict[str, object],
+    payload: tuple[float, float, float, float, float, float],
     _websocket: WebSocketServerProtocol,
     _state: ROVState,
 ) -> None:
-    await log_info(f"Received movement command: {payload}")
+    # Should call something in thrusters
+    # await log_info(f"Received movement command: {payload}")
+    return
+
+
+async def handle_start_thruster_test(
+    payload: int,
+    _websocket: WebSocketServerProtocol,
+    _state: ROVState,
+) -> None:
+    # Should call something in thrusters
+    await log_info(f"Received command to start thruster test: {payload}")
+
+
+async def handle_cancel_thruster_test(
+    payload: int,
+    _websocket: WebSocketServerProtocol,
+    _state: ROVState,
+) -> None:
+    # Should call something in thrusters
+    await log_info(f"Received command to cancel thruster test: {payload}")
+
+
+async def handle_start_regulator_auto_tuning(
+    _payload: None,
+    _websocket: WebSocketServerProtocol,
+    _state: ROVState,
+) -> None:
+    # Should call something in regulator
+    await log_info(f"Received command to start regulator auto-tuning: {payload}")
+
+
+async def handle_cancel_regulator_auto_tuning(
+    _payload: None,
+    _websocket: WebSocketServerProtocol,
+    _state: ROVState,
+) -> None:
+    # Should call something in regulator
+    await log_info(f"Received command to cancel regulator auto-tuning: {payload}")
+
+
+async def handle_run_action_1(
+    _payload: None,
+    _websocket: WebSocketServerProtocol,
+    _state: ROVState,
+) -> None:
+    # Should do an action of some  sort??
+    return
+
+
+async def handle_run_action_2(
+    _payload: None,
+    _websocket: WebSocketServerProtocol,
+    _state: ROVState,
+) -> None:
+    # Should do an action of some  sort??
+    return
+
+
+async def handle_toggle_pitch_stabilization(
+    _payload: None,
+    _websocket: WebSocketServerProtocol,
+    state: ROVState,
+) -> None:
+    state.pitch_stabilization = not state.pitch_stabilization
+
+
+async def handle_toggle_roll_stabilization(
+    _payload: None,
+    _websocket: WebSocketServerProtocol,
+    state: ROVState,
+) -> None:
+    state.roll_stabilization = not state.roll_stabilization
+
+
+async def handle_toggle_depth_stabilization(
+    _payload: None,
+    _websocket: WebSocketServerProtocol,
+    state: ROVState,
+) -> None:
+    state.depth_stabilization = not state.depth_stabilization
 
 
 HandlerType = Callable[[Any, WebSocketServerProtocol, ROVState], Awaitable[None]]
 
 MESSAGE_TYPE_HANDLERS: Dict[str, HandlerType] = {
+    "movementCommand": handle_movement_command,
     "getConfig": handle_get_config,
     "setConfig": handle_set_config,
-    "movementCommand": handle_movement_command,
+    "startThrusterTest": handle_start_thruster_test,
+    "cancelThrusterTest": handle_start_thruster_test,
+    "startRegulatorAutoTuning": handle_start_regulator_auto_tuning,
+    "cancelRegulatorAutoTuning": handle_cancel_regulator_auto_tuning,
+    "runAction1": handle_run_action_1,
+    "runAction2": handle_run_action_2,
+    "togglePitchStabilization": handle_toggle_pitch_stabilization,
+    "toggleRollStabilization": handle_toggle_roll_stabilization,
+    "toggleDepthStabilization": handle_toggle_depth_stabilization,
 }
