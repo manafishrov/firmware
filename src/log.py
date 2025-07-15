@@ -3,7 +3,7 @@ from websocket_server import get_message_queue
 _is_client_connected: bool = False
 
 
-def set_is_client_connected(is_connected: bool) -> None:
+def set_log_is_client_connected_status(is_connected: bool) -> None:
     global _is_client_connected
     _is_client_connected = is_connected
 

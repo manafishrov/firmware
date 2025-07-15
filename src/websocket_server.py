@@ -6,7 +6,7 @@ from websockets.server import WebSocketServer, WebSocketServerProtocol
 from websockets.exceptions import ConnectionClosed
 from rov_state import ROVState
 from websocket_handler import handle_message
-from log import set_is_client_connected
+from log import set_log_is_client_connected_status
 
 FIRMWARE_VERSION = "1.0.0"
 IP_ADDRESS = "10.10.10.10"
@@ -27,7 +27,7 @@ class WebsocketServer:
 
     async def handler(self, websocket: WebSocketServerProtocol) -> None:
         self.client = websocket
-        set_is_client_connected(True)
+        set_log_is_client_connected_status(True)
         print(f"Client connected: {websocket.remote_address}. Status: Connected")
 
         async def send_firmware_version_on_connect():
@@ -42,6 +42,12 @@ class WebsocketServer:
                     print(
                         f"Sent firmware version '{FIRMWARE_VERSION}' to {websocket.remote_address}"
                     )
+                    config_message = {
+                        "type": "config",
+                        "payload": self.state.rov_config,
+                    }
+                    await websocket.send(json.dumps(config_message))
+                    print(f"Sent config to {websocket.remote_address}")
                 except ConnectionClosed:
                     print(
                         f"Client disconnected before firmware version could be sent to {websocket.remote_address}"
@@ -68,7 +74,7 @@ class WebsocketServer:
             print(f"Client connection closed: {websocket.remote_address}")
         finally:
             self.client = None
-            set_is_client_connected(False)
+            set_log_is_client_connected_status(False)
             print("Client disconnected. Status: Not Connected")
 
     async def start(self) -> None:
