@@ -4,6 +4,7 @@ from imu import IMU
 from pressure import PressureSensor
 from websocket_server import WebsocketServer
 from websocket_senders import WebsocketSenders
+from log import log_info
 
 
 async def main() -> None:
@@ -15,7 +16,9 @@ async def main() -> None:
     message_sender_task = asyncio.create_task(senders.message_sender())
 
     imu = IMU(state)
+    await imu.initialize()
     pressure_sensor = PressureSensor(state)
+    await pressure_sensor.initialize()
 
     tasks = [
         imu.start_reading_loop(),
@@ -29,10 +32,10 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    print("Starting ROV Firmware...")
+    asyncio.run(log_info("Starting ROV Firmware..."))
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         pass
     finally:
-        print("Shutting down.")
+        asyncio.run(log_info("Shutting down."))

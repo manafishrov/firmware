@@ -6,7 +6,7 @@ from websockets.server import WebSocketServer, WebSocketServerProtocol
 from websockets.exceptions import ConnectionClosed
 from rov_state import ROVState
 from websocket_handler import handle_message
-from log import set_log_is_client_connected_status
+from log import set_log_is_client_connected_status, log_info, log_error, log_warn
 
 FIRMWARE_VERSION = "1.0.0"
 IP_ADDRESS = "10.10.10.10"
@@ -28,7 +28,7 @@ class WebsocketServer:
     async def handler(self, websocket: WebSocketServerProtocol) -> None:
         self.client = websocket
         set_log_is_client_connected_status(True)
-        print(f"Client connected: {websocket.remote_address}. Status: Connected")
+        await log_info(f"Client connected: {websocket.remote_address}.")
 
         async def send_firmware_version_on_connect():
             await asyncio.sleep(5)
@@ -39,7 +39,7 @@ class WebsocketServer:
                         "payload": FIRMWARE_VERSION,
                     }
                     await websocket.send(json.dumps(version_message))
-                    print(
+                    await log_info(
                         f"Sent firmware version '{FIRMWARE_VERSION}' to {websocket.remote_address}"
                     )
                     config_message = {
@@ -47,13 +47,13 @@ class WebsocketServer:
                         "payload": self.state.rov_config,
                     }
                     await websocket.send(json.dumps(config_message))
-                    print(f"Sent config to {websocket.remote_address}")
+                    await log_info(f"Sent config to {websocket.remote_address}")
                 except ConnectionClosed:
-                    print(
-                        f"Client disconnected before firmware version could be sent to {websocket.remote_address}"
+                    await log_warn(
+                        f"Client disconnected before firmware version and config could be sent to {websocket.remote_address}"
                     )
                 except Exception as e:
-                    print(f"Error sending firmware version: {e}")
+                    await log_error(f"Error sending initial data: {e}")
 
         asyncio.create_task(send_firmware_version_on_connect())
 
@@ -65,21 +65,21 @@ class WebsocketServer:
                     payload = data.get("payload")
                     await handle_message(msg_type, payload, websocket, self.state)
                 except json.JSONDecodeError:
-                    print(
+                    await log_error(
                         f"Error: Received invalid JSON from {websocket.remote_address}"
                     )
                 except Exception as e:
-                    print(f"Error processing message: {e}")
+                    await log_error(f"Error processing message: {e}")
         except ConnectionClosed:
-            print(f"Client connection closed: {websocket.remote_address}")
+            await log_info(f"Client connection closed: {websocket.remote_address}")
         finally:
             self.client = None
             set_log_is_client_connected_status(False)
-            print("Client disconnected. Status: Not Connected")
+            await log_info("Client disconnected.")
 
     async def start(self) -> None:
         self.server = await websockets.serve(self.handler, IP_ADDRESS, PORT)
-        print(f"Websocket server started on {IP_ADDRESS}:{PORT}")
+        await log_info(f"Websocket server started on {IP_ADDRESS}:{PORT}")
 
     async def wait_closed(self) -> None:
         if self.server:
