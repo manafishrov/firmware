@@ -13,6 +13,13 @@ class PressureData(TypedDict):
     depth: float
 
 
+class RegulatorData(TypedDict):
+    pitch: float
+    roll: float
+    desiredPitch: float
+    desiredRoll: float
+
+
 class ThrusterPinSetup(TypedDict):
     identifiers: List[int]
     spinDirections: List[int]

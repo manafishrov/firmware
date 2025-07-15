@@ -1,6 +1,6 @@
 import json
 import os
-from rov_types import IMUData, PressureData, ROVConfig
+from rov_types import IMUData, PressureData, ROVConfig, RegulatorData
 
 
 from thrusters import Thrusters
@@ -14,6 +14,8 @@ class ROVState:
     pitch_stabilization: bool
     roll_stabilization: bool
     depth_stabilization: bool
+    regulator: RegulatorData
+    battery_percentage: int
     thrusters: Thrusters
 
     def __init__(self) -> None:
@@ -27,9 +29,16 @@ class ROVState:
             "temperature": 0.0,
             "depth": 0.0,
         }
+        self.regulator: RegulatorData = {
+            "pitch": 0.0,
+            "roll": 0.0,
+            "desiredPitch": 0.0,
+            "desiredRoll": 0.0,
+        }
         self.pitch_stabilization = False
         self.roll_stabilization = False
         self.depth_stabilization = False
+        self.battery_percentage = 100
         self.thrusters = Thrusters(self)
 
     def set_config(self, config: ROVConfig) -> None:

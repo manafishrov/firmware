@@ -5,6 +5,7 @@ import numpy as np
 class Thrusters:
     def __init__(self, state: ROVState):
         self.state: ROVState = state
+        self.erpms: list[float] = [0.0] * 8
 
     def _scale_vector_by_user_max_power(self, direction_vector: list[float]) -> None:
         scale = self.state.rov_config["power"]["userMaxPower"]

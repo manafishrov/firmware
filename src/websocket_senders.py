@@ -19,18 +19,30 @@ class WebsocketSenders:
 
     async def telemetry_sender(self) -> None:
         while True:
-            telemetry_data = {
-                "imu": self.state.imu,
-            }
-            message = json.dumps({"type": "telemetry", "payload": telemetry_data})
+            message = json.dumps(
+                {
+                    "type": "telemetry",
+                    "payload": {
+                        "pitch": self.state.regulator["pitch"],
+                        "roll": self.state.regulator["roll"],
+                        "desiredPitch": self.state.regulator["desiredPitch"],
+                        "desiredRoll": self.state.regulator["desiredRoll"],
+                        "depth": self.state.pressure["depth"],
+                        "temperature": self.state.pressure["temperature"],
+                        "thrusterErpms": self.state.thrusters.erpms,
+                    },
+                }
+            )
             await self._send_message(message)
             await asyncio.sleep(1 / 60)
 
     async def status_update_sender(self) -> None:
         while True:
             status_data = {
-                "depth": self.state.pressure.depth,
-                "temperature": self.state.pressure.temperature,
+                "pitchStabilization": self.state.pitch_stabilization,
+                "rollStabilization": self.state.roll_stabilization,
+                "depthStabilization": self.state.depth_stabilization,
+                "batteryPercentage": self.state.battery_percentage,
             }
             message = json.dumps({"type": "statusUpdate", "payload": status_data})
             await self._send_message(message)
