@@ -1,7 +1,7 @@
 import asyncio
 import json
 from websockets.exceptions import ConnectionClosed
-from websocket_server import WebsocketServer, get_event_message_queue
+from websocket_server import WebsocketServer, get_message_queue
 from rov_state import ROVState
 
 
@@ -36,8 +36,8 @@ class WebsocketSenders:
             await self._send_message(message)
             await asyncio.sleep(1 / 2)
 
-    async def event_sender(self) -> None:
-        queue = get_event_message_queue()
+    async def message_sender(self) -> None:
+        queue = get_message_queue()
         while True:
             message_dict = await queue.get()
             message_str = json.dumps(message_dict)

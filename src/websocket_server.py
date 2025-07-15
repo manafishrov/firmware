@@ -6,16 +6,17 @@ from websockets.server import WebSocketServer, WebSocketServerProtocol
 from websockets.exceptions import ConnectionClosed
 from rov_state import ROVState
 from websocket_handler import handle_message
+from log import set_is_client_connected
 
 FIRMWARE_VERSION = "1.0.0"
 IP_ADDRESS = "10.10.10.10"
 PORT = 9000
 
-event_message_queue: asyncio.Queue = asyncio.Queue()
+message_queue: asyncio.Queue = asyncio.Queue()
 
 
-def get_event_message_queue() -> asyncio.Queue:
-    return event_message_queue
+def get_message_queue() -> asyncio.Queue:
+    return message_queue
 
 
 class WebsocketServer:
@@ -25,9 +26,8 @@ class WebsocketServer:
         self.client: Optional[WebSocketServerProtocol] = None
 
     async def handler(self, websocket: WebSocketServerProtocol) -> None:
-        """Handles a new client connection and updates the global state."""
         self.client = websocket
-        self.state.is_client_connected = True
+        set_is_client_connected(True)
         print(f"Client connected: {websocket.remote_address}. Status: Connected")
 
         async def send_firmware_version_on_connect():
@@ -68,7 +68,7 @@ class WebsocketServer:
             print(f"Client connection closed: {websocket.remote_address}")
         finally:
             self.client = None
-            self.state.is_client_connected = False
+            set_is_client_connected(False)
             print("Client disconnected. Status: Not Connected")
 
     async def start(self) -> None:

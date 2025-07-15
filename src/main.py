@@ -12,7 +12,7 @@ async def main() -> None:
     senders = WebsocketSenders(state, ws_server)
 
     await ws_server.start()
-    event_sender_task = asyncio.create_task(senders.event_sender())
+    message_sender_task = asyncio.create_task(senders.message_sender())
 
     imu = IMU(state)
     pressure_sensor = PressureSensor(state)
@@ -23,7 +23,7 @@ async def main() -> None:
         ws_server.wait_closed(),
         senders.telemetry_sender(),
         senders.status_update_sender(),
-        event_sender_task,
+        message_sender_task,
     ]
     await asyncio.gather(*tasks)
 
