@@ -51,12 +51,11 @@ async def handle_set_config(
 
 
 async def handle_movement_command(
-    payload: tuple[float, float, float, float, float, float],
+    payload: list[float],
     _websocket: WebSocketServerProtocol,
     state: ROVState,
 ) -> None:
-    state.thrusters.run_thrusters(payload)
-    return
+    state.thrusters.run_thrusters_with_regulator(payload)
 
 
 async def handle_start_thruster_test(
