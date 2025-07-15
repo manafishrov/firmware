@@ -4,6 +4,7 @@ from websockets.server import WebSocketServerProtocol
 from rov_state import ROVState
 import json
 from log import log_info, log_error
+from toast import toast_success
 
 
 async def handle_message(
@@ -32,6 +33,12 @@ async def handle_get_config(
     msg = {"type": "config", "payload": state.rov_config}
     await websocket.send(json.dumps(msg))
     await log_info("Sent config to client.")
+    await toast_success(
+        id=None,
+        message="ROV config set successfully",
+        description=None,
+        cancel=None,
+    )
 
 
 async def handle_set_config(
