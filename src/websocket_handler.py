@@ -53,10 +53,9 @@ async def handle_set_config(
 async def handle_movement_command(
     payload: tuple[float, float, float, float, float, float],
     _websocket: WebSocketServerProtocol,
-    _state: ROVState,
+    state: ROVState,
 ) -> None:
-    # Should call something in thrusters
-    # await log_info(f"Received movement command: {payload}")
+    state.thrusters.run_thrusters(payload)
     return
 
 
@@ -84,7 +83,7 @@ async def handle_start_regulator_auto_tuning(
     _state: ROVState,
 ) -> None:
     # Should call something in regulator
-    await log_info(f"Received command to start regulator auto-tuning: {payload}")
+    await log_info("Received command to start regulator auto-tuning")
 
 
 async def handle_cancel_regulator_auto_tuning(
@@ -93,7 +92,7 @@ async def handle_cancel_regulator_auto_tuning(
     _state: ROVState,
 ) -> None:
     # Should call something in regulator
-    await log_info(f"Received command to cancel regulator auto-tuning: {payload}")
+    await log_info("Received command to cancel regulator auto-tuning")
 
 
 async def handle_run_action_1(

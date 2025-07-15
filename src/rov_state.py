@@ -3,6 +3,8 @@ import os
 from rov_types import IMUData, PressureData, ROVConfig
 
 
+from thrusters import Thrusters
+
 class ROVState:
     config_path: str
     rov_config: ROVConfig
@@ -11,6 +13,7 @@ class ROVState:
     pitch_stabilization: bool
     roll_stabilization: bool
     depth_stabilization: bool
+    thrusters: Thrusters
 
     def __init__(self) -> None:
         self.config_path = os.path.join(os.path.dirname(__file__), "config.json")
@@ -26,6 +29,7 @@ class ROVState:
         self.pitch_stabilization = False
         self.roll_stabilization = False
         self.depth_stabilization = False
+        self.thrusters = Thrusters()
 
     def set_config(self, config: ROVConfig) -> None:
         self.rov_config = config
