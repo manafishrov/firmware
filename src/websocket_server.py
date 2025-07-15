@@ -8,6 +8,8 @@ from rov_state import ROVState
 from websocket_handler import handle_message
 
 FIRMWARE_VERSION = "1.0.0"
+IP_ADDRESS = "10.10.10.10"
+PORT = 9000
 
 event_message_queue: asyncio.Queue = asyncio.Queue()
 
@@ -69,9 +71,9 @@ class WebsocketServer:
             self.state.is_client_connected = False
             print("Client disconnected. Status: Not Connected")
 
-    async def start(self, host: str = "10.10.10.10", port: int = 9000) -> None:
-        self.server = await websockets.serve(self.handler, host, port)
-        print(f"Websocket server started on {host}:{port}")
+    async def start(self) -> None:
+        self.server = await websockets.serve(self.handler, IP_ADDRESS, PORT)
+        print(f"Websocket server started on {IP_ADDRESS}:{PORT}")
 
     async def wait_closed(self) -> None:
         if self.server:
