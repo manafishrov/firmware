@@ -1,6 +1,6 @@
 import json
 import os
-from .types import IMUData, PressureData, ROVConfig
+from rov_types import IMUData, PressureData, ROVConfig
 
 
 class ROVState:

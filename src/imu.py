@@ -1,7 +1,7 @@
 import asyncio
 from typing import Optional
 from rov_state import ROVState
-from .types import IMUData
+from rov_types import IMUData
 from bmi270.BMI270 import *
 
 

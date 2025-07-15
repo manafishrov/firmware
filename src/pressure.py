@@ -2,7 +2,7 @@ import asyncio
 from typing import Optional
 import ms5837
 from rov_state import ROVState
-from .types import PressureData
+from rov_types import PressureData
 
 
 class PressureSensor:
