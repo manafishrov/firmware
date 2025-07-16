@@ -1,13 +1,14 @@
 import asyncio
 from log import log_error
 import numpy as np
+from numpy.typing import NDArray
 import struct
 import serial
 import glob
 import sys
 import time
 import threading
-from typing import TYPE_CHECKING
+from typing import Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from rov_state import ROVState
@@ -18,6 +19,7 @@ class Thrusters:
         self.state: "ROVState" = state
         self.erpms: list[float] = [0.0] * 8
         self.serial = None
+        self._serial_lock = threading.Lock()
 
         self._telemetry_thread = None
         self._telemetry_thread_stop = threading.Event()
@@ -45,7 +47,8 @@ class Thrusters:
             read_buffer = b""
             while not self._telemetry_thread_stop.is_set():
                 try:
-                    new_bytes = self.serial.read(self.serial.in_waiting or 1)
+                    with self._serial_lock:
+                        new_bytes = self.serial.read(self.serial.in_waiting or 1)
                     if new_bytes:
                         read_buffer += new_bytes
                         while True:
@@ -116,17 +119,22 @@ class Thrusters:
             await log_error(f"Error opening serial port: {e}")
             sys.exit(1)
 
-    def _scale_vector_with_user_max_power(self, direction_vector: list[float]) -> None:
+    def _scale_vector_with_user_max_power(
+        self, direction_vector: NDArray[np.float64]
+    ) -> None:
         scale = self.state.rov_config["power"]["userMaxPower"]
         np.multiply(direction_vector, scale, out=direction_vector)
 
     def _create_thrust_vector_from_thruster_allocation(
-        self, direction_vector: list[float]
+        self, direction_vector: NDArray[np.float64]
     ) -> list[float]:
-        allocation_matrix = np.array(self.state.rov_config["thrusterAllocation"])
-        # TODO: Remove this cutoff when actions are sent as part of the direction vector
-        allocation_matrix = allocation_matrix[:6, :]
-        direction_vector_np = np.array(direction_vector)
+        allocation_matrix = np.array(
+            self.state.rov_config["thrusterAllocation"], dtype=float
+        )
+        direction_vector_np = direction_vector.reshape(-1)
+        # Match matrix to the direction vector input size
+        cols = direction_vector_np.shape[0]
+        allocation_matrix = allocation_matrix[:, :cols]
         thrust_vector = allocation_matrix @ direction_vector_np
         return thrust_vector.tolist()
 
@@ -143,17 +151,20 @@ class Thrusters:
             reordered[dest_idx] = thrust_vector[src_idx]
         return reordered
 
-    def run_thrusters_with_regulator(self, direction_vector: list[float]) -> None:
+    def run_thrusters_with_regulator(
+        self, direction_vector: NDArray[np.float64]
+    ) -> None:
         self._scale_vector_with_user_max_power(direction_vector)
         thrust_vector = self._create_thrust_vector_from_thruster_allocation(
             direction_vector
         )
         self.run_thrusters(thrust_vector)
 
-    def run_thrusters(self, thrust_vector: list[float]) -> None:
+    def run_thrusters(self, thrust_vector: list[float], reorder: bool = True) -> None:
         thrust_vector = self._correct_spin_direction(thrust_vector)
         thrust_vector = np.clip(thrust_vector, -1, 1)
-        thrust_vector = self._reorder_thrust_vector(thrust_vector)
+        if reorder:
+            thrust_vector = self._reorder_thrust_vector(thrust_vector)
         INPUT_START_BYTE = 0x5A
         NUM_MOTORS = 8
         NEUTRAL = 1000
@@ -170,7 +181,7 @@ class Thrusters:
 
         thrust_values = (thrust_values + [NEUTRAL] * NUM_MOTORS)[:NUM_MOTORS]
 
-        def calculate_checksum(data_bytes: bytes | bytearray) -> int:
+        def calculate_checksum(data_bytes: Union[bytes, bytearray]) -> int:
             checksum = 0
             for byte in data_bytes:
                 checksum ^= byte
@@ -182,7 +193,8 @@ class Thrusters:
             checksum = calculate_checksum(packet_without_checksum)
             full_packet = packet_without_checksum + bytearray([checksum])
             try:
-                self.serial.write(full_packet)
+                with self._serial_lock:
+                    self.serial.write(full_packet)
             except Exception as e:
 
                 asyncio.create_task(log_error(f"Error writing to thruster serial: {e}"))
@@ -196,9 +208,11 @@ class Thrusters:
 
         thrust_vector = [0.0] * 8
         if 0 <= thruster_identifier < len(thrust_vector):
-            thrust_vector[thruster_identifier] = 0.1
-            self.run_thrusters(thrust_vector)
-            time.sleep(5)
-            self.run_thrusters([0.0] * 8)
+            thrust_vector[thruster_identifier] = 0.05
+            start_time = time.time()
+            while (time.time() - start_time) < 5.0:
+                self.run_thrusters(thrust_vector, reorder=False)
+                time.sleep(0.02)
+            self.run_thrusters([0.0] * 8, reorder=False)
         else:
             print(f"Invalid thruster identifier: {thruster_identifier}")

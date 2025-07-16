@@ -52,12 +52,18 @@ async def handle_set_config(
     )
 
 
+import numpy as np
+from numpy.typing import NDArray
+
+
 async def handle_movement_command(
     payload: list[float],
     _websocket: "WebSocketServerProtocol",
     state: "ROVState",
 ) -> None:
-    state.thrusters.run_thrusters_with_regulator(payload)
+    # Convert payload (expected as list[float]) to numpy array for downstream operations
+    payload_array: NDArray[np.float64] = np.array(payload, dtype=np.float64)
+    state.thrusters.run_thrusters_with_regulator(payload_array)
 
 
 async def handle_start_thruster_test(
