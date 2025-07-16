@@ -190,3 +190,15 @@ class Thrusters:
             asyncio.create_task(
                 log_error("Thruster serial port not open when trying to send thrust.")
             )
+
+    def test_thruster(self, thruster_identifier: int) -> None:
+        import time
+
+        thrust_vector = [0.0] * 8
+        if 0 <= thruster_identifier < len(thrust_vector):
+            thrust_vector[thruster_identifier] = 0.1
+            self.run_thrusters(thrust_vector)
+            time.sleep(5)
+            self.run_thrusters([0.0] * 8)
+        else:
+            print(f"Invalid thruster identifier: {thruster_identifier}")

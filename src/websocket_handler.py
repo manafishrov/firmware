@@ -63,10 +63,9 @@ async def handle_movement_command(
 async def handle_start_thruster_test(
     payload: int,
     _websocket: "WebSocketServerProtocol",
-    _state: "ROVState",
+    state: "ROVState",
 ) -> None:
-    # Should call something in thrusters
-    await log_info(f"Received command to start thruster test: {payload}")
+    state.thrusters.test_thruster(payload)
 
 
 async def handle_cancel_thruster_test(
