@@ -1,5 +1,3 @@
-from websocket_server import get_message_queue
-
 _is_client_connected: bool = False
 
 
@@ -10,6 +8,8 @@ def set_log_is_client_connected_status(is_connected: bool) -> None:
 
 async def log_info(message: str) -> None:
     if _is_client_connected:
+        from websocket_server import get_message_queue
+
         await get_message_queue().put(
             {
                 "type": "logMessage",
@@ -22,6 +22,8 @@ async def log_info(message: str) -> None:
 
 async def log_warn(message: str) -> None:
     if _is_client_connected:
+        from websocket_server import get_message_queue
+
         await get_message_queue().put(
             {
                 "type": "logMessage",
@@ -34,6 +36,8 @@ async def log_warn(message: str) -> None:
 
 async def log_error(message: str) -> None:
     if _is_client_connected:
+        from websocket_server import get_message_queue
+
         await get_message_queue().put(
             {
                 "type": "logMessage",

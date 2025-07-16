@@ -22,7 +22,7 @@ def get_message_queue() -> asyncio.Queue:
 
 
 class WebsocketServer:
-    def __init__(self, state: ROVState) -> None:
+    def __init__(self, state: "ROVState") -> None:
         self.state = state
         self.server: Optional["WebSocketServer"] = None
         self.client: Optional["WebSocketServerProtocol"] = None

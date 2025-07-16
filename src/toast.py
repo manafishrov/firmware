@@ -1,4 +1,3 @@
-from websocket_server import get_message_queue
 from typing import Optional, Literal, TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -12,6 +11,8 @@ async def _toast_message(
     description: Optional[str],
     cancel: Optional["Cancel"],
 ) -> None:
+    from websocket_server import get_message_queue
+
     await get_message_queue().put(
         {
             "type": "showToast",
