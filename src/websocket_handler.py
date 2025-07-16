@@ -35,12 +35,6 @@ async def handle_get_config(
     msg = {"type": "config", "payload": state.rov_config}
     await websocket.send(json.dumps(msg))
     await log_info("Sent config to client.")
-    await toast_success(
-        id=None,
-        message="ROV config set successfully",
-        description=None,
-        cancel=None,
-    )
 
 
 async def handle_set_config(
@@ -50,6 +44,12 @@ async def handle_set_config(
 ) -> None:
     state.set_config(payload)
     await log_info("Received and applied new config.")
+    await toast_success(
+        id=None,
+        message="ROV config set successfully",
+        description=None,
+        cancel=None,
+    )
 
 
 async def handle_movement_command(

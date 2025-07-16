@@ -34,28 +34,27 @@ class WebsocketServer:
 
         async def send_firmware_version_on_connect():
             await asyncio.sleep(5)
-            if websocket.open:
-                try:
-                    version_message = {
-                        "type": "firmwareVersion",
-                        "payload": FIRMWARE_VERSION,
-                    }
-                    await websocket.send(json.dumps(version_message))
-                    await log_info(
-                        f"Sent firmware version '{FIRMWARE_VERSION}' to {websocket.remote_address}"
-                    )
-                    config_message = {
-                        "type": "config",
-                        "payload": self.state.rov_config,
-                    }
-                    await websocket.send(json.dumps(config_message))
-                    await log_info(f"Sent config to {websocket.remote_address}")
-                except ConnectionClosed:
-                    await log_warn(
-                        f"Client disconnected before firmware version and config could be sent to {websocket.remote_address}"
-                    )
-                except Exception as e:
-                    await log_error(f"Error sending initial data: {e}")
+            try:
+                version_message = {
+                    "type": "firmwareVersion",
+                    "payload": FIRMWARE_VERSION,
+                }
+                await websocket.send(json.dumps(version_message))
+                await log_info(
+                    f"Sent firmware version '{FIRMWARE_VERSION}' to {websocket.remote_address}"
+                )
+                config_message = {
+                    "type": "config",
+                    "payload": self.state.rov_config,
+                }
+                await websocket.send(json.dumps(config_message))
+                await log_info(f"Sent config to {websocket.remote_address}")
+            except ConnectionClosed:
+                await log_warn(
+                    f"Client disconnected before firmware version and config could be sent to {websocket.remote_address}"
+                )
+            except Exception as e:
+                await log_error(f"Error sending initial data: {e}")
 
         asyncio.create_task(send_firmware_version_on_connect())
 
