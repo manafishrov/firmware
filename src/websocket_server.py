@@ -1,12 +1,14 @@
 import asyncio
 import json
-from typing import Optional
 import websockets
-from websockets.server import WebSocketServer, WebSocketServerProtocol
 from websockets.exceptions import ConnectionClosed
-from rov_state import ROVState
 from websocket_handler import handle_message
 from log import set_log_is_client_connected_status, log_info, log_error, log_warn
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from websockets.server import WebSocketServer, WebSocketServerProtocol
+    from rov_state import ROVState
 
 FIRMWARE_VERSION = "1.0.0"
 IP_ADDRESS = "10.10.10.10"
@@ -22,10 +24,10 @@ def get_message_queue() -> asyncio.Queue:
 class WebsocketServer:
     def __init__(self, state: ROVState) -> None:
         self.state = state
-        self.server: Optional[WebSocketServer] = None
-        self.client: Optional[WebSocketServerProtocol] = None
+        self.server: Optional["WebSocketServer"] = None
+        self.client: Optional["WebSocketServerProtocol"] = None
 
-    async def handler(self, websocket: WebSocketServerProtocol) -> None:
+    async def handler(self, websocket: "WebSocketServerProtocol") -> None:
         self.client = websocket
         set_log_is_client_connected_status(True)
         await log_info(f"Client connected: {websocket.remote_address}.")

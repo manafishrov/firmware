@@ -1,22 +1,25 @@
 import asyncio
-from typing import Optional
 from log import log_error, log_info
 from toast import toast_error
-from rov_state import ROVState
-from rov_types import IMUData
 from bmi270.BMI270 import *
+
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from rov_state import ROVState
+    from rov_types import IMUData
 
 
 class IMU:
-    def __init__(self, state: ROVState):
-        self.state: ROVState = state
+    def __init__(self, state: "ROVState"):
+        self.state: "ROVState" = state
         self.imu: Optional[BMI270] = None
 
     async def initialize(self) -> None:
         try:
             await log_info("Attempting to initialize BMI270 IMU...")
 
-            imu_instance = await asyncio.to_thread(BMI270, I2C_PRIM_ADDR)
+            imu_instance = await asyncio.to_thread(BMI270(I2C_PRIM_ADDR))
             imu_instance.load_config_file()
             imu_instance.set_mode(PERFORMANCE_MODE)
             imu_instance.set_acc_range(ACC_RANGE_2G)
@@ -45,7 +48,7 @@ class IMU:
                 cancel=None,
             )
 
-    def _read_sensor_data_sync(self) -> Optional[IMUData]:
+    def _read_sensor_data_sync(self) -> Optional["IMUData"]:
         try:
             if self.imu is None:
                 return None
