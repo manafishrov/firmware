@@ -3,30 +3,6 @@ let
   pico-sdk-with-submodules = pkgs.pico-sdk.override {
     withSubmodules = true;
   };
-  picoFirmware = pkgs.stdenv.mkDerivation {
-    name = "pico-firmware";
-    src = ./pico;
-    nativeBuildInputs = with pkgs; [
-      cmake
-      gnumake
-      gcc-arm-embedded
-    ];
-    buildInputs = [ pico-sdk-with-submodules ];
-
-    configurePhase = ''
-      export PICO_SDK_PATH=${pico-sdk-with-submodules}/lib/pico-sdk
-      mkdir build
-      cd build
-      cmake ..
-    '';
-
-    buildPhase = "make";
-
-    installPhase = ''
-      mkdir -p $out
-      cp pico.uf2 $out/
-    '';
-  };
 in
 {
   # Nix state version
@@ -44,7 +20,7 @@ in
   # Login credentials
   users.users.pi = {
     isNormalUser = true;
-    extraGroups = [ "wheel" "networkmanager" "video" "i2c" "dialout" ];
+    extraGroups = [ "wheel" "networkmanager" "video" "i2c" "plugdev" ];
     password = "manafish";
     home = "/home/pi";
   };
@@ -127,7 +103,8 @@ in
   services.go2rtc = {
     enable = true;
     settings = {
-      streams.cam = "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline -o -";
+      streams.cam =
+        "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline -o -";
       api = {
         listen = ":1984";
         origin = "*";
@@ -154,16 +131,26 @@ in
         numpy
         websockets
         smbus2
+        pyserial
       ] ++ [
         (pkgs.python3Packages.buildPythonPackage {
           pname = "bmi270";
           version = "0.4.3";
+          format = "other";
           src = pkgs.fetchFromGitHub {
             owner = "CoRoLab-Berlin";
             repo = "bmi270_python";
-            rev = "main";
+            rev = "8309e687d6b346455833c5d0c2734eeb56e98789";
             hash = "sha256-IxkMWWcrsglFV5HGDMK0GBx5o0svNfRXqhW8/ZWpsUk=";
           };
+          buildPhase = ":";
+          installPhase = ''
+            runHook preInstall
+            install -d $out/${pkgs.python3.sitePackages}
+            cp -r src/bmi270 $out/${pkgs.python3.sitePackages}/
+            runHook postInstall
+          '';
+
           doCheck = false;
         })
         (pkgs.python3Packages.buildPythonPackage {
@@ -172,8 +159,8 @@ in
           src = pkgs.fetchFromGitHub {
             owner = "bluerobotics";
             repo = "ms5837-python";
-            rev = "master";
-            hash = "sha256-a6P3zHAw5YPlgiznX2lHJs2EI3xwPOqI49lO+m+f9iw=";
+            rev = "02996d71d2f08339b3d317b3f4da0a83781c706e";
+            hash = "sha256-LBwM9sTvr7IaBcY8PcsPZcAbNRWBa4hj7tUC4oOr4eM=";
           };
           doCheck = false;
         })
@@ -204,7 +191,14 @@ in
         ];
         file.LICENSE.source = ./LICENSE;
         activation.copyFirmwareFiles = home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
-          cp -r ${./src}/* $tmpdir/
+          if [ ! -f "$HOME/.firmware_initialized" ]; then
+            tmpdir=$(mktemp -d)
+            cp -r ${./src}/* $tmpdir/
+            chmod -R u+w $tmpdir/*
+            cp -rf $tmpdir/* $HOME/
+            rm -rf $tmpdir
+            touch "$HOME/.firmware_initialized"
+          fi
         '';
       };
     };
@@ -223,17 +217,6 @@ in
         ExecStart = "${pkgs.python3}/bin/python3 main.py";
         Restart = "always";
         RestartSec = "5";
-      };
-    };
-    pico-flash = {
-      enable = true;
-      wantedBy = [ "multi-user.target" ];
-      after = [ "dev-ttyACM0.device" ];
-      serviceConfig = {
-        Type = "oneshot";
-        User = "root";
-        ExecStart = "${pkgs.bash}/bin/bash -c '${pkgs.picotool}/bin/picotool info 2>&1 | grep -q \"Program: pico\" || ${pkgs.picotool}/bin/picotool load -f -x ${picoFirmware}/pico.uf2'";
-        RemainAfterExit = "yes";
       };
     };
   };

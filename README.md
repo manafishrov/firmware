@@ -178,11 +178,9 @@ The Manafish firmware runs as a systemd service. It is set to run automatically 
 
 6. View service logs:
 
-   ```sh
-   journalctl -u manafish-firmware -f
-   ```
-
-   ```
+  ```sh
+  journalctl -u manafish-firmware -f
+  ```
 
 ## License
 

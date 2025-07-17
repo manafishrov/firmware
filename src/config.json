@@ -1,0 +1,139 @@
+{
+  "fluidType": "saltwater",
+  "thrusterPinSetup": {
+    "identifiers": [
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8
+    ],
+    "spinDirections": [
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1
+    ]
+  },
+  "thrusterAllocation": [
+    [
+      1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      -1,
+      -1
+    ],
+    [
+      1,
+      -1,
+      0,
+      0,
+      0,
+      0,
+      -1,
+      1
+    ],
+    [
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      1,
+      1,
+      -1,
+      -1,
+      0,
+      0
+    ],
+    [
+      -1,
+      1,
+      0,
+      0,
+      0,
+      0,
+      1,
+      -1
+    ],
+    [
+      0,
+      0,
+      1,
+      -1,
+      1,
+      -1,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ]
+  ],
+  "regulator": {
+    "turnSpeed": 40,
+    "pitch": {
+      "kp": 5,
+      "ki": 0.5,
+      "kd": 1
+    },
+    "roll": {
+      "kp": 1.5,
+      "ki": 0.1,
+      "kd": 0.4
+    },
+    "depth": {
+      "kp": 0,
+      "ki": 0.05,
+      "kd": 0.1
+    }
+  },
+  "movementCoefficients": {
+    "horizontal": 0.8,
+    "strafe": 0.35,
+    "vertical": 0.5,
+    "pitch": 0.4,
+    "yaw": 0.3,
+    "roll": 0.8
+  },
+  "power": {
+    "userMaxPower": 30,
+    "regulatorMaxPower": 30,
+    "batteryMinVoltage": 9.6,
+    "batteryMaxVoltage": 12.6
+  }
+}

@@ -1,107 +1,59 @@
-import time
-import numpy as np
+import asyncio
+from rov_state import ROVState
+from bmi270.BMI270 import *
 
-import config
-from bmi270 import *
 
 class IMU:
-    def __init__(self):
-        # Initialize sensor and settings
-        self.sensor = BMI270(0x68)
-        self.sensor.load_config_file()
-        self.sensor.set_mode(PERFORMANCE_MODE)
-        self.sensor.set_acc_range(ACC_RANGE_2G)
-        self.sensor.set_gyr_range(GYR_RANGE_1000)
-        self.sensor.set_acc_odr(ACC_ODR_100)
-        self.sensor.set_gyr_odr(GYR_ODR_100)
-        self.sensor.set_acc_bwp(ACC_BWP_NORMAL)
-        self.sensor.set_gyr_bwp(GYR_BWP_NORMAL)
-        self.sensor.disable_fifo_header()
-        self.sensor.enable_data_streaming()
-        self.sensor.enable_acc_filter_perf()
-        self.sensor.enable_gyr_noise_perf()
-        self.sensor.enable_gyr_filter_perf()
-        print("--- IMU initialization finished! ---")
+    def __init__(self, state: ROVState):
+        self.state = state
+        self.imu = None
 
-        # Timing and state
-        self.last_measurement_time = time.time()
-        self.current_pitch = 0.0
-        self.current_roll = 0.0
-        self.prev_gyro = None
-        self.filtered_gyro = None
-
-        # Filter parameters
-        self.CF_alpha = config.get_CF_alpha()
-        self.GYRO_HPF_tau = config.get_GYRO_HPF_tau()
-
-    def update_pitch_roll(self):
-        # Read data
-        accel = self.sensor.get_acc_data()  # (x, y, z) in m/s²
-        gyr = self.sensor.get_gyr_data()    # (x, y, z) in rad/s
-        gyro = np.degrees(np.array([gyr[0], gyr[1], gyr[2]]))
-
-        # Compute delta time
-        now = time.time()
-        delta_t = now - self.last_measurement_time
-        self.last_measurement_time = now
-
-        # High-pass filter on gyro
-        if self.prev_gyro is None:
-            self.filtered_gyro = gyro.copy()
-        else:
-            alpha = self.GYRO_HPF_tau / (self.GYRO_HPF_tau + delta_t)
-            self.filtered_gyro = alpha * (self.filtered_gyro + gyro - self.prev_gyro)
-        self.prev_gyro = gyro.copy()
-
-        # Accelerometer angles
-        accel_pitch = np.degrees(np.arctan2(accel[0], np.sqrt(accel[1]**2 + accel[2]**2)))
-        accel_roll = np.degrees(np.arctan2(accel[1], accel[2]))
-
-        # Handle wrap-around for roll
-        if accel_roll - self.current_roll > 180:
-            self.current_roll += 360
-        if accel_roll - self.current_roll < -180:
-            self.current_roll -= 360
-
-        # Complementary filter
-        if self.current_roll >= 90 or self.current_roll <= -90:
-            self.current_pitch = (
-                self.CF_alpha * (self.current_pitch + self.filtered_gyro[1] * delta_t)
-                + (1 - self.CF_alpha) * accel_pitch
+        try:
+            imu = BMI270(I2C_PRIM_ADDR)
+            imu.load_config_file()
+            imu.set_mode(PERFORMANCE_MODE)
+            imu.set_acc_range(ACC_RANGE_2G)
+            imu.set_gyr_range(GYR_RANGE_1000)
+            imu.set_acc_odr(ACC_ODR_100)
+            imu.set_gyr_odr(GYR_ODR_100)
+            imu.set_acc_bwp(ACC_BWP_NORMAL)
+            imu.set_gyr_bwp(GYR_BWP_NORMAL)
+            imu.disable_fifo_header()
+            imu.enable_data_streaming()
+            imu.enable_acc_filter_perf()
+            imu.enable_gyr_noise_perf()
+            imu.enable_gyr_filter_perf()
+            return imu
+        except Exception as e:
+            # LOG + TOAST
+            print(
+                f"ERROR: Failed to initialize BMI270 IMU. Is it connected? Error: {e}"
             )
-        else:
-            self.current_pitch = (
-                self.CF_alpha * (self.current_pitch - self.filtered_gyro[1] * delta_t)
-                + (1 - self.CF_alpha) * accel_pitch
-            )
-        self.current_roll = (
-            self.CF_alpha * (self.current_roll + self.filtered_gyro[0] * delta_t)
-            + (1 - self.CF_alpha) * accel_roll
-        )
+            return None
 
-        # Normalize angles
-        self.current_roll = ((self.current_roll + 180) % 360) - 180
-        self.current_pitch = max(min(self.current_pitch,  90), -90)
+    def _read_sensor_data(self):
+        try:
+            acc = self.imu.get_acc_data()
+            gyr = self.imu.get_gyr_data()
+            temp = self.imu.get_temp_data()
+            return {"acc": acc, "gyr": gyr, "temp": temp}
+        except Exception as e:
+            print(f"ERROR in reading IMU data: {e}")
+            return None
 
-    def get_pitch_roll(self):
-        return self.current_pitch, self.current_roll
-    
-    def get_pitch_roll_gyro(self):
-        gyr = self.sensor.get_gyr_data()
-        return -np.degrees(gyr[1]), np.degrees(gyr[0])
+    async def start_reading_loop(self):
+        READ_INTERVAL = 1 / 60
 
-    def get_yaw_gyro(self):
-        gyr = self.sensor.get_gyr_data()
-        return np.degrees(gyr[2])
+        while True:
+            try:
+                raw_data = await asyncio.to_thread(self._read_sensor_data)
+                if raw_data is not None:
+                    self.state.imu["acc"] = raw_data["acc"]
+                    self.state.imu["gyr"] = raw_data["gyr"]
+                    self.state.imu["temp"] = raw_data["temp"]
 
-    def log_data(self, filename):
-        with open(filename, 'a') as f:
-            f.write(f"{self.current_pitch}, {self.current_roll}, {self.last_measurement_time}\n")
+                await asyncio.sleep(READ_INTERVAL)
 
-
-if __name__ == "__main__":
-    imu = IMU()
-    while True:
-        imu.update_pitch_roll()
-        print(f"Pitch: {imu.current_pitch}, Roll: {imu.current_roll}")
-        time.sleep(0.1)
+            except Exception as e:
+                print(f"ERROR in IMU reading loop: {e}")
+                await asyncio.sleep(1)
