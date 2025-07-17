@@ -4,7 +4,7 @@ import time
 from bmi270.BMI270 import *
 
 
-def main():
+def main() -> None:
     print("Initializing IMU...")
     imu = BMI270(I2C_PRIM_ADDR)
     imu.load_config_file()

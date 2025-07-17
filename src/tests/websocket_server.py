@@ -6,16 +6,18 @@ import time
 import websockets
 import math
 import signal
+from typing import Dict, Optional, Set, Union
+from websockets.legacy.server import WebSocketServerProtocol
 
-clients = set()
-shutdown = False
+clients: Set[WebSocketServerProtocol] = set()
+shutdown: bool = False
 
 pitch_stabilization = False
 roll_stabilization = False
 depth_stabilization = False
 
-on_going_thruster_tests = {}
-on_going_regulator_autotune = None
+on_going_thruster_tests: Dict[Union[str, int], asyncio.Task] = {}
+on_going_regulator_autotune: Optional[asyncio.Task] = None
 
 rov_config = {
     "fluidType": "saltwater",
@@ -56,7 +58,7 @@ rov_config = {
 }
 
 
-async def log(level, message):
+async def log(level: str, message: str) -> None:
     log_msg = {
         "type": "logMessage",
         "payload": {"origin": "firmware", "level": level, "message": str(message)},
@@ -70,7 +72,13 @@ async def log(level, message):
         print(f"[{level}] {message}")
 
 
-async def toast(id, toast_type, message, description, cancel):
+async def toast(
+    id: Optional[Union[str, int]],
+    toast_type: str,
+    message: str,
+    description: Optional[str],
+    cancel: Optional[dict],
+) -> None:
     toast_msg = {
         "type": "showToast",
         "payload": {
@@ -88,7 +96,9 @@ async def toast(id, toast_type, message, description, cancel):
         )
 
 
-async def handle_client(websocket):
+async def handle_client(
+    websocket: websockets.legacy.server.WebSocketServerProtocol,
+) -> None:
     global rov_config, pitch_stabilization, roll_stabilization, depth_stabilization
     last_movement_command = None
     await log(
@@ -96,7 +106,7 @@ async def handle_client(websocket):
     )
     clients.add(websocket)
 
-    async def send_telemetry():
+    async def send_telemetry() -> None:
         while not shutdown:
             try:
                 current_time = time.time()
@@ -128,7 +138,7 @@ async def handle_client(websocket):
                     await log("Error", f"Telemetry error: {e}")
                 break
 
-    async def send_status_update():
+    async def send_status_update() -> None:
         while not shutdown:
             try:
                 current_time = time.time()
@@ -333,7 +343,7 @@ async def handle_client(websocket):
         status_task.cancel()
 
 
-async def shutdown_server(server):
+async def shutdown_server(server: websockets.legacy.server.Serve) -> None:
     global shutdown
     shutdown = True
     if clients:
@@ -344,11 +354,11 @@ async def shutdown_server(server):
     await server.wait_closed()
 
 
-async def main():
+async def main() -> None:
     server = None
     shutdown_event = asyncio.Event()
 
-    def signal_handler():
+    def signal_handler() -> None:
         if not clients:
             print("[info] Shutdown signal received")
         else:
