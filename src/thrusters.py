@@ -123,7 +123,9 @@ class Thrusters:
     ) -> None:
         scale = self.state.rov_config["power"]["userMaxPower"]
         np.multiply(direction_vector, scale, out=direction_vector)
-
+        
+        return direction_vector
+        
     def _create_thrust_vector_from_thruster_allocation(
         self, direction_vector: NDArray[np.float64]
     ) -> list[float]:
@@ -150,13 +152,12 @@ class Thrusters:
             reordered[dest_idx] = thrust_vector[src_idx]
         return reordered
 
-    def run_thrusters_with_regulator(
-        self, direction_vector: NDArray[np.float64]
-    ) -> None:
-        self._scale_vector_with_user_max_power(direction_vector)
-        thrust_vector = self._create_thrust_vector_from_thruster_allocation(
-            direction_vector
-        )
+    def run_thrusters_with_regulator(self, direction_vector: NDArray[np.float64]) -> None:
+        direction_vector = self._scale_vector_with_user_max_power(direction_vector)
+
+    
+
+        thrust_vector = self._create_thrust_vector_from_thruster_allocation(direction_vector)
         self.run_thrusters(thrust_vector)
 
     def run_thrusters(self, thrust_vector: list[float], reorder: bool = True) -> None:
