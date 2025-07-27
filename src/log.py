@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 _is_client_connected: bool = False
 
 

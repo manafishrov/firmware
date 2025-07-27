@@ -1,18 +1,16 @@
+from __future__ import annotations
 import asyncio
 import ms5837
 from log import log_error, log_info
 from toast import toast_error
-
-from typing import Optional, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from rov_state import ROVState
-    from rov_types import PressureData
+from typing import Optional
+from rov_state import ROVState
+from rov_types import PressureData
 
 
 class PressureSensor:
-    def __init__(self, state: "ROVState"):
-        self.state: "ROVState" = state
+    def __init__(self, state: ROVState):
+        self.state: ROVState = state
         self.sensor: Optional[ms5837.MS5837_30BA] = None
 
     async def initialize(self) -> None:
@@ -33,7 +31,7 @@ class PressureSensor:
                 cancel=None,
             )
 
-    def _read_sensor_data_sync(self) -> Optional["PressureData"]:
+    def _read_sensor_data_sync(self) -> Optional[PressureData]:
         try:
             if self.sensor is None:
                 return None

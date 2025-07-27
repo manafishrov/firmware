@@ -1,18 +1,16 @@
+from __future__ import annotations
 import asyncio
 from log import log_error, log_info
 from toast import toast_error
 from bmi270.BMI270 import *
-
-from typing import Optional, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from rov_state import ROVState
-    from rov_types import IMUData
+from typing import Optional
+from rov_state import ROVState
+from rov_types import IMUData
 
 
 class IMU:
-    def __init__(self, state: "ROVState"):
-        self.state: "ROVState" = state
+    def __init__(self, state: ROVState):
+        self.state: ROVState = state
         self.imu: Optional[BMI270] = None
 
     async def initialize(self) -> None:
@@ -48,7 +46,7 @@ class IMU:
                 cancel=None,
             )
 
-    def _read_sensor_data_sync(self) -> Optional["IMUData"]:
+    def _read_sensor_data_sync(self) -> Optional[IMUData]:
         try:
             if self.imu is None:
                 return None

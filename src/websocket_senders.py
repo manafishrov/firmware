@@ -1,16 +1,13 @@
+from __future__ import annotations
 import asyncio
 import json
 from websocket_server import WebsocketServer, get_message_queue
 from websockets.exceptions import ConnectionClosed
-from typing import TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from websocket_server import WebsocketServer
-    from rov_state import ROVState
+from rov_state import ROVState
 
 
 class WebsocketSenders:
-    def __init__(self, state: "ROVState", ws_server: "WebsocketServer") -> None:
+    def __init__(self, state: ROVState, ws_server: WebsocketServer) -> None:
         self.state = state
         self.ws_server = ws_server
 

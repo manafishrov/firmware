@@ -1,3 +1,4 @@
+from __future__ import annotations
 import asyncio
 from log import log_error
 import numpy as np
@@ -8,15 +9,13 @@ import glob
 import sys
 import time
 import threading
-from typing import Union, TYPE_CHECKING
-
-if TYPE_CHECKING:
-    from rov_state import ROVState
+from typing import Union
+from rov_state import ROVState
 
 
 class Thrusters:
-    def __init__(self, state: "ROVState"):
-        self.state: "ROVState" = state
+    def __init__(self, state: ROVState):
+        self.state: ROVState = state
         self.erpms: list[float] = [0.0] * 8
         self.serial = None
         self._serial_lock = threading.Lock()
