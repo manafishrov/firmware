@@ -41,7 +41,7 @@ rov_config = {
         "roll": {"kp": 5, "ki": 0.0, "kd": 0.0},
         "depth": {"kp": 8, "ki": 2.8, "kd": 0.0},
     },
-    "movementCoefficients": {
+    "directionCoefficients": {
         "horizontal": 0.0,
         "strafe": 0.0,
         "vertical": 0.0,
@@ -100,7 +100,7 @@ async def handle_client(
     websocket: websockets.legacy.server.WebSocketServerProtocol,
 ) -> None:
     global rov_config, pitch_stabilization, roll_stabilization, depth_stabilization
-    last_movement_command = None
+    last_direction_vector = None
     await log(
         "info", f"Client connected from Manafish App at {websocket.remote_address}!"
     )
@@ -185,16 +185,16 @@ async def handle_client(
                 msg_type = msg_data.get("type")
                 payload = msg_data.get("payload")
 
-                if msg_type == "movementCommand":
+                if msg_type == "directionVector":
                     if (
-                        last_movement_command is not None
-                        and payload != last_movement_command
+                        last_direction_vector is not None
+                        and payload != last_direction_vector
                     ):
                         await log(
                             "info",
-                            f"MovementCommand changed: old={last_movement_command}, new={payload}",
+                            f"DirectionVector changed: old={last_direction_vector}, new={payload}",
                         )
-                    last_movement_command = payload
+                    last_direction_vector = payload
                 elif msg_type == "getConfig":
                     await log("info", "Sending full ROV config")
                     config_msg = {
