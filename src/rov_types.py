@@ -38,7 +38,7 @@ class RegulatorConfig(TypedDict):
     depth: PIDParams
 
 
-class MovementCoefficients(TypedDict):
+class DirectionCoefficients(TypedDict):
     horizontal: float
     strafe: float
     vertical: float
@@ -59,7 +59,7 @@ class ROVConfig(TypedDict):
     thrusterPinSetup: ThrusterPinSetup
     thrusterAllocation: List[List[int]]
     regulator: RegulatorConfig
-    movementCoefficients: MovementCoefficients
+    directionCoefficients: DirectionCoefficients
     power: PowerConfig
 
 
