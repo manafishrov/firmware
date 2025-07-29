@@ -309,10 +309,8 @@ async def handle_client(
                     if on_going_regulator_autotune:
                         on_going_regulator_autotune.cancel()
                     await log("info", "Auto-tuning cancelled")
-                elif msg_type == "runAction1":
-                    await log("info", "Run Action 1 triggered")
-                elif msg_type == "runAction2":
-                    await log("info", "Run Action 2 triggered")
+                elif msg_type == "customAction":
+                    await log("info", f"Custom action received with payload: {payload}")
                 elif msg_type == "togglePitchStabilization":
                     pitch_stabilization = not pitch_stabilization
                     await log(

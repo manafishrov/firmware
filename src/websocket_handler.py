@@ -53,7 +53,7 @@ async def handle_set_config(
     )
 
 
-async def handle_movement_command(
+async def handle_direction_vector(
     payload: list[float],
     _websocket: WebSocketServerProtocol,
     state: ROVState,
@@ -97,21 +97,12 @@ async def handle_cancel_regulator_auto_tuning(
     await log_info("Received command to cancel regulator auto-tuning")
 
 
-async def handle_run_action_1(
-    _payload: None,
+async def handle_custom_action(
+    payload: str,
     _websocket: WebSocketServerProtocol,
     _state: ROVState,
 ) -> None:
-    # Should do an action of some  sort??
-    return
-
-
-async def handle_run_action_2(
-    _payload: None,
-    _websocket: WebSocketServerProtocol,
-    _state: ROVState,
-) -> None:
-    # Should do an action of some  sort??
+    # Should do a custom action of some  sort??
     return
 
 
@@ -142,15 +133,14 @@ async def handle_toggle_depth_stabilization(
 HandlerType = Callable[[Any, WebSocketServerProtocol, ROVState], Awaitable[None]]
 
 MESSAGE_TYPE_HANDLERS: Dict[str, HandlerType] = {
-    "movementCommand": handle_movement_command,
+    "directionVector": handle_direction_vector,
     "getConfig": handle_get_config,
     "setConfig": handle_set_config,
     "startThrusterTest": handle_start_thruster_test,
     "cancelThrusterTest": handle_start_thruster_test,
     "startRegulatorAutoTuning": handle_start_regulator_auto_tuning,
     "cancelRegulatorAutoTuning": handle_cancel_regulator_auto_tuning,
-    "runAction1": handle_run_action_1,
-    "runAction2": handle_run_action_2,
+    "customAction": handle_custom_action,
     "togglePitchStabilization": handle_toggle_pitch_stabilization,
     "toggleRollStabilization": handle_toggle_roll_stabilization,
     "toggleDepthStabilization": handle_toggle_depth_stabilization,
