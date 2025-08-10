@@ -6,6 +6,8 @@ The Pico in the Manafish ROV is responsible for sending signals to the thrusters
 
 To build the pico firmware, you need to have the `pico-sdk` installed including its submodules with the `PICO_SDK_PATH` environment variable set to the path of the SDK. We also need `arm-none-eabi-gcc` a cross compiler that lets us build for the pico. We also need `Cmake`, the build system generator and `make` to build the firmware.
 
+You can build either the dshot or pwm firmware by specifying the FIRMWARE_TYPE option when running cmake:
+
 Create the build directory:
 
 ```sh
@@ -18,10 +20,16 @@ Navigate to the build directory:
 cd build
 ```
 
-Run `Cmake` to generate the build files using the `CmakeLists.txt` in the parent directory:
+To build dshot firmware:
 
 ```sh
-cmake ..
+cmake -DFIRMWARE_TYPE=dshot ..
+```
+
+To build pwm firmware:
+
+```sh
+cmake -DFIRMWARE_TYPE=pwm ..
 ```
 
 Lastly, run `make` to build the firmware:
@@ -30,19 +38,27 @@ Lastly, run `make` to build the firmware:
 make
 ```
 
-After the build completes successfully, you will find the `pico.uf2` file inside the `build` directory. This is the file you will flash onto the Pico. For subequent builds, you can skip the `cmake` step and just run `make` to rebuild the firmware in the `build` directory.
+After the build completes successfully, you will find the `.uf2` file inside the `build` directory. This is the file you will flash onto the Pico. For subsequent builds, you can skip the `cmake` step and just run `make` to rebuild the firmware in the `build` directory.
 
 ## Flash
 
 We need to have `picotool` installed to flash the firmware onto the Pico.
 
-To flash the firmware use the following command inside the `build` directory (after you have built the firmware):
+After building, the .uf2 file will be located in either `build/dshot/` or `build/pwm/`, depending on which firmware you built.
+
+To flash the DShot firmware:
 
 ```sh
-picotool load -f -x pico.uf2
+picotool load -f -x dshot/dshot_firmware.uf2
 ```
 
-This should work regardless of it the Pico is in BOOTSEL mode or not.
+To flash the PWM firmware:
+
+```sh
+picotool load -f -x pwm/pwm_firmware.uf2
+```
+
+This should work regardless of if the Pico is in BOOTSEL mode or not.
 
 ## View firmware serial output
 

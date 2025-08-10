@@ -2,22 +2,16 @@ cmake_minimum_required(VERSION 3.13)
 
 include(pico_sdk_import.cmake)
 
-project(pico C CXX ASM)
+project(pico_firmware)
 
-pico_sdk_init()
+if(NOT DEFINED FIRMWARE_TYPE)
+  message(FATAL_ERROR "You must specify -DFIRMWARE_TYPE=dshot or -DFIRMWARE_TYPE=pwm when running cmake.")
+endif()
 
-add_executable(${CMAKE_PROJECT_NAME}
-    main.c
-    dshot.c
-)
-
-pico_generate_pio_header(${CMAKE_PROJECT_NAME} ${CMAKE_CURRENT_LIST_DIR}/dshot.pio)
-
-target_link_libraries(${CMAKE_PROJECT_NAME}
-    pico_stdlib
-    pico_stdio_usb
-    hardware_clocks
-    hardware_pio
-)
-
-pico_add_extra_outputs(${CMAKE_PROJECT_NAME})
+if(FIRMWARE_TYPE STREQUAL "dshot")
+  add_subdirectory(dshot)
+elseif(FIRMWARE_TYPE STREQUAL "pwm")
+  add_subdirectory(pwm)
+else()
+  message(FATAL_ERROR "Unknown FIRMWARE_TYPE: ${FIRMWARE_TYPE}. Use 'dshot' or 'pwm'.")
+endif()
