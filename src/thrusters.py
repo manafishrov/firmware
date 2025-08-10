@@ -123,9 +123,8 @@ class Thrusters:
     ) -> None:
         scale = self.state.rov_config["power"]["userMaxPower"]
         np.multiply(direction_vector, scale, out=direction_vector)
-        
         return direction_vector
-        
+
     def _create_thrust_vector_from_thruster_allocation(
         self, direction_vector: NDArray[np.float64]
     ) -> list[float]:
@@ -133,7 +132,6 @@ class Thrusters:
             self.state.rov_config["thrusterAllocation"], dtype=float
         )
         direction_vector_np = direction_vector.reshape(-1)
-        # Match matrix to the direction vector input size
         cols = direction_vector_np.shape[0]
         allocation_matrix = allocation_matrix[:, :cols]
         thrust_vector = allocation_matrix @ direction_vector_np
@@ -148,15 +146,12 @@ class Thrusters:
     def _reorder_thrust_vector(self, thrust_vector: list[float]) -> list[float]:
         identifiers = self.state.rov_config["thrusterPinSetup"]["identifiers"]
         reordered = [0.0] * len(identifiers)
-        for src_idx, dest_idx in enumerate(identifiers):
-            reordered[dest_idx] = thrust_vector[src_idx]
+        for i in range(len(identifiers)):
+            reordered[i] = thrust_vector[identifiers[i]]
         return reordered
 
     def run_thrusters_with_regulator(self, direction_vector: NDArray[np.float64]) -> None:
         direction_vector = self._scale_vector_with_user_max_power(direction_vector)
-
-    
-
         thrust_vector = self._create_thrust_vector_from_thruster_allocation(direction_vector)
         self.run_thrusters(thrust_vector)
 
