@@ -1,6 +1,7 @@
 from __future__ import annotations
-from typing import Optional, Literal
-from rov_types import Cancel
+from typing import Optional, Literal, TYPE_CHECKING
+if TYPE_CHECKING:
+    from rov_types import Cancel
 
 
 async def _toast_message(

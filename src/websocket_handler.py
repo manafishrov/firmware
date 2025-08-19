@@ -1,13 +1,15 @@
 from __future__ import annotations
+from typing import Any, Callable, Awaitable, Dict, TYPE_CHECKING
+if TYPE_CHECKING:
+    from rov_state import ROVState
+    from rov_types import ROVConfig
+    from websockets.server import WebSocketServerProtocol
+    from numpy.typing import NDArray
+
 import json
 from log import log_info, log_error
 from toast import toast_success
 import numpy as np
-from numpy.typing import NDArray
-from typing import Any, Callable, Awaitable, Dict
-from rov_state import ROVState
-from rov_types import ROVConfig
-from websockets.server import WebSocketServerProtocol
 from pico import flash_micro_controller_firmware
 
 

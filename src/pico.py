@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import subprocess
 import os
 from log import log_info, log_error

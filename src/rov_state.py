@@ -1,8 +1,11 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from thrusters import Thrusters
+    from rov_types import IMUData, PressureData, ROVConfig, RegulatorData
+
 import json
 import os
-from thrusters import Thrusters
-from rov_types import IMUData, PressureData, ROVConfig, RegulatorData
 
 
 class ROVState:

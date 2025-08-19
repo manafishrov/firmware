@@ -1,11 +1,13 @@
 from __future__ import annotations
+from typing import Optional, TYPE_CHECKING
+if TYPE_CHECKING:
+    from rov_state import ROVState
+    from rov_types import PressureData
+
 import asyncio
 import ms5837
 from log import log_error, log_info
 from toast import toast_error
-from typing import Optional
-from rov_state import ROVState
-from rov_types import PressureData
 
 
 class PressureSensor:

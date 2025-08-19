@@ -1,13 +1,15 @@
 from __future__ import annotations
+from typing import Optional, TYPE_CHECKING
+if TYPE_CHECKING:
+    from websockets.exceptions import ConnectionClosed
+    from websockets.server import WebSocketServer, WebSocketServerProtocol
+    from rov_state import ROVState
+
 import asyncio
 import json
 import websockets
-from websockets.exceptions import ConnectionClosed
 from websocket_handler import handle_message
 from log import set_log_is_client_connected_status, log_info, log_error, log_warn
-from typing import Optional
-from websockets.server import WebSocketServer, WebSocketServerProtocol
-from rov_state import ROVState
 
 FIRMWARE_VERSION = "1.0.0"
 IP_ADDRESS = "10.10.10.10"

@@ -1,16 +1,18 @@
 from __future__ import annotations
+from typing import Union, TYPE_CHECKING
+if TYPE_CHECKING:
+    from rov_state import ROVState
+    from numpy.typing import NDArray
+
 import asyncio
 from log import log_error
 import numpy as np
-from numpy.typing import NDArray
 import struct
 import serial
 import glob
 import sys
 import time
 import threading
-from typing import Union
-from rov_state import ROVState
 
 
 class Thrusters:
