@@ -8,6 +8,7 @@ from typing import Any, Callable, Awaitable, Dict
 from rov_state import ROVState
 from rov_types import ROVConfig
 from websockets.server import WebSocketServerProtocol
+from pico import flash_micro_controller_firmware
 
 
 async def handle_message(
@@ -129,6 +130,13 @@ async def handle_toggle_depth_stabilization(
 ) -> None:
     state.depth_stabilization = not state.depth_stabilization
 
+async def handle_flash_micro_controller_firmware(
+    payload: str,
+    _websocket: WebSocketServerProtocol,
+    _state: ROVState,
+) -> None:
+    await flash_micro_controller_firmware(payload)
+
 
 HandlerType = Callable[[Any, WebSocketServerProtocol, ROVState], Awaitable[None]]
 
@@ -144,4 +152,5 @@ MESSAGE_TYPE_HANDLERS: Dict[str, HandlerType] = {
     "togglePitchStabilization": handle_toggle_pitch_stabilization,
     "toggleRollStabilization": handle_toggle_roll_stabilization,
     "toggleDepthStabilization": handle_toggle_depth_stabilization,
+    "flashMicroControllerFirmware": handle_flash_micro_controller_firmware,
 }
