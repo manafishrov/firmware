@@ -1,4 +1,5 @@
 {
+  "microcontrollerFirmwareVariant": "dshot300",
   "fluidType": "saltwater",
   "thrusterPinSetup": {
     "identifiers": [

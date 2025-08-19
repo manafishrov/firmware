@@ -4,7 +4,7 @@ import subprocess
 import os
 from log import log_info, log_error
 
-async def flash_micro_controller_firmware(firmware_variant: str) -> None:
+async def flash_microcontroller_firmware(firmware_variant: str) -> None:
     if firmware_variant == 'pwm':
         firmware_path = os.path.join(os.path.dirname(__file__), 'pico', 'pwm.uf2')
     elif firmware_variant == 'dshot300':
