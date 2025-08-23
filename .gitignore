@@ -1,9 +1,9 @@
 # misc
 .DS_Store
 
-# Python
+# python
 __pycache__
 
-# Build files
+# build files
 result
 build
