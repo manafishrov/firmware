@@ -6,6 +6,7 @@
 #include "pico/time.h"
 #include "dshot.h"
 
+
 #define MOTOR0_PIN_BASE 6
 #define MOTOR1_PIN_BASE 18
 #define NUM_MOTORS_0 4
@@ -29,10 +30,17 @@
 #define DSHOT_CMD_MAX_FORWARD 2047
 
 #define TELEMETRY_START_BYTE 0xA5
-#define TELEMETRY_PACKET_SIZE 7
+#define TELEMETRY_PACKET_SIZE 8
+#define TELEMETRY_ID_VOLTAGE 0xFF
+#define TELEMETRY_TYPE_ERPM 0
+#define TELEMETRY_TYPE_VOLTAGE 1
+#define TELEMETRY_TYPE_TEMPERATURE 2
+#define TELEMETRY_TYPE_CURRENT 3
 
 #define INPUT_START_BYTE 0x5A
 #define INPUT_PACKET_SIZE (1 + NUM_MOTORS * 2 + 1)
+
+
 
 static uint16_t thruster_values[NUM_MOTORS] = {0};
 static absolute_time_t last_comm_time;
@@ -65,26 +73,38 @@ uint16_t translate_throttle_to_dshot(uint16_t cmd_throttle) {
     return DSHOT_CMD_NEUTRAL;
 }
 
+void send_telemetry(uint8_t motor_id, uint8_t type, int32_t value) {
+    uint8_t buf[TELEMETRY_PACKET_SIZE];
+    buf[0] = TELEMETRY_START_BYTE;
+    buf[1] = motor_id;
+    buf[2] = type;
+    memcpy(&buf[3], &value, 4);
+    buf[TELEMETRY_PACKET_SIZE - 1] = calculate_checksum(&buf[0], TELEMETRY_PACKET_SIZE - 1);
+    fwrite(buf, 1, TELEMETRY_PACKET_SIZE, stdout);
+    fflush(stdout);
+}
+
 void telemetry_callback(void *context, int channel, enum dshot_telemetry_type type, int value) {
+    telemetry_context_t *ctx = (telemetry_context_t *)context;
+    uint8_t global_motor_id = ctx->controller_base_global_id + channel;
+
     if (type == DSHOT_TELEMETRY_ERPM) {
-        telemetry_context_t *ctx = (telemetry_context_t *)context;
-        uint8_t global_motor_id = ctx->controller_base_global_id + channel;
-
-        uint8_t buf[TELEMETRY_PACKET_SIZE];
-        buf[0] = TELEMETRY_START_BYTE;
-        buf[1] = global_motor_id;
-        int32_t v = value;
-        memcpy(&buf[2], &v, 4);
-
-        buf[TELEMETRY_PACKET_SIZE - 1] = calculate_checksum(&buf[0], TELEMETRY_PACKET_SIZE - 1);
-
-        fwrite(buf, 1, TELEMETRY_PACKET_SIZE, stdout);
-        fflush(stdout);
+        send_telemetry(global_motor_id, TELEMETRY_TYPE_ERPM, value);
+    } else if (type == DSHOT_TELEMETRY_VOLTAGE) {
+        send_telemetry(global_motor_id, TELEMETRY_TYPE_VOLTAGE, value);
+    } else if (type == DSHOT_TELEMETRY_TEMPERATURE) {
+        send_telemetry(global_motor_id, TELEMETRY_TYPE_TEMPERATURE, value);
+    } else if (type == DSHOT_TELEMETRY_CURRENT) {
+        send_telemetry(global_motor_id, TELEMETRY_TYPE_CURRENT, value);
     }
 }
 
+
+
 int main() {
     stdio_init_all();
+
+
 
     struct dshot_controller controller0, controller1;
     dshot_controller_init(&controller0, DSHOT_SPEED, DSHOT_PIO, DSHOT_SM_0, MOTOR0_PIN_BASE, NUM_MOTORS_0);
@@ -99,6 +119,8 @@ int main() {
 
     static uint8_t usb_buf[INPUT_PACKET_SIZE];
     static size_t usb_idx = 0;
+
+
 
     while (true) {
         int c = getchar_timeout_us(0);
@@ -144,6 +166,8 @@ int main() {
 
         dshot_loop(&controller0);
         dshot_loop(&controller1);
+
+    
     }
     return 0;
 }

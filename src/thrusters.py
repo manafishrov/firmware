@@ -19,6 +19,9 @@ class Thrusters:
     def __init__(self, state: ROVState):
         self.state: ROVState = state
         self.erpms: list[float] = [0.0] * 8
+        self.voltages: list[float] = [0.0] * 8
+        self.temperatures: list[float] = [0.0] * 8
+        self.currents: list[float] = [0.0] * 8
         self.serial = None
         self._serial_lock = threading.Lock()
 
@@ -40,7 +43,7 @@ class Thrusters:
 
     def _telemetry_reader(self):
         TELEMETRY_START_BYTE = 0xA5
-        TELEMETRY_PACKET_SIZE = 7
+        TELEMETRY_PACKET_SIZE = 8
         try:
             if self.serial is None:
                 return
@@ -64,8 +67,7 @@ class Thrusters:
                                 read_buffer = read_buffer[start_index:]
                             if len(read_buffer) >= TELEMETRY_PACKET_SIZE:
                                 packet = read_buffer[:TELEMETRY_PACKET_SIZE]
-                                if self._validate_and_update_erpm(packet):
-                                    pass
+                                self._validate_and_update_telemetry(packet)
                                 read_buffer = read_buffer[TELEMETRY_PACKET_SIZE:]
                             else:
                                 break
@@ -74,12 +76,26 @@ class Thrusters:
                     break
         except Exception:
             pass
+ 
+    def _update_battery_percentage(self, voltage: float):
+        VOLTAGE_MIN = 12.8
+        VOLTAGE_MAX = 16.8
+        percentage = 100 * (voltage - VOLTAGE_MIN) / (VOLTAGE_MAX - VOLTAGE_MIN)
+        self.state.battery_percentage = int(np.clip(percentage, 0, 100))
 
-    def _validate_and_update_erpm(self, pkt_bytes):
+    def _update_average_voltage(self):
+        valid_voltages = [v for v in self.voltages if v > 0]
+        if valid_voltages:
+            average_voltage = sum(valid_voltages) / len(valid_voltages)
+            self.state.battery_voltage = average_voltage
+            self._update_battery_percentage(average_voltage / 100.0)
+
+    def _validate_and_update_telemetry(self, pkt_bytes):
         import struct
 
         TELEMETRY_START_BYTE = 0xA5
-        TELEMETRY_PACKET_SIZE = 7
+        TELEMETRY_PACKET_SIZE = 8
+        
         if len(pkt_bytes) != TELEMETRY_PACKET_SIZE:
             return False
         if pkt_bytes[0] != TELEMETRY_START_BYTE:
@@ -95,11 +111,31 @@ class Thrusters:
         received_checksum = pkt_bytes[TELEMETRY_PACKET_SIZE - 1]
         if calculated_checksum != received_checksum:
             return False
-        global_motor_id = pkt_bytes[1]
-        erpm_value = struct.unpack("<i", pkt_bytes[2:6])[0]
-        if 0 <= global_motor_id < len(self.erpms):
-            self.erpms[global_motor_id] = erpm_value
-        return True
+            
+        global_id = pkt_bytes[1]
+        packet_type = pkt_bytes[2]
+        
+        if 0 <= global_id < 8:
+            if packet_type == 0:  # ERPM
+                erpm_value = struct.unpack("<i", pkt_bytes[3:7])[0]
+                self.erpms[global_id] = erpm_value
+                return True
+            elif packet_type == 1:  # Voltage
+                voltage_cv = struct.unpack("<i", pkt_bytes[3:7])[0]
+                self.voltages[global_id] = voltage_cv
+                self._update_average_voltage()
+                return True
+            elif packet_type == 2:  # Temperature
+                temp_c = struct.unpack("<i", pkt_bytes[3:7])[0]
+                self.temperatures[global_id] = temp_c
+                self.state.esc_temperatures[global_id] = temp_c
+                return True
+            elif packet_type == 3:  # Current
+                current_ca = struct.unpack("<i", pkt_bytes[3:7])[0]
+                self.currents[global_id] = current_ca
+                self.state.esc_currents[global_id] = current_ca
+                return True
+        return False
 
     async def _find_pico_port(self) -> str:
         pico_ports = glob.glob("/dev/serial/by-id/usb-Raspberry_Pi_Pico*")

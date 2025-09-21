@@ -9,7 +9,7 @@ import threading
 import queue
 
 TELEMETRY_START_BYTE = 0xA5
-TELEMETRY_PACKET_SIZE = 7
+TELEMETRY_PACKET_SIZE = 8
 
 INPUT_START_BYTE = 0x5A
 INPUT_PACKET_OVERHEAD = 2
@@ -87,11 +87,22 @@ def print_telemetry(pkt_bytes: bytes | bytearray) -> None:
     if calculated_checksum != received_checksum:
         return
 
-    global_motor_id = pkt_bytes[1]
-    erpm_value = struct.unpack("<i", pkt_bytes[2:6])[0]
+    global_id = pkt_bytes[1]
+    packet_type = pkt_bytes[2]
 
-    if global_motor_id == current_test_motor_id:
-        print(f"[Telemetry] Motor {global_motor_id}: ERPM = {erpm_value}")
+    if packet_type == 0:  # ERPM
+        erpm_value = struct.unpack("<i", pkt_bytes[3:7])[0]
+        if global_id == current_test_motor_id:
+            print(f"[Telemetry] Motor {global_id}: ERPM = {erpm_value}")
+    elif packet_type == 1:  # Voltage
+        voltage_cv = struct.unpack("<i", pkt_bytes[3:7])[0]
+        print(f"[Telemetry] Motor {global_id}: Voltage = {voltage_cv} cV")
+    elif packet_type == 2:  # Temperature
+        temp_c = struct.unpack("<i", pkt_bytes[3:7])[0]
+        print(f"[Telemetry] Motor {global_id}: Temperature = {temp_c} °C")
+    elif packet_type == 3:  # Current
+        current_ca = struct.unpack("<i", pkt_bytes[3:7])[0]
+        print(f"[Telemetry] Motor {global_id}: Current = {current_ca / 100.0:.2f} A")
 
 
 def telemetry_reader_thread(
