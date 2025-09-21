@@ -99,12 +99,8 @@ void telemetry_callback(void *context, int channel, enum dshot_telemetry_type ty
     }
 }
 
-
-
 int main() {
     stdio_init_all();
-
-
 
     struct dshot_controller controller0, controller1;
     dshot_controller_init(&controller0, DSHOT_SPEED, DSHOT_PIO, DSHOT_SM_0, MOTOR0_PIN_BASE, NUM_MOTORS_0);
@@ -119,8 +115,6 @@ int main() {
 
     static uint8_t usb_buf[INPUT_PACKET_SIZE];
     static size_t usb_idx = 0;
-
-
 
     while (true) {
         int c = getchar_timeout_us(0);
@@ -166,8 +160,6 @@ int main() {
 
         dshot_loop(&controller0);
         dshot_loop(&controller1);
-
-    
     }
     return 0;
 }
