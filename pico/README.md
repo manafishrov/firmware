@@ -49,16 +49,25 @@ After building, the .uf2 file will be located in either `build/dshot/` or `build
 To flash the DShot firmware:
 
 ```sh
-picotool load -f -x dshot/dshot_firmware.uf2
+picotool load -f -x build/dshot/dshot_firmware.uf2
 ```
 
 To flash the PWM firmware:
 
 ```sh
-picotool load -f -x pwm/pwm_firmware.uf2
+picotool load -f -x build/pwm/pwm_firmware.uf2
 ```
 
 This should work regardless of if the Pico is in BOOTSEL mode or not.
+
+## Add to firmware
+
+To make the pico firmware part of the main Manafish firmware, you need to copy the built `.uf2` file to the `src` directory. You can do this with the following commands:
+
+```sh
+cp build/dshot/dshot_firmware.uf2 ../src/pico/dshot300.uf2
+cp build/pwm/pwm_firmware.uf2 ../src/pico/pwm.uf2
+```
 
 ## View firmware serial output
 
