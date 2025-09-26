@@ -6,17 +6,17 @@ import time
 import websockets
 import math
 import signal
-from typing import Dict, Optional, Set, Union
+from typing import Optional, Union
 from websockets.legacy.server import WebSocketServerProtocol
 
-clients: Set[WebSocketServerProtocol] = set()
+clients: set[WebSocketServerProtocol] = set()
 shutdown: bool = False
 
 pitch_stabilization = False
 roll_stabilization = False
 depth_stabilization = False
 
-on_going_thruster_tests: Dict[Union[str, int], asyncio.Task] = {}
+on_going_thruster_tests: dict[Union[str, int], asyncio.Task] = {}
 on_going_regulator_autotune: Optional[asyncio.Task] = None
 
 rov_config = {

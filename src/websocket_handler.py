@@ -1,11 +1,11 @@
 from __future__ import annotations
-from typing import Any, Callable, Awaitable, Dict, TYPE_CHECKING
+from typing import Any, Callable, Awaitable, TYPE_CHECKING
+
 if TYPE_CHECKING:
     from rov_types import ROVConfig
-    from numpy.typing import NDArray
 
 import json
-import numpy as np
+import time
 from websockets.server import WebSocketServerProtocol
 from log import log_info, log_error
 from toast import toast_success
@@ -20,7 +20,7 @@ async def handle_message(
     state: ROVState,
 ) -> None:
     async def handle_unknown(payload, _websocket, _state):
-        await log_error(
+        log_error(
             f"Unknown message type received: {msg_type} with payload: {payload}"
         )
 
@@ -28,7 +28,7 @@ async def handle_message(
     try:
         await handler(payload, websocket, state)
     except Exception as exc:
-        await log_error(f"Error in handler for message type '{msg_type}': {exc}")
+        log_error(f"Error in handler for message type '{msg_type}': {exc}")
 
 
 async def handle_get_config(
@@ -38,7 +38,7 @@ async def handle_get_config(
 ) -> None:
     msg = {"type": "config", "payload": state.rov_config}
     await websocket.send(json.dumps(msg))
-    await log_info("Sent config to client.")
+    log_info("Sent config to client.")
 
 
 async def handle_set_config(
@@ -47,8 +47,8 @@ async def handle_set_config(
     state: ROVState,
 ) -> None:
     state.set_config(payload)
-    await log_info("Received and applied new config.")
-    await toast_success(
+    log_info("Received and applied new config.")
+    toast_success(
         id=None,
         message="ROV config set successfully",
         description=None,
@@ -61,8 +61,10 @@ async def handle_direction_vector(
     _websocket: WebSocketServerProtocol,
     state: ROVState,
 ) -> None:
-    payload_array: NDArray[np.float64] = np.array(payload, dtype=np.float64)
-    state.thrusters.run_thrusters_with_regulator(payload_array)
+    if isinstance(payload, list) and len(payload) <= 8:
+        padded_payload = (payload + [0.0] * 8)[:8]
+        state.thruster_command = padded_payload
+        state.last_thruster_command_time = time.time()
 
 
 async def handle_start_thruster_test(
@@ -70,7 +72,7 @@ async def handle_start_thruster_test(
     _websocket: WebSocketServerProtocol,
     state: ROVState,
 ) -> None:
-    state.thrusters.test_thruster(payload)
+    log_info(f"Received command to start thruster test: {payload}")
 
 
 async def handle_cancel_thruster_test(
@@ -79,7 +81,7 @@ async def handle_cancel_thruster_test(
     _state: ROVState,
 ) -> None:
     # Should call something in thrusters
-    await log_info(f"Received command to cancel thruster test: {payload}")
+    log_info(f"Received command to cancel thruster test: {payload}")
 
 
 async def handle_start_regulator_auto_tuning(
@@ -88,7 +90,7 @@ async def handle_start_regulator_auto_tuning(
     _state: ROVState,
 ) -> None:
     # Should call something in regulator
-    await log_info("Received command to start regulator auto-tuning")
+    log_info("Received command to start regulator auto-tuning")
 
 
 async def handle_cancel_regulator_auto_tuning(
@@ -97,7 +99,7 @@ async def handle_cancel_regulator_auto_tuning(
     _state: ROVState,
 ) -> None:
     # Should call something in regulator
-    await log_info("Received command to cancel regulator auto-tuning")
+    log_info("Received command to cancel regulator auto-tuning")
 
 
 async def handle_custom_action(
@@ -132,22 +134,23 @@ async def handle_toggle_depth_stabilization(
 ) -> None:
     state.depth_stabilization = not state.depth_stabilization
 
+
 async def handle_flash_microcontroller_firmware(
     payload: str,
     _websocket: WebSocketServerProtocol,
     _state: ROVState,
 ) -> None:
-    await flash_microcontroller_firmware(payload)
+    flash_microcontroller_firmware(payload)
 
 
 HandlerType = Callable[[Any, WebSocketServerProtocol, ROVState], Awaitable[None]]
 
-MESSAGE_TYPE_HANDLERS: Dict[str, HandlerType] = {
+MESSAGE_TYPE_HANDLERS: dict[str, HandlerType] = {
     "directionVector": handle_direction_vector,
     "getConfig": handle_get_config,
     "setConfig": handle_set_config,
     "startThrusterTest": handle_start_thruster_test,
-    "cancelThrusterTest": handle_start_thruster_test,
+    "cancelThrusterTest": handle_cancel_thruster_test,
     "startRegulatorAutoTuning": handle_start_regulator_auto_tuning,
     "cancelRegulatorAutoTuning": handle_cancel_regulator_auto_tuning,
     "customAction": handle_custom_action,

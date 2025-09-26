@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Optional, TYPE_CHECKING
+
 if TYPE_CHECKING:
     from websockets.exceptions import ConnectionClosed
     from websockets.server import WebSocketServer, WebSocketServerProtocol
@@ -31,7 +32,7 @@ class WebsocketServer:
     async def handler(self, websocket: WebSocketServerProtocol) -> None:
         self.client = websocket
         set_log_is_client_connected_status(True)
-        await log_info(f"Client connected: {websocket.remote_address}.")
+        log_info(f"Client connected: {websocket.remote_address}.")
 
         async def send_firmware_version_on_connect():
             await asyncio.sleep(5)
@@ -41,7 +42,7 @@ class WebsocketServer:
                     "payload": FIRMWARE_VERSION,
                 }
                 await websocket.send(json.dumps(version_message))
-                await log_info(
+                log_info(
                     f"Sent firmware version '{FIRMWARE_VERSION}' to {websocket.remote_address}"
                 )
                 config_message = {
@@ -49,39 +50,39 @@ class WebsocketServer:
                     "payload": self.state.rov_config,
                 }
                 await websocket.send(json.dumps(config_message))
-                await log_info(f"Sent config to {websocket.remote_address}")
+                log_info(f"Sent config to {websocket.remote_address}")
             except ConnectionClosed:
-                await log_warn(
+                log_warn(
                     f"Client disconnected before firmware version and config could be sent to {websocket.remote_address}"
                 )
             except Exception as e:
-                await log_error(f"Error sending initial data: {e}")
+                log_error(f"Error sending initial data: {e}")
 
         asyncio.create_task(send_firmware_version_on_connect())
 
         try:
-            async for message in websocket:
+            for message in websocket:
                 try:
                     data = json.loads(message)
                     msg_type = data.get("type")
                     payload = data.get("payload")
-                    await handle_message(msg_type, payload, websocket, self.state)
+                    handle_message(msg_type, payload, websocket, self.state)
                 except json.JSONDecodeError:
-                    await log_error(
+                    log_error(
                         f"Error: Received invalid JSON from {websocket.remote_address}"
                     )
                 except Exception as e:
-                    await log_error(f"Error processing message: {e}")
+                    log_error(f"Error processing message: {e}")
         except ConnectionClosed:
-            await log_info(f"Client connection closed: {websocket.remote_address}")
+            log_info(f"Client connection closed: {websocket.remote_address}")
         finally:
             self.client = None
             set_log_is_client_connected_status(False)
-            await log_info("Client disconnected.")
+            log_info("Client disconnected.")
 
     async def start(self) -> None:
         self.server = await websockets.serve(self.handler, IP_ADDRESS, PORT)
-        await log_info(f"Websocket server started on {IP_ADDRESS}:{PORT}")
+        log_info(f"Websocket server started on {IP_ADDRESS}:{PORT}")
 
     async def wait_closed(self) -> None:
         if self.server:

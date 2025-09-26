@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import List, Literal, TypedDict
+from typing import Literal, TypedDict
 
 
 class IMUData(TypedDict):
@@ -22,8 +22,8 @@ class RegulatorData(TypedDict):
 
 
 class ThrusterPinSetup(TypedDict):
-    identifiers: List[int]
-    spinDirections: List[int]
+    identifiers: list[int]
+    spinDirections: list[int]
 
 
 class PIDParams(TypedDict):
@@ -58,7 +58,7 @@ class PowerConfig(TypedDict):
 class ROVConfig(TypedDict):
     fluidType: Literal["saltwater", "freshwater"]
     thrusterPinSetup: ThrusterPinSetup
-    thrusterAllocation: List[List[int]]
+    thrusterAllocation: list[list[int]]
     regulator: RegulatorConfig
     directionCoefficients: DirectionCoefficients
     power: PowerConfig
