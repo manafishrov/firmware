@@ -47,7 +47,7 @@ class WebsocketServer:
                 )
                 config_message = {
                     "type": "config",
-                    "payload": self.state.rov_config,
+                    "payload": self.state.rov_config.to_dict(),
                 }
                 await websocket.send(json.dumps(config_message))
                 log_info(f"Sent config to {websocket.remote_address}")

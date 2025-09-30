@@ -1,5 +1,6 @@
 from __future__ import annotations
 from typing import Union, TYPE_CHECKING
+
 if TYPE_CHECKING:
     from rov_state import ROVState
     from numpy.typing import NDArray
@@ -76,7 +77,7 @@ class Thrusters:
                     break
         except Exception:
             pass
- 
+
     def _update_battery_percentage(self, voltage: float):
         VOLTAGE_MIN = 12.8
         VOLTAGE_MAX = 16.8
@@ -95,7 +96,7 @@ class Thrusters:
 
         TELEMETRY_START_BYTE = 0xA5
         TELEMETRY_PACKET_SIZE = 8
-        
+
         if len(pkt_bytes) != TELEMETRY_PACKET_SIZE:
             return False
         if pkt_bytes[0] != TELEMETRY_START_BYTE:
@@ -111,10 +112,10 @@ class Thrusters:
         received_checksum = pkt_bytes[TELEMETRY_PACKET_SIZE - 1]
         if calculated_checksum != received_checksum:
             return False
-            
+
         global_id = pkt_bytes[1]
         packet_type = pkt_bytes[2]
-        
+
         if 0 <= global_id < 8:
             if packet_type == 0:  # ERPM
                 erpm_value = struct.unpack("<i", pkt_bytes[3:7])[0]
@@ -159,7 +160,7 @@ class Thrusters:
     def _scale_vector_with_user_max_power(
         self, direction_vector: NDArray[np.float64]
     ) -> None:
-        scale = self.state.rov_config["power"]["userMaxPower"]
+        scale = self.state.rov_config.power.user_max_power
         np.multiply(direction_vector, scale, out=direction_vector)
         return direction_vector
 
@@ -167,7 +168,7 @@ class Thrusters:
         self, direction_vector: NDArray[np.float64]
     ) -> list[float]:
         allocation_matrix = np.array(
-            self.state.rov_config["thrusterAllocation"], dtype=float
+            self.state.rov_config.thruster_allocation, dtype=float
         )
         direction_vector_np = direction_vector.reshape(-1)
         cols = direction_vector_np.shape[0]
@@ -177,20 +178,24 @@ class Thrusters:
 
     def _correct_spin_direction(self, thrust_vector: list[float]) -> list[float]:
         spin_directions = np.array(
-            self.state.rov_config["thrusterPinSetup"]["spinDirections"]
+            self.state.rov_config.thruster_pin_setup.spin_directions
         )
         return thrust_vector * spin_directions
 
     def _reorder_thrust_vector(self, thrust_vector: list[float]) -> list[float]:
-        identifiers = self.state.rov_config["thrusterPinSetup"]["identifiers"]
+        identifiers = self.state.rov_config.thruster_pin_setup.identifiers
         reordered = [0.0] * len(identifiers)
         for i in range(len(identifiers)):
             reordered[i] = thrust_vector[identifiers[i]]
         return reordered
 
-    def run_thrusters_with_regulator(self, direction_vector: NDArray[np.float64]) -> None:
+    def run_thrusters_with_regulator(
+        self, direction_vector: NDArray[np.float64]
+    ) -> None:
         direction_vector = self._scale_vector_with_user_max_power(direction_vector)
-        thrust_vector = self._create_thrust_vector_from_thruster_allocation(direction_vector)
+        thrust_vector = self._create_thrust_vector_from_thruster_allocation(
+            direction_vector
+        )
         self.run_thrusters(thrust_vector)
 
     def run_thrusters(self, thrust_vector: list[float], reorder: bool = True) -> None:
@@ -229,7 +234,6 @@ class Thrusters:
                 with self._serial_lock:
                     self.serial.write(full_packet)
             except Exception as e:
-
                 asyncio.create_task(log_error(f"Error writing to thruster serial: {e}"))
         else:
             asyncio.create_task(

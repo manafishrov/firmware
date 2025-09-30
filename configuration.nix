@@ -132,6 +132,7 @@ in
         websockets
         smbus2
         pyserial
+        pydantic
       ] ++ [
         (pkgs.python3Packages.buildPythonPackage {
           pname = "bmi270";

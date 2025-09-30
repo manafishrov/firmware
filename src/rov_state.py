@@ -2,10 +2,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from rov_types import IMUData, PressureData, ROVConfig, RegulatorData
-
-import json
-import os
+    from rov_config import ROVConfig
+from rov_types import IMUData, PressureData, RegulatorData
 
 
 class ROVState:
@@ -19,9 +17,7 @@ class ROVState:
     regulator: RegulatorData
 
     def __init__(self) -> None:
-        self.config_path = os.path.join(os.path.dirname(__file__), "config.json")
-        with open(self.config_path, "r") as f:
-            self.rov_config: ROVConfig = json.load(f)
+        self.rov_config = ROVConfig.load()
 
         self.imu: IMUData = {"acceleration": 0.0, "gyroscope": 0.0, "temperature": 0.0}
         self.pressure: PressureData = {
@@ -41,5 +37,4 @@ class ROVState:
 
     def set_config(self, config: ROVConfig) -> None:
         self.rov_config = config
-        with open(self.config_path, "w") as f:
-            json.dump(config, f, indent=2)
+        self.rov_config.save()

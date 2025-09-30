@@ -1,15 +1,21 @@
 from __future__ import annotations
 from typing import Optional, TYPE_CHECKING
+
 if TYPE_CHECKING:
     from rov_state import ROVState
-    from rov_types import IMUData
 
 from bmi270.BMI270 import *
-
-
+from pydantic import BaseModel
 import asyncio
 from log import log_error, log_info
 from toast import toast_error
+
+
+class IMUData(BaseModel):
+    acceleration: float
+    gyroscope: float
+    temperature: float
+
 
 class IMU:
     def __init__(self, state: ROVState):
@@ -39,9 +45,7 @@ class IMU:
             log_info("BMI270 IMU initialized successfully.")
 
         except Exception as e:
-            log_error(
-                f"Failed to initialize BMI270 IMU. Is it connected? Error: {e}"
-            )
+            log_error(f"Failed to initialize BMI270 IMU. Is it connected? Error: {e}")
             toast_error(
                 id=None,
                 message="IMU Init Failed!",
@@ -53,11 +57,11 @@ class IMU:
         try:
             if self.imu is None:
                 return None
-            return {
-                "acceleration": self.imu.get_acc_data(),
-                "gyroscope": self.imu.get_gyr_data(),
-                "temperature": self.imu.get_temp_data(),
-            }
+            return IMUData(
+                acceleration=self.imu.get_acc_data(),
+                gyroscope=self.imu.get_gyr_data(),
+                temperature=self.imu.get_temp_data(),
+            )
         except Exception as e:
             log_error(f"Error reading IMU data: {e}")
             return None

@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Any, Callable, Awaitable, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from rov_types import ROVConfig
+    from rov_config import ROVConfig
 
 import json
 import time
@@ -20,9 +20,7 @@ async def handle_message(
     state: ROVState,
 ) -> None:
     async def handle_unknown(payload, _websocket, _state):
-        log_error(
-            f"Unknown message type received: {msg_type} with payload: {payload}"
-        )
+        log_error(f"Unknown message type received: {msg_type} with payload: {payload}")
 
     handler = MESSAGE_TYPE_HANDLERS.get(msg_type, handle_unknown)
     try:
@@ -36,17 +34,17 @@ async def handle_get_config(
     websocket: WebSocketServerProtocol,
     state: ROVState,
 ) -> None:
-    msg = {"type": "config", "payload": state.rov_config}
+    msg = {"type": "config", "payload": state.rov_config.to_dict()}
     await websocket.send(json.dumps(msg))
     log_info("Sent config to client.")
 
 
 async def handle_set_config(
-    payload: ROVConfig,
+    payload: dict,
     _websocket: WebSocketServerProtocol,
     state: ROVState,
 ) -> None:
-    state.set_config(payload)
+    state.set_config(ROVConfig.from_dict(payload))
     log_info("Received and applied new config.")
     toast_success(
         id=None,

@@ -3,12 +3,18 @@ from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
     from rov_state import ROVState
-    from rov_types import PressureData
 
 import asyncio
 import ms5837
 from log import log_error, log_info
 from toast import toast_error
+from pydantic import BaseModel
+
+
+class PressureData(BaseModel):
+    pressure: float
+    temperature: float
+    depth: float
 
 
 class PressureSensor:
@@ -40,16 +46,16 @@ class PressureSensor:
                 return None
 
             if self.sensor.read():
-                fluid_type = self.state.rov_config["fluidType"]
+                fluid_type = self.state.rov_config.fluid_type
                 if fluid_type == "saltwater":
                     depth = self.sensor.depth(ms5837.DENSITY_SALTWATER)
                 else:
                     depth = self.sensor.depth(ms5837.DENSITY_FRESHWATER)
-                return {
-                    "pressure": self.sensor.pressure(),
-                    "temperature": self.sensor.temperature(),
-                    "depth": depth,
-                }
+                return PressureData(
+                    pressure=self.sensor.pressure(),
+                    temperature=self.sensor.temperature(),
+                    depth=depth,
+                )
             else:
                 return None
         except Exception as e:
