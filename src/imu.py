@@ -42,9 +42,11 @@ class IMU:
             await asyncio.to_thread(imu_instance.enable_gyr_filter_perf)
 
             self.imu = imu_instance
+            self.state.system_status.imu_ok = True
             log_info("BMI270 IMU initialized successfully.")
 
         except Exception as e:
+            self.state.system_status.imu_ok = False
             log_error(f"Failed to initialize BMI270 IMU. Is it connected? Error: {e}")
             toast_error(
                 id=None,
@@ -55,7 +57,7 @@ class IMU:
 
     def read_data(self) -> Optional[IMUData]:
         try:
-            if self.imu is None:
+            if not self.state.system_status.imu_ok:
                 return None
             return IMUData(
                 acceleration=self.imu.get_acc_data(),

@@ -17,15 +17,9 @@ async def main() -> None:
     await ws_server.start()
     message_sender_task = asyncio.create_task(senders.message_sender())
 
-    # imu = IMU(state)
-    # await imu.initialize()
-    # pressure_sensor = PressureSensor(state)
-    # await pressure_sensor.initialize()
     await state.thrusters.initialize()
 
     tasks = [
-        # imu.start_reading_loop(),
-        # pressure_sensor.start_reading_loop(),
         ws_server.wait_closed(),
         senders.telemetry_sender(),
         senders.status_update_sender(),

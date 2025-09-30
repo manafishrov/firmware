@@ -28,8 +28,10 @@ class PressureSensor:
             sensor_instance = await asyncio.to_thread(ms5837.MS5837_30BA)
             await asyncio.to_thread(sensor_instance.init)
             self.sensor = sensor_instance
+            self.state.system_status.pressure_sensor_ok = True
             log_info("MS5837 pressure sensor initialized successfully.")
         except Exception as e:
+            self.state.system_status.pressure_sensor_ok = False
             log_error(
                 f"Failed to initialize MS5837 pressure sensor. Is it connected? Error: {e}"
             )
@@ -42,12 +44,11 @@ class PressureSensor:
 
     def read_data(self) -> Optional[PressureData]:
         try:
-            if self.sensor is None:
+            if not self.state.system_status.pressure_sensor_ok:
                 return None
 
             if self.sensor.read():
-                fluid_type = self.state.rov_config.fluid_type
-                if fluid_type == "saltwater":
+                if self.state.rov_config.fluid_type == "saltwater":
                     depth = self.sensor.depth(ms5837.DENSITY_SALTWATER)
                 else:
                     depth = self.sensor.depth(ms5837.DENSITY_FRESHWATER)
