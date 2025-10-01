@@ -12,9 +12,9 @@ from toast import toast_error
 
 
 class IMUData(BaseModel):
-    acceleration: float
-    gyroscope: float
-    temperature: float
+    acceleration: float = 0.0
+    gyroscope: float = 0.0
+    temperature: float = 0.0
 
 
 class IMU:
@@ -42,11 +42,11 @@ class IMU:
             await asyncio.to_thread(imu_instance.enable_gyr_filter_perf)
 
             self.imu = imu_instance
-            self.state.system_status.imu_ok = True
+            self.state.system_health.imu_ok = True
             log_info("BMI270 IMU initialized successfully.")
 
         except Exception as e:
-            self.state.system_status.imu_ok = False
+            self.state.system_health.imu_ok = False
             log_error(f"Failed to initialize BMI270 IMU. Is it connected? Error: {e}")
             toast_error(
                 id=None,
@@ -57,7 +57,7 @@ class IMU:
 
     def read_data(self) -> Optional[IMUData]:
         try:
-            if not self.state.system_status.imu_ok:
+            if not self.state.system_health.imu_ok:
                 return None
             return IMUData(
                 acceleration=self.imu.get_acc_data(),

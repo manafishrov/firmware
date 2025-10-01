@@ -44,7 +44,7 @@ async def handle_set_config(
     _websocket: WebSocketServerProtocol,
     state: ROVState,
 ) -> None:
-    state.set_config(ROVConfig.from_dict(payload))
+    state.update_config(payload)
     log_info("Received and applied new config.")
     toast_success(
         id=None,
@@ -114,7 +114,9 @@ async def handle_toggle_pitch_stabilization(
     _websocket: WebSocketServerProtocol,
     state: ROVState,
 ) -> None:
-    state.pitch_stabilization = not state.pitch_stabilization
+    state.system_status.pitch_stabilization = (
+        not state.system_status.pitch_stabilization
+    )
 
 
 async def handle_toggle_roll_stabilization(
@@ -122,7 +124,7 @@ async def handle_toggle_roll_stabilization(
     _websocket: WebSocketServerProtocol,
     state: ROVState,
 ) -> None:
-    state.roll_stabilization = not state.roll_stabilization
+    state.system_status.roll_stabilization = not state.system_status.roll_stabilization
 
 
 async def handle_toggle_depth_stabilization(
@@ -130,7 +132,9 @@ async def handle_toggle_depth_stabilization(
     _websocket: WebSocketServerProtocol,
     state: ROVState,
 ) -> None:
-    state.depth_stabilization = not state.depth_stabilization
+    state.system_status.depth_stabilization = (
+        not state.system_status.depth_stabilization
+    )
 
 
 async def handle_flash_microcontroller_firmware(

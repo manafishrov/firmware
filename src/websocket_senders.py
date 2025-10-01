@@ -45,9 +45,9 @@ class WebsocketSenders:
     async def status_update_sender(self) -> None:
         while True:
             status_data = {
-                "pitchStabilization": self.state.pitch_stabilization,
-                "rollStabilization": self.state.roll_stabilization,
-                "depthStabilization": self.state.depth_stabilization,
+                "pitchStabilization": self.state.system_status.pitch_stabilization,
+                "rollStabilization": self.state.system_status.roll_stabilization,
+                "depthStabilization": self.state.system_status.depth_stabilization,
                 "batteryPercentage": self.state.battery_percentage,
             }
             message = json.dumps({"type": "statusUpdate", "payload": status_data})

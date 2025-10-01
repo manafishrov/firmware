@@ -15,37 +15,37 @@ class CamelCaseModel(BaseModel):
 
 
 class ThrusterPinSetup(CamelCaseModel):
-    identifiers: List[int]
-    spin_directions: List[int]
+    identifiers: List[int] = [0, 1, 2, 3, 4, 5, 6, 7]
+    spin_directions: List[int] = [1, 1, 1, 1, 1, 1, 1, 1]
 
 
 class RegulatorPID(CamelCaseModel):
-    kp: float
-    ki: float
-    kd: float
+    kp: float = 0.0
+    ki: float = 0.0
+    kd: float = 0.0
 
 
 class Regulator(CamelCaseModel):
-    turn_speed: int
-    pitch: RegulatorPID
-    roll: RegulatorPID
-    depth: RegulatorPID
+    turn_speed: int = 40
+    pitch: RegulatorPID = RegulatorPID()
+    roll: RegulatorPID = RegulatorPID()
+    depth: RegulatorPID = RegulatorPID()
 
 
 class DirectionCoefficients(CamelCaseModel):
-    horizontal: float
-    strafe: float
-    vertical: float
-    pitch: float
-    yaw: float
-    roll: float
+    horizontal: float = 0.0
+    strafe: float = 0.0
+    vertical: float = 0.0
+    pitch: float = 0.0
+    yaw: float = 0.0
+    roll: float = 0.0
 
 
 class Power(CamelCaseModel):
-    user_max_power: int
-    regulator_max_power: int
-    battery_min_voltage: float
-    battery_max_voltage: float
+    user_max_power: int = 30
+    regulator_max_power: int = 30
+    battery_min_voltage: float = 9.6
+    battery_max_voltage: float = 12.6
 
 
 class ROVConfig(CamelCaseModel):

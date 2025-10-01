@@ -12,9 +12,9 @@ from pydantic import BaseModel
 
 
 class PressureData(BaseModel):
-    pressure: float
-    temperature: float
-    depth: float
+    pressure: float = 0.0
+    temperature: float = 0.0
+    depth: float = 0.0
 
 
 class PressureSensor:
@@ -28,10 +28,10 @@ class PressureSensor:
             sensor_instance = await asyncio.to_thread(ms5837.MS5837_30BA)
             await asyncio.to_thread(sensor_instance.init)
             self.sensor = sensor_instance
-            self.state.system_status.pressure_sensor_ok = True
+            self.state.system_health.pressure_sensor_ok = True
             log_info("MS5837 pressure sensor initialized successfully.")
         except Exception as e:
-            self.state.system_status.pressure_sensor_ok = False
+            self.state.system_health.pressure_sensor_ok = False
             log_error(
                 f"Failed to initialize MS5837 pressure sensor. Is it connected? Error: {e}"
             )
@@ -44,7 +44,7 @@ class PressureSensor:
 
     def read_data(self) -> Optional[PressureData]:
         try:
-            if not self.state.system_status.pressure_sensor_ok:
+            if not self.state.system_health.pressure_sensor_ok:
                 return None
 
             if self.sensor.read():

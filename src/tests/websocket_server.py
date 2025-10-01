@@ -12,9 +12,11 @@ from websockets.legacy.server import WebSocketServerProtocol
 clients: set[WebSocketServerProtocol] = set()
 shutdown: bool = False
 
-pitch_stabilization = False
-roll_stabilization = False
-depth_stabilization = False
+system_status = {
+    "pitch_stabilization": False,
+    "roll_stabilization": False,
+    "depth_stabilization": False,
+}
 
 on_going_thruster_tests: dict[Union[str, int], asyncio.Task] = {}
 on_going_regulator_autotune: Optional[asyncio.Task] = None
@@ -99,7 +101,7 @@ async def toast(
 async def handle_client(
     websocket: websockets.legacy.server.WebSocketServerProtocol,
 ) -> None:
-    global rov_config, pitch_stabilization, roll_stabilization, depth_stabilization
+    global rov_config, system_status
     last_direction_vector = None
     await log(
         "info", f"Client connected from Manafish App at {websocket.remote_address}!"
@@ -146,9 +148,9 @@ async def handle_client(
                 states_msg = {
                     "type": "statusUpdate",
                     "payload": {
-                        "pitchStabilization": pitch_stabilization,
-                        "rollStabilization": roll_stabilization,
-                        "depthStabilization": depth_stabilization,
+                        "pitchStabilization": system_status["pitch_stabilization"],
+                        "rollStabilization": system_status["roll_stabilization"],
+                        "depthStabilization": system_status["depth_stabilization"],
                         "batteryPercentage": battery_percentage,
                     },
                 }
@@ -312,17 +314,28 @@ async def handle_client(
                 elif msg_type == "customAction":
                     await log("info", f"Custom action received with payload: {payload}")
                 elif msg_type == "togglePitchStabilization":
-                    pitch_stabilization = not pitch_stabilization
+                    system_status["pitch_stabilization"] = not system_status[
+                        "pitch_stabilization"
+                    ]
                     await log(
-                        "info", f"Pitch stabilization set to {pitch_stabilization}"
+                        "info",
+                        f"Pitch stabilization set to {system_status['pitch_stabilization']}",
                     )
                 elif msg_type == "toggleRollStabilization":
-                    roll_stabilization = not roll_stabilization
-                    await log("info", f"Roll stabilization set to {roll_stabilization}")
-                elif msg_type == "toggleDepthStabilization":
-                    depth_stabilization = not depth_stabilization
+                    system_status["roll_stabilization"] = not system_status[
+                        "roll_stabilization"
+                    ]
                     await log(
-                        "info", f"Depth stabilization set to {depth_stabilization}"
+                        "info",
+                        f"Roll stabilization set to {system_status['roll_stabilization']}",
+                    )
+                elif msg_type == "toggleDepthStabilization":
+                    system_status["depth_stabilization"] = not system_status[
+                        "depth_stabilization"
+                    ]
+                    await log(
+                        "info",
+                        f"Depth stabilization set to {system_status['depth_stabilization']}",
                     )
                 else:
                     await log(
