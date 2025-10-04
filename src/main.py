@@ -2,8 +2,6 @@ from __future__ import annotations
 
 import asyncio
 from rov_state import ROVState
-from imu import IMU
-from pressure import PressureSensor
 from websocket_server import WebsocketServer
 from websocket_senders import WebsocketSenders
 from log import log_info

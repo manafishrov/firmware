@@ -4,8 +4,8 @@ from pydantic import BaseModel
 
 if TYPE_CHECKING:
     from rov_config import ROVConfig
-    from imu import IMUData
-    from pressure import PressureData
+    from sensors.imu import IMUData
+    from sensors.pressure import PressureData
 
 
 class SystemHealth(BaseModel):
