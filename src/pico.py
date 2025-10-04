@@ -3,8 +3,8 @@ from __future__ import annotations
 import subprocess
 import os
 import re
-from log import log_info, log_error, log_warn
-from toast import toast_error, toast_warn, toast_loading, toast_success, toast_info
+from .log import log_info, log_error, log_warn
+from .toast import toast_error, toast_warn, toast_loading, toast_success, toast_info
 
 FLASH_TOAST_ID = "flash-microcontroller-firmware"
 

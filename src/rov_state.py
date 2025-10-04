@@ -3,9 +3,9 @@ from typing import TYPE_CHECKING
 from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from rov_config import ROVConfig
-    from sensors.imu import IMUData
-    from sensors.pressure import PressureData
+    from .rov_config import ROVConfig
+    from .sensors.imu import IMUData
+    from .sensors.pressure import PressureData
 
 
 class SystemHealth(BaseModel):

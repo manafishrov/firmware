@@ -4,12 +4,13 @@ from typing import Any, Callable, Awaitable, TYPE_CHECKING
 if TYPE_CHECKING:
     from rov_state import ROVState
 
-import json
 import time
 from websockets.server import WebSocketServerProtocol
-from log import log_info, log_error
-from toast import toast_success
-from pico import flash_microcontroller_firmware
+from ..log import log_info, log_error
+from ..toast import toast_success
+from ..pico import flash_microcontroller_firmware
+from .message import ConfigMessage, MessageType
+from ..rov_config import ROVConfig
 
 
 async def handle_message(
@@ -33,8 +34,8 @@ async def handle_get_config(
     websocket: WebSocketServerProtocol,
     state: ROVState,
 ) -> None:
-    msg = {"type": "config", "payload": state.rov_config.to_dict()}
-    await websocket.send(json.dumps(msg))
+    msg = ConfigMessage(payload=state.rov_config).json(by_alias=True)
+    await websocket.send(msg)
     log_info("Sent config to client.")
 
 
@@ -43,14 +44,19 @@ async def handle_set_config(
     _websocket: WebSocketServerProtocol,
     state: ROVState,
 ) -> None:
-    state.update_config(payload)
-    log_info("Received and applied new config.")
-    toast_success(
-        id=None,
-        message="ROV config set successfully",
-        description=None,
-        cancel=None,
-    )
+    try:
+        new_config = ROVConfig(**payload)
+        state.rov_config = new_config
+        state.rov_config.save()
+        log_info("Received and applied new config.")
+        toast_success(
+            id=None,
+            message="ROV config set successfully",
+            description=None,
+            cancel=None,
+        )
+    except Exception as e:
+        log_error(f"Error setting config: {e}")
 
 
 async def handle_direction_vector(
@@ -147,16 +153,16 @@ async def handle_flash_microcontroller_firmware(
 HandlerType = Callable[[Any, WebSocketServerProtocol, ROVState], Awaitable[None]]
 
 MESSAGE_TYPE_HANDLERS: dict[str, HandlerType] = {
-    "directionVector": handle_direction_vector,
-    "getConfig": handle_get_config,
-    "setConfig": handle_set_config,
-    "startThrusterTest": handle_start_thruster_test,
-    "cancelThrusterTest": handle_cancel_thruster_test,
-    "startRegulatorAutoTuning": handle_start_regulator_auto_tuning,
-    "cancelRegulatorAutoTuning": handle_cancel_regulator_auto_tuning,
-    "customAction": handle_custom_action,
-    "togglePitchStabilization": handle_toggle_pitch_stabilization,
-    "toggleRollStabilization": handle_toggle_roll_stabilization,
-    "toggleDepthStabilization": handle_toggle_depth_stabilization,
-    "flashMicrocontrollerFirmware": handle_flash_microcontroller_firmware,
+    MessageType.DIRECTION_VECTOR: handle_direction_vector,
+    MessageType.GET_CONFIG: handle_get_config,
+    MessageType.SET_CONFIG: handle_set_config,
+    MessageType.START_THRUSTER_TEST: handle_start_thruster_test,
+    MessageType.CANCEL_THRUSTER_TEST: handle_cancel_thruster_test,
+    MessageType.START_REGULATOR_AUTO_TUNING: handle_start_regulator_auto_tuning,
+    MessageType.CANCEL_REGULATOR_AUTO_TUNING: handle_cancel_regulator_auto_tuning,
+    MessageType.CUSTOM_ACTION: handle_custom_action,
+    MessageType.TOGGLE_PITCH_STABILIZATION: handle_toggle_pitch_stabilization,
+    MessageType.TOGGLE_ROLL_STABILIZATION: handle_toggle_roll_stabilization,
+    MessageType.TOGGLE_DEPTH_STABILIZATION: handle_toggle_depth_stabilization,
+    MessageType.FLASH_MICROCONTROLLER_FIRMWARE: handle_flash_microcontroller_firmware,
 }

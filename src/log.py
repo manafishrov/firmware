@@ -18,7 +18,7 @@ def set_log_is_client_connected_status(is_connected: bool) -> None:
 
 async def _log_message_async(level: str, message: str) -> None:
     if _is_client_connected:
-        from websocket_server import get_message_queue
+        from .websocket.server import get_message_queue
 
         await get_message_queue().put(
             {

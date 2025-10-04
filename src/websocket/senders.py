@@ -6,9 +6,10 @@ if TYPE_CHECKING:
     from websockets.exceptions import ConnectionClosed
     from rov_state import ROVState
 
-from websocket.server import get_message_queue
 import asyncio
 import json
+from .websocket.server import get_message_queue
+from .message import Telemetry, TelemetryPayload, StatusUpdate, StatusUpdatePayload
 
 
 class WebsocketSenders:
@@ -25,32 +26,28 @@ class WebsocketSenders:
 
     async def telemetry_sender(self) -> None:
         while True:
-            message = json.dumps(
-                {
-                    "type": "telemetry",
-                    "payload": {
-                        "pitch": self.state.regulator["pitch"],
-                        "roll": self.state.regulator["roll"],
-                        "desiredPitch": self.state.regulator["desiredPitch"],
-                        "desiredRoll": self.state.regulator["desiredRoll"],
-                        "depth": self.state.pressure["depth"],
-                        "temperature": self.state.pressure["temperature"],
-                        "thrusterErpms": self.state.thrusters.erpms,
-                    },
-                }
+            telemetry_payload = TelemetryPayload(
+                pitch=self.state.regulator.get("pitch", 0.0),
+                roll=self.state.regulator.get("roll", 0.0),
+                desired_pitch=self.state.regulator.get("desired_pitch", 0.0),
+                desired_roll=self.state.regulator.get("desired_roll", 0.0),
+                depth=self.state.pressure.get("depth", 0.0),
+                temperature=self.state.pressure.get("temperature", 0.0),
+                thruster_erpms=getattr(self.state.thrusters, "erpms", [0] * 8),
             )
+            message = Telemetry(payload=telemetry_payload).json(by_alias=True)
             await self._send_message(message)
             await asyncio.sleep(1 / 60)
 
     async def status_update_sender(self) -> None:
         while True:
-            status_data = {
-                "pitchStabilization": self.state.system_status.pitch_stabilization,
-                "rollStabilization": self.state.system_status.roll_stabilization,
-                "depthStabilization": self.state.system_status.depth_stabilization,
-                "batteryPercentage": self.state.battery_percentage,
-            }
-            message = json.dumps({"type": "statusUpdate", "payload": status_data})
+            status_update_payload = StatusUpdatePayload(
+                pitch_stabilization=self.state.system_status.pitch_stabilization,
+                roll_stabilization=self.state.system_status.roll_stabilization,
+                depth_stabilization=self.state.system_status.depth_stabilization,
+                battery_percentage=getattr(self.state, "battery_percentage", 0),
+            )
+            message = StatusUpdate(payload=status_update_payload).json(by_alias=True)
             await self._send_message(message)
             await asyncio.sleep(1 / 2)
 

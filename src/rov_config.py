@@ -1,22 +1,39 @@
-from pydantic import BaseModel
-from typing import List
 import os
+from enum import Enum
+from .base_model import CamelCaseModel
 
 
-def to_camel(snake_str: str) -> str:
-    components = snake_str.split("_")
-    return components[0] + "".join(x.title() for x in components[1:])
+class MicrocontrollerFirmwareVariant(str, Enum):
+    PWM = "pwm"
+    DSHOT = "dshot"
 
 
-class CamelCaseModel(BaseModel):
-    class Config:
-        alias_generator = to_camel
-        allow_population_by_field_name = True
+class FluidType(str, Enum):
+    FRESHWATER = "freshwater"
+    SALTWATER = "saltwater"
 
 
 class ThrusterPinSetup(CamelCaseModel):
-    identifiers: List[int] = [0, 1, 2, 3, 4, 5, 6, 7]
-    spin_directions: List[int] = [1, 1, 1, 1, 1, 1, 1, 1]
+    identifiers: tuple[int, int, int, int, int, int, int, int] = (
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+    )
+    spin_directions: tuple[int, int, int, int, int, int, int, int] = (
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+    )
 
 
 class RegulatorPID(CamelCaseModel):
@@ -49,10 +66,19 @@ class Power(CamelCaseModel):
 
 
 class ROVConfig(CamelCaseModel):
-    microcontroller_firmware_variant: str
-    fluid_type: str
+    microcontroller_firmware_variant: MicrocontrollerFirmwareVariant
+    fluid_type: FluidType
     thruster_pin_setup: ThrusterPinSetup
-    thruster_allocation: List[List[int]]
+    thruster_allocation: tuple[
+        tuple[int, int, int, int, int, int, int, int],
+        tuple[int, int, int, int, int, int, int, int],
+        tuple[int, int, int, int, int, int, int, int],
+        tuple[int, int, int, int, int, int, int, int],
+        tuple[int, int, int, int, int, int, int, int],
+        tuple[int, int, int, int, int, int, int, int],
+        tuple[int, int, int, int, int, int, int, int],
+        tuple[int, int, int, int, int, int, int, int],
+    ]
     regulator: Regulator
     direction_coefficients: DirectionCoefficients
     power: Power

@@ -9,8 +9,9 @@ if TYPE_CHECKING:
 import asyncio
 import json
 import websockets
-from websocket.handler import handle_message
-from log import set_log_is_client_connected_status, log_info, log_error, log_warn
+from ..websocket.handler import handle_message
+from ..log import set_log_is_client_connected_status, log_info, log_error, log_warn
+from .message import FirmwareVersion, ConfigMessage
 
 FIRMWARE_VERSION = "1.0.0"
 IP_ADDRESS = "10.10.10.10"
@@ -37,19 +38,17 @@ class WebsocketServer:
         async def send_firmware_version_on_connect():
             await asyncio.sleep(5)
             try:
-                version_message = {
-                    "type": "firmwareVersion",
-                    "payload": FIRMWARE_VERSION,
-                }
-                await websocket.send(json.dumps(version_message))
+                version_message = FirmwareVersion(payload=FIRMWARE_VERSION).json(
+                    by_alias=True
+                )
+                await websocket.send(version_message)
                 log_info(
                     f"Sent firmware version '{FIRMWARE_VERSION}' to {websocket.remote_address}"
                 )
-                config_message = {
-                    "type": "config",
-                    "payload": self.state.rov_config.to_dict(),
-                }
-                await websocket.send(json.dumps(config_message))
+                config_message = ConfigMessage(payload=self.state.rov_config).json(
+                    by_alias=True
+                )
+                await websocket.send(config_message)
                 log_info(f"Sent config to {websocket.remote_address}")
             except ConnectionClosed:
                 log_warn(
