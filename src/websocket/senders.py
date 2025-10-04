@@ -2,18 +2,18 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from websocket.server import WebsocketServer
     from websockets.exceptions import ConnectionClosed
-    from rov_state import ROVState
+    from websocket.server import WebsocketServer
+    from ..rov_state import RovState
 
 import asyncio
 import json
-from .websocket.server import get_message_queue
-from .message import Telemetry, TelemetryPayload, StatusUpdate, StatusUpdatePayload
+from .server import get_message_queue
+from .message import Telemetry, RovTelemetry, StatusUpdate, RovStatus
 
 
 class WebsocketSenders:
-    def __init__(self, state: ROVState, ws_server: WebsocketServer) -> None:
+    def __init__(self, state: RovState, ws_server: WebsocketServer) -> None:
         self.state = state
         self.ws_server = ws_server
 
@@ -26,7 +26,7 @@ class WebsocketSenders:
 
     async def telemetry_sender(self) -> None:
         while True:
-            telemetry_payload = TelemetryPayload(
+            telemetry_payload = RovTelemetry(
                 pitch=self.state.regulator.get("pitch", 0.0),
                 roll=self.state.regulator.get("roll", 0.0),
                 desired_pitch=self.state.regulator.get("desired_pitch", 0.0),
@@ -41,7 +41,7 @@ class WebsocketSenders:
 
     async def status_update_sender(self) -> None:
         while True:
-            status_update_payload = StatusUpdatePayload(
+            status_update_payload = RovStatus(
                 pitch_stabilization=self.state.system_status.pitch_stabilization,
                 roll_stabilization=self.state.system_status.roll_stabilization,
                 depth_stabilization=self.state.system_status.depth_stabilization,

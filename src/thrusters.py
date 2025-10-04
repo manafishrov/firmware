@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Union, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from rov_state import ROVState
+    from rov_state import RovState
     from numpy.typing import NDArray
 
 import asyncio
@@ -17,8 +17,8 @@ import threading
 
 
 class Thrusters:
-    def __init__(self, state: ROVState):
-        self.state: ROVState = state
+    def __init__(self, state: RovState):
+        self.state: RovState = state
         self.erpms: list[float] = [0.0] * 8
         self.voltages: list[float] = [0.0] * 8
         self.temperatures: list[float] = [0.0] * 8

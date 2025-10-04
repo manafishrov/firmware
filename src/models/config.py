@@ -1,6 +1,6 @@
 import os
 from enum import Enum
-from .base_model import CamelCaseModel
+from .base import CamelCaseModel
 
 
 class MicrocontrollerFirmwareVariant(str, Enum):
@@ -47,7 +47,7 @@ class Power(CamelCaseModel):
     battery_max_voltage: float
 
 
-class ROVConfig(CamelCaseModel):
+class RovConfig(CamelCaseModel):
     microcontroller_firmware_variant: MicrocontrollerFirmwareVariant = (
         MicrocontrollerFirmwareVariant.DSHOT
     )

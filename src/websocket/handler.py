@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Any, Callable, Awaitable, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from rov_state import ROVState
+    from rov_state import RovState
 
 import time
 from websockets.server import WebSocketServerProtocol
@@ -10,14 +10,14 @@ from ..log import log_info, log_error
 from ..toast import toast_success
 from ..pico import flash_microcontroller_firmware
 from .message import ConfigMessage, MessageType
-from ..rov_config import ROVConfig
+from ..models.config import RovConfig
 
 
 async def handle_message(
     msg_type: str,
     payload: dict[str, object],
     websocket: WebSocketServerProtocol,
-    state: ROVState,
+    state: RovState,
 ) -> None:
     async def handle_unknown(payload, _websocket, _state):
         log_error(f"Unknown message type received: {msg_type} with payload: {payload}")
@@ -32,7 +32,7 @@ async def handle_message(
 async def handle_get_config(
     _payload: None,
     websocket: WebSocketServerProtocol,
-    state: ROVState,
+    state: RovState,
 ) -> None:
     msg = ConfigMessage(payload=state.rov_config).json(by_alias=True)
     await websocket.send(msg)
@@ -42,10 +42,10 @@ async def handle_get_config(
 async def handle_set_config(
     payload: dict,
     _websocket: WebSocketServerProtocol,
-    state: ROVState,
+    state: RovState,
 ) -> None:
     try:
-        new_config = ROVConfig(**payload)
+        new_config = RovConfig(**payload)
         state.rov_config = new_config
         state.rov_config.save()
         log_info("Received and applied new config.")
@@ -62,7 +62,7 @@ async def handle_set_config(
 async def handle_direction_vector(
     payload: list[float],
     _websocket: WebSocketServerProtocol,
-    state: ROVState,
+    state: RovState,
 ) -> None:
     if isinstance(payload, list) and len(payload) <= 8:
         padded_payload = (payload + [0.0] * 8)[:8]
@@ -73,7 +73,7 @@ async def handle_direction_vector(
 async def handle_start_thruster_test(
     payload: int,
     _websocket: WebSocketServerProtocol,
-    state: ROVState,
+    state: RovState,
 ) -> None:
     log_info(f"Received command to start thruster test: {payload}")
 
@@ -81,7 +81,7 @@ async def handle_start_thruster_test(
 async def handle_cancel_thruster_test(
     payload: int,
     _websocket: WebSocketServerProtocol,
-    _state: ROVState,
+    _state: RovState,
 ) -> None:
     # Should call something in thrusters
     log_info(f"Received command to cancel thruster test: {payload}")
@@ -90,7 +90,7 @@ async def handle_cancel_thruster_test(
 async def handle_start_regulator_auto_tuning(
     _payload: None,
     _websocket: WebSocketServerProtocol,
-    _state: ROVState,
+    _state: RovState,
 ) -> None:
     # Should call something in regulator
     log_info("Received command to start regulator auto-tuning")
@@ -99,7 +99,7 @@ async def handle_start_regulator_auto_tuning(
 async def handle_cancel_regulator_auto_tuning(
     _payload: None,
     _websocket: WebSocketServerProtocol,
-    _state: ROVState,
+    _state: RovState,
 ) -> None:
     # Should call something in regulator
     log_info("Received command to cancel regulator auto-tuning")
@@ -108,7 +108,7 @@ async def handle_cancel_regulator_auto_tuning(
 async def handle_custom_action(
     payload: str,
     _websocket: WebSocketServerProtocol,
-    _state: ROVState,
+    _state: RovState,
 ) -> None:
     # Should do a custom action of some  sort??
     return
@@ -117,7 +117,7 @@ async def handle_custom_action(
 async def handle_toggle_pitch_stabilization(
     _payload: None,
     _websocket: WebSocketServerProtocol,
-    state: ROVState,
+    state: RovState,
 ) -> None:
     state.system_status.pitch_stabilization = (
         not state.system_status.pitch_stabilization
@@ -127,7 +127,7 @@ async def handle_toggle_pitch_stabilization(
 async def handle_toggle_roll_stabilization(
     _payload: None,
     _websocket: WebSocketServerProtocol,
-    state: ROVState,
+    state: RovState,
 ) -> None:
     state.system_status.roll_stabilization = not state.system_status.roll_stabilization
 
@@ -135,7 +135,7 @@ async def handle_toggle_roll_stabilization(
 async def handle_toggle_depth_stabilization(
     _payload: None,
     _websocket: WebSocketServerProtocol,
-    state: ROVState,
+    state: RovState,
 ) -> None:
     state.system_status.depth_stabilization = (
         not state.system_status.depth_stabilization
@@ -145,12 +145,12 @@ async def handle_toggle_depth_stabilization(
 async def handle_flash_microcontroller_firmware(
     payload: str,
     _websocket: WebSocketServerProtocol,
-    _state: ROVState,
+    _state: RovState,
 ) -> None:
     flash_microcontroller_firmware(payload)
 
 
-HandlerType = Callable[[Any, WebSocketServerProtocol, ROVState], Awaitable[None]]
+HandlerType = Callable[[Any, WebSocketServerProtocol, RovState], Awaitable[None]]
 
 MESSAGE_TYPE_HANDLERS: dict[str, HandlerType] = {
     MessageType.DIRECTION_VECTOR: handle_direction_vector,

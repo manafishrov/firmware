@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 import asyncio
-from .rov_state import ROVState
+from .rov_state import RovState
 from .websocket.server import WebsocketServer
 from .websocket.senders import WebsocketSenders
 from .log import log_info
 
 
 async def main() -> None:
-    state = ROVState()
+    state = RovState()
     ws_server = WebsocketServer(state)
     senders = WebsocketSenders(state, ws_server)
 

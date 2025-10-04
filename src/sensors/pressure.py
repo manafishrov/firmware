@@ -2,24 +2,18 @@ from __future__ import annotations
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from rov_state import ROVState
+    from rov_state import RovState
 
 import asyncio
 import ms5837
-from log import log_error, log_info
-from toast import toast_error
-from pydantic import BaseModel
-
-
-class PressureData(BaseModel):
-    pressure: float = 0.0
-    temperature: float = 0.0
-    depth: float = 0.0
+from ..log import log_error, log_info
+from ..toast import toast_error
+from ..models.sensors import PressureData
 
 
 class PressureSensor:
-    def __init__(self, state: ROVState):
-        self.state: ROVState = state
+    def __init__(self, state: RovState):
+        self.state: RovState = state
         self.sensor: Optional[ms5837.MS5837_30BA] = None
 
     async def initialize(self) -> None:

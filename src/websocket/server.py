@@ -4,7 +4,7 @@ from typing import Optional, TYPE_CHECKING
 if TYPE_CHECKING:
     from websockets.exceptions import ConnectionClosed
     from websockets.server import WebSocketServer, WebSocketServerProtocol
-    from rov_state import ROVState
+    from rov_state import RovState
 
 import asyncio
 import json
@@ -25,7 +25,7 @@ def get_message_queue() -> asyncio.Queue:
 
 
 class WebsocketServer:
-    def __init__(self, state: ROVState) -> None:
+    def __init__(self, state: RovState) -> None:
         self.state = state
         self.server: Optional[WebSocketServer] = None
         self.client: Optional[WebSocketServerProtocol] = None

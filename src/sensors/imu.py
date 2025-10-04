@@ -2,24 +2,18 @@ from __future__ import annotations
 from typing import Optional, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from rov_state import ROVState
+    from rov_state import RovState
 
 from bmi270.BMI270 import *
-from pydantic import BaseModel
 import asyncio
-from log import log_error, log_info
-from toast import toast_error
+from ..log import log_error, log_info
+from ..toast import toast_error
+from ..models.sensors import ImuData
 
 
-class IMUData(BaseModel):
-    acceleration: float = 0.0
-    gyroscope: float = 0.0
-    temperature: float = 0.0
-
-
-class IMU:
-    def __init__(self, state: ROVState):
-        self.state: ROVState = state
+class Imu:
+    def __init__(self, state: RovState):
+        self.state: RovState = state
         self.imu: Optional[BMI270] = None
 
     async def initialize(self) -> None:
@@ -55,11 +49,11 @@ class IMU:
                 cancel=None,
             )
 
-    def read_data(self) -> Optional[IMUData]:
+    def read_data(self) -> Optional[ImuData]:
         try:
             if not self.state.system_health.imu_ok:
                 return None
-            return IMUData(
+            return ImuData(
                 acceleration=self.imu.get_acc_data(),
                 gyroscope=self.imu.get_gyr_data(),
                 temperature=self.imu.get_temp_data(),

@@ -1,48 +1,30 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
-from pydantic import BaseModel
 
 if TYPE_CHECKING:
-    from .rov_config import ROVConfig
-    from .sensors.imu import IMUData
-    from .sensors.pressure import PressureData
+    from .models.config import RovConfig
+    from .models.sensors import ImuData, PressureData
+    from .models.system import SystemHealth, SystemStatus
+    from .models.regulator import RegulatorData
 
 
-class SystemHealth(BaseModel):
-    imu_ok: bool = False
-    pressure_sensor_ok: bool = False
-
-
-class SystemStatus(BaseModel):
-    pitch_stabilization: bool = False
-    roll_stabilization: bool = False
-    depth_stabilization: bool = False
-
-
-class RegulatorData(BaseModel):
-    pitch: float = 0.0
-    roll: float = 0.0
-    desired_pitch: float = 0.0
-    desired_roll: float = 0.0
-
-
-class ROVState:
-    rov_config: ROVConfig
+class RovState:
+    rov_config: RovConfig
     system_health: SystemHealth
     system_status: SystemStatus
-    imu: IMUData
+    imu: ImuData
     pressure: PressureData
     regulator: RegulatorData
 
     def __init__(self) -> None:
-        self.rov_config = ROVConfig.load()
+        self.rov_config = RovConfig.load()
         self.system_health = SystemHealth()
         self.system_status = SystemStatus()
-        self.imu = IMUData()
+        self.imu = ImuData()
         self.pressure = PressureData()
         self.regulator = RegulatorData()
 
     def set_config(self, new_config_data: dict) -> None:
-        new_config = ROVConfig(**new_config_data)
+        new_config = RovConfig(**new_config_data)
         new_config.save()
         self.rov_config = new_config

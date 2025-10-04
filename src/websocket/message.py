@@ -1,8 +1,9 @@
-from pydantic import BaseModel
 from typing import Union
-from ..rov_config import ROVConfig
-from ..base_model import CamelCaseModel
 from enum import Enum
+from ..models.config import RovConfig
+from ..models.rov_telemetry import RovTelemetry
+from ..models.rov_status import RovStatus
+from ..models.base import CamelCaseModel
 
 
 class MessageType(str, Enum):
@@ -13,31 +14,14 @@ class MessageType(str, Enum):
     SET_CONFIG = "setConfig"
 
 
-class TelemetryPayload(CamelCaseModel):
-    pitch: float
-    roll: float
-    desired_pitch: float
-    desired_roll: float
-    depth: float
-    temperature: float
-    thruster_erpms: tuple[int, int, int, int, int, int, int, int]
-
-
 class Telemetry(CamelCaseModel):
     type: MessageType = MessageType.TELEMETRY
-    payload: TelemetryPayload
-
-
-class StatusUpdatePayload(CamelCaseModel):
-    pitch_stabilization: bool
-    roll_stabilization: bool
-    depth_stabilization: bool
-    battery_percentage: int
+    payload: RovTelemetry
 
 
 class StatusUpdate(CamelCaseModel):
     type: MessageType = MessageType.STATUS_UPDATE
-    payload: StatusUpdatePayload
+    payload: RovStatus
 
 
 class FirmwareVersion(CamelCaseModel):
@@ -47,7 +31,7 @@ class FirmwareVersion(CamelCaseModel):
 
 class ConfigMessage(CamelCaseModel):
     type: MessageType = MessageType.CONFIG
-    payload: ROVConfig
+    payload: RovConfig
 
 
 Message = Union[Telemetry, StatusUpdate, FirmwareVersion, ConfigMessage]
