@@ -9,7 +9,7 @@ if TYPE_CHECKING:
 import asyncio
 import json
 import websockets
-from websocket_handler import handle_message
+from websocket.handler import handle_message
 from log import set_log_is_client_connected_status, log_info, log_error, log_warn
 
 FIRMWARE_VERSION = "1.0.0"

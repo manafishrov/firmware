@@ -2,14 +2,13 @@ from __future__ import annotations
 from typing import Any, Callable, Awaitable, TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from rov_config import ROVConfig
+    from rov_state import ROVState
 
 import json
 import time
 from websockets.server import WebSocketServerProtocol
 from log import log_info, log_error
 from toast import toast_success
-from rov_state import ROVState
 from pico import flash_microcontroller_firmware
 
 

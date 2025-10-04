@@ -2,11 +2,11 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
-    from websocket_server import WebsocketServer
+    from websocket.server import WebsocketServer
     from websockets.exceptions import ConnectionClosed
     from rov_state import ROVState
 
-from websocket_server import get_message_queue
+from websocket.server import get_message_queue
 import asyncio
 import json
 

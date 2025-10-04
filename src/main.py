@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import asyncio
 from rov_state import ROVState
-from websocket_server import WebsocketServer
-from websocket_senders import WebsocketSenders
+from websocket.server import WebsocketServer
+from websocket.senders import WebsocketSenders
 from log import log_info
 
 
