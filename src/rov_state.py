@@ -4,6 +4,7 @@ from .models.config import RovConfig
 from .models.sensors import ImuData, PressureData
 from .models.system import SystemHealth, SystemStatus
 from .models.regulator import RegulatorData
+from .models.esc import EscData
 
 
 class RovState:
@@ -20,4 +21,5 @@ class RovState:
         self.system_status = SystemStatus()
         self.imu = ImuData()
         self.pressure = PressureData()
+        self.esc = EscData()
         self.regulator = RegulatorData()
