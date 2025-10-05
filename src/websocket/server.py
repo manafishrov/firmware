@@ -37,15 +37,21 @@ class WebsocketServer:
         log_info(f"Client connected: {websocket.remote_address}.")
 
         send_task = asyncio.create_task(self._send_from_queue(websocket))
+        status_task = asyncio.create_task(
+            self._send_status_periodically(websocket, self.state)
+        )
+        telemetry_task = asyncio.create_task(
+            self._send_telemetry_periodically(websocket, self.state)
+        )
 
         async def send_firmware_version_on_connect():
             await asyncio.sleep(5)
             try:
-                await handle_send_firmware_version(websocket, FIRMWARE_VERSION)
+                await handle_send_firmware_version(websocket)
                 log_info(
                     f"Sent firmware version '{FIRMWARE_VERSION}' to {websocket.remote_address}"
                 )
-                await handle_send_config(websocket, self.state.rov_config)
+                await handle_send_config(websocket, self.state)
                 log_info(f"Sent config to {websocket.remote_address}")
             except ConnectionClosed:
                 log_warn(
@@ -72,6 +78,8 @@ class WebsocketServer:
             log_info(f"Client connection closed: {websocket.remote_address}")
         finally:
             send_task.cancel()
+            status_task.cancel()
+            telemetry_task.cancel()
             self.client = None
             set_log_is_client_connected_status(False)
             log_info("Client disconnected.")
@@ -89,6 +97,30 @@ class WebsocketServer:
                     await websocket.send(json_msg)
                 except Exception as e:
                     log_error(f"Error sending queued message: {e}")
+        except asyncio.CancelledError:
+            pass
+
+    async def _send_status_periodically(
+        self, websocket: WebSocketServerProtocol, state
+    ) -> None:
+        from .send.status import handle_status_update
+
+        try:
+            while True:
+                await handle_status_update(websocket, state)
+                await asyncio.sleep(1 / 2)
+        except asyncio.CancelledError:
+            pass
+
+    async def _send_telemetry_periodically(
+        self, websocket: WebSocketServerProtocol, state
+    ) -> None:
+        from .send.telemetry import handle_telemetry
+
+        try:
+            while True:
+                await handle_telemetry(websocket, state)
+                await asyncio.sleep(1 / 60)
         except asyncio.CancelledError:
             pass
 

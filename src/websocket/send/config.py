@@ -3,15 +3,18 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from websockets.server import WebSocketServerProtocol
+    from rov_state import RovState
 
-from ...models.config import RovConfig, FirmwareVersion
+from ...models.config import FirmwareVersion
 from ..message import Config, FirmwareVersion as FirmwareVersionMessage
+
+FIRMWARE_VERSION = "1.0.0"
 
 
 async def handle_send_firmware_version(
-    websocket: WebSocketServerProtocol, payload: FirmwareVersion
+    websocket: WebSocketServerProtocol,
 ) -> None:
-    message = FirmwareVersionMessage(payload=FirmwareVersion(version=payload)).json(
+    message = FirmwareVersionMessage(payload=FirmwareVersion(FIRMWARE_VERSION)).json(
         by_alias=True
     )
     await websocket.send(message)
@@ -19,8 +22,7 @@ async def handle_send_firmware_version(
 
 async def handle_send_config(
     websocket: WebSocketServerProtocol,
-    payload: RovConfig,
+    state: RovState,
 ) -> None:
-    message = Config(payload=payload).json(by_alias=True)
+    message = Config(payload=state.rov_config).json(by_alias=True)
     await websocket.send(message)
-
