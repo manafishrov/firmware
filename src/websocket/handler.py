@@ -8,8 +8,24 @@ from websockets.server import WebSocketServerProtocol
 from ..log import log_warn
 from .receive.config import handle_get_config, handle_set_config
 from .receive.microcontroller import handle_flash_microcontroller_firmware
+from .receive.actions import (
+    handle_direction_vector,
+    handle_start_thruster_test,
+    handle_cancel_thruster_test,
+    handle_custom_action,
+)
+from .receive.state import (
+    handle_toggle_pitch_stabilization,
+    handle_toggle_roll_stabilization,
+    handle_toggle_depth_stabilization,
+)
+from .receive.regulator import (
+    handle_start_regulator_auto_tuning,
+    handle_cancel_regulator_auto_tuning,
+)
 from .message import MessageType, WebsocketMessage
-from ..models.config import RovConfig, MicrocontrollerFirmwareVariant
+from ..models.config import RovConfig, MicrocontrollerFirmwareVariant, ThrusterTest
+from ..models.actions import DirectionVector, CustomAction
 
 
 async def handle_message(
@@ -27,5 +43,23 @@ async def handle_message(
             await handle_flash_microcontroller_firmware(
                 cast(MicrocontrollerFirmwareVariant, payload)
             )
+        case MessageType.DIRECTION_VECTOR:
+            await handle_direction_vector(state, cast(DirectionVector, payload))
+        case MessageType.START_THRUSTER_TEST:
+            await handle_start_thruster_test(state, cast(ThrusterTest, payload))
+        case MessageType.CANCEL_THRUSTER_TEST:
+            await handle_cancel_thruster_test(state, cast(ThrusterTest, payload))
+        case MessageType.START_REGULATOR_AUTO_TUNING:
+            await handle_start_regulator_auto_tuning(state)
+        case MessageType.CANCEL_REGULATOR_AUTO_TUNING:
+            await handle_cancel_regulator_auto_tuning(state)
+        case MessageType.CUSTOM_ACTION:
+            await handle_custom_action(state, cast(CustomAction, payload))
+        case MessageType.TOGGLE_PITCH_STABILIZATION:
+            await handle_toggle_pitch_stabilization(state)
+        case MessageType.TOGGLE_ROLL_STABILIZATION:
+            await handle_toggle_roll_stabilization(state)
+        case MessageType.TOGGLE_DEPTH_STABILIZATION:
+            await handle_toggle_depth_stabilization(state)
         case _:
             log_warn(f"Received unhandled message type: {message.type}")

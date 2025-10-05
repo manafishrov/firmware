@@ -69,6 +69,14 @@ class CancelThrusterTest(CamelCaseModel):
     payload: ThrusterTest
 
 
+class StartRegulatorAutoTuning(CamelCaseModel):
+    type: MessageType = MessageType.START_REGULATOR_AUTO_TUNING
+
+
+class CancelRegulatorAutoTuning(CamelCaseModel):
+    type: MessageType = MessageType.CANCEL_REGULATOR_AUTO_TUNING
+
+
 class RegulatorSuggestions(CamelCaseModel):
     type: MessageType = MessageType.REGULATOR_SUGGESTIONS
     payload: RegulatorSuggestions
@@ -129,6 +137,8 @@ WebsocketMessage = Annotated[
         Config,
         StartThrusterTest,
         CancelThrusterTest,
+        StartRegulatorAutoTuning,
+        CancelRegulatorAutoTuning,
         RegulatorSuggestions,
         ShowToast,
         LogMessage,
