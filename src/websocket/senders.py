@@ -33,7 +33,7 @@ class WebsocketSenders:
                 desired_roll=self.state.regulator.get("desired_roll", 0.0),
                 depth=self.state.pressure.get("depth", 0.0),
                 temperature=self.state.pressure.get("temperature", 0.0),
-                thruster_erpms=getattr(self.state.thrusters, "erpms", [0] * 8),
+                thruster_rpms=getattr(self.state.thrusters, "erpms", [0] * 8),
             )
             message = Telemetry(payload=telemetry_payload).json(by_alias=True)
             await self._send_message(message)

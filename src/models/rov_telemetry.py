@@ -1,5 +1,6 @@
 from .base import CamelCaseModel
 
+
 class RovTelemetry(CamelCaseModel):
     pitch: float
     roll: float
@@ -7,6 +8,4 @@ class RovTelemetry(CamelCaseModel):
     desired_roll: float
     depth: float
     temperature: float
-    thruster_erpms: tuple[int, int, int, int, int, int, int, int]
-
-
+    thruster_rpms: tuple[int, int, int, int, int, int, int, int]

@@ -119,7 +119,7 @@ async def handle_client(
                 desired_roll = 20 * math.cos(current_time / 3)
                 depth = 10 + 5 * math.sin(current_time / 4)
                 temperature = 20 + 5 * math.cos(current_time / 5)
-                thruster_erpm_values = [0, 937, 1875, 3750, 7500, 15000, 30000, 60000]
+                thruster_rpm_values = [0, 937, 1875, 3750, 7500, 15000, 30000, 60000]
 
                 status_msg = {
                     "type": "telemetry",
@@ -130,7 +130,7 @@ async def handle_client(
                         "desiredRoll": round(desired_roll, 2),
                         "depth": round(depth, 2),
                         "temperature": round(temperature, 2),
-                        "thrusterErpms": thruster_erpm_values,
+                        "thrusterRpms": thruster_rpm_values,
                     },
                 }
                 await websocket.send(json.dumps(status_msg))
