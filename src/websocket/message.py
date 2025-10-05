@@ -1,4 +1,3 @@
-from typing import Union
 from enum import Enum
 
 from ..models.log import LogEntry
@@ -57,3 +56,4 @@ class CancelRegulatorAutoTuning(CamelCaseModel):
 
 class CancelThrusterTest(CamelCaseModel):
     type: MessageType = MessageType.CANCEL_THRUSTER_TEST
+    payload: int
