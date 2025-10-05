@@ -16,20 +16,19 @@ async def handle_message(
     message: WebsocketMessage,
 ) -> None:
     async def handle_unknown(
-        _state: RovState, _websocket: WebsocketMessage, message: WebsocketMessage
+        _state: RovState, _websocket: WebSocketServerProtocol, payload: Any
     ) -> None:
-        log_error(
-            f"Unknown message type received: {message.type} with payload: {message.payload}"
-        )
+        log_error(f"Unknown message type received with payload: {payload}")
 
     handler = MESSAGE_TYPE_HANDLERS.get(message.type, handle_unknown)
     try:
-        await handler(state, websocket, message)
+        payload = getattr(message, "payload", None)
+        await handler(state, websocket, payload)
     except Exception as exc:
         log_error(f"Error in handler for message type '{message.type}': {exc}")
 
 
-HandlerType = Callable[[Any, WebSocketServerProtocol, RovState], Awaitable[None]]
+HandlerType = Callable[[RovState, WebSocketServerProtocol, Any], Awaitable[None]]
 
 MESSAGE_TYPE_HANDLERS: dict[str, HandlerType] = {
     MessageType.GET_CONFIG: handle_get_config,

@@ -11,7 +11,7 @@ import json
 import websockets
 from ..websocket.handler import handle_message
 from ..log import set_log_is_client_connected_status, log_info, log_error, log_warn
-from .message import FirmwareVersion, ConfigMessage
+from .message import FirmwareVersion, Config, WebsocketMessage
 
 FIRMWARE_VERSION = "1.0.0"
 IP_ADDRESS = "10.10.10.10"
@@ -45,7 +45,7 @@ class WebsocketServer:
                 log_info(
                     f"Sent firmware version '{FIRMWARE_VERSION}' to {websocket.remote_address}"
                 )
-                config_message = ConfigMessage(payload=self.state.rov_config).json(
+                config_message = Config(payload=self.state.rov_config).json(
                     by_alias=True
                 )
                 await websocket.send(config_message)
@@ -63,9 +63,8 @@ class WebsocketServer:
             for message in websocket:
                 try:
                     data = json.loads(message)
-                    msg_type = data.get("type")
-                    payload = data.get("payload")
-                    handle_message(msg_type, payload, websocket, self.state)
+                    deserialized_msg = WebsocketMessage(**data)
+                    await handle_message(self.state, websocket, deserialized_msg)
                 except json.JSONDecodeError:
                     log_error(
                         f"Error: Received invalid JSON from {websocket.remote_address}"

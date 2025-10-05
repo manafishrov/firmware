@@ -1,5 +1,7 @@
 from enum import Enum
-from typing import Union
+from typing import Union, Annotated
+
+from pydantic import Field
 
 from ..models.actions import DirectionVector, CustomAction
 from ..models.log import LogEntry
@@ -117,22 +119,25 @@ class FlashMicrocontrollerFirmware(CamelCaseModel):
     type: MessageType = MessageType.FLASH_MICROCONTROLLER_FIRMWARE
 
 
-WebsocketMessage = Union[
-    DirectionVector,
-    GetConfig,
-    SetConfig,
-    Config,
-    StartThrusterTest,
-    CancelThrusterTest,
-    RegulatorSuggestions,
-    ShowToast,
-    LogMessage,
-    StatusUpdate,
-    Telemetry,
-    FirmwareVersion,
-    CustomAction,
-    TogglePitchStabilization,
-    ToggleRollStabilization,
-    ToggleDepthStabilization,
-    FlashMicrocontrollerFirmware,
+WebsocketMessage = Annotated[
+    Union[
+        DirectionVector,
+        GetConfig,
+        SetConfig,
+        Config,
+        StartThrusterTest,
+        CancelThrusterTest,
+        RegulatorSuggestions,
+        ShowToast,
+        LogMessage,
+        StatusUpdate,
+        Telemetry,
+        FirmwareVersion,
+        CustomAction,
+        TogglePitchStabilization,
+        ToggleRollStabilization,
+        ToggleDepthStabilization,
+        FlashMicrocontrollerFirmware,
+    ],
+    Field(discriminator="type"),
 ]
