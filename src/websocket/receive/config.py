@@ -24,15 +24,12 @@ async def handle_set_config(
     state: RovState,
     payload: RovConfig,
 ) -> None:
-    try:
-        state.rov_config = payload
-        state.rov_config.save()
-        log_info("Received and applied new config.")
-        toast_success(
-            id=None,
-            message="ROV config set successfully",
-            description=None,
-            cancel=None,
-        )
-    except Exception as e:
-        log_error(f"Error setting config: {e}")
+    state.rov_config = payload
+    state.rov_config.save()
+    log_info("Received and applied new config.")
+    toast_success(
+        id=None,
+        message="ROV config set successfully",
+        description=None,
+        cancel=None,
+    )

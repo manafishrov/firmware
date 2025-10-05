@@ -16,14 +16,11 @@ async def handle_message(
     websocket: WebSocketServerProtocol,
     message: WebsocketMessage,
 ) -> None:
-    try:
-        payload = getattr(message, "payload", None)
-        match message.type:
-            case MessageType.GET_CONFIG:
-                await handle_get_config(state, websocket)
-            case MessageType.SET_CONFIG:
-                await handle_set_config(state, cast(RovConfig, payload))
-            case _:
-                log_warn(f"Received unhandled message type: {message.type}")
-    except Exception as exc:
-        log_warn(f"Error in handler for message type '{message.type}': {exc}")
+    payload = getattr(message, "payload", None)
+    match message.type:
+        case MessageType.GET_CONFIG:
+            await handle_get_config(state, websocket)
+        case MessageType.SET_CONFIG:
+            await handle_set_config(state, cast(RovConfig, payload))
+        case _:
+            log_warn(f"Received unhandled message type: {message.type}")

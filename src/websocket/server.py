@@ -69,11 +69,11 @@ class WebsocketServer:
                     deserialized_msg = WebsocketMessage(**data)
                     await handle_message(self.state, websocket, deserialized_msg)
                 except json.JSONDecodeError:
-                    log_error(
-                        f"Error: Received invalid JSON from {websocket.remote_address}"
+                    log_warn(
+                        f"Failed to deserialize message from {websocket.remote_address}"
                     )
                 except Exception as e:
-                    log_error(f"Error processing message: {e}")
+                    log_warn(f"Error processing message: {e}")
         except ConnectionClosed:
             log_info(f"Client connection closed: {websocket.remote_address}")
         finally:
