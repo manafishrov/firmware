@@ -12,8 +12,6 @@ async def main() -> None:
 
     await ws_server.start()
 
-    await state.thrusters.initialize()
-
     tasks = [
         ws_server.wait_closed(),
     ]
