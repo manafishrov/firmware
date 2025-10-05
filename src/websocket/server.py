@@ -10,8 +10,9 @@ import asyncio
 import json
 import websockets
 from ..websocket.handler import handle_message
+from ..websocket.send.config import handle_send_firmware_version, handle_send_config
 from ..log import set_log_is_client_connected_status, log_info, log_error, log_warn
-from .message import FirmwareVersion, Config, WebsocketMessage
+from .message import WebsocketMessage
 
 FIRMWARE_VERSION = "1.0.0"
 IP_ADDRESS = "10.10.10.10"
@@ -35,20 +36,16 @@ class WebsocketServer:
         set_log_is_client_connected_status(True)
         log_info(f"Client connected: {websocket.remote_address}.")
 
+        send_task = asyncio.create_task(self._send_from_queue(websocket))
+
         async def send_firmware_version_on_connect():
             await asyncio.sleep(5)
             try:
-                version_message = FirmwareVersion(payload=FIRMWARE_VERSION).json(
-                    by_alias=True
-                )
-                await websocket.send(version_message)
+                await handle_send_firmware_version(websocket, FIRMWARE_VERSION)
                 log_info(
                     f"Sent firmware version '{FIRMWARE_VERSION}' to {websocket.remote_address}"
                 )
-                config_message = Config(payload=self.state.rov_config).json(
-                    by_alias=True
-                )
-                await websocket.send(config_message)
+                await handle_send_config(websocket, self.state.rov_config)
                 log_info(f"Sent config to {websocket.remote_address}")
             except ConnectionClosed:
                 log_warn(
@@ -74,6 +71,7 @@ class WebsocketServer:
         except ConnectionClosed:
             log_info(f"Client connection closed: {websocket.remote_address}")
         finally:
+            send_task.cancel()
             self.client = None
             set_log_is_client_connected_status(False)
             log_info("Client disconnected.")
@@ -81,6 +79,18 @@ class WebsocketServer:
     async def start(self) -> None:
         self.server = await websockets.serve(self.handler, IP_ADDRESS, PORT)
         log_info(f"Websocket server started on {IP_ADDRESS}:{PORT}")
+
+    async def _send_from_queue(self, websocket: WebSocketServerProtocol) -> None:
+        try:
+            while True:
+                message = await message_queue.get()
+                try:
+                    json_msg = message.json(by_alias=True)
+                    await websocket.send(json_msg)
+                except Exception as e:
+                    log_error(f"Error sending queued message: {e}")
+        except asyncio.CancelledError:
+            pass
 
     async def wait_closed(self) -> None:
         if self.server:

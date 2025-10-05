@@ -5,7 +5,7 @@ if TYPE_CHECKING:
     from websockets.server import WebSocketServerProtocol
     from rov_state import RovState
 
-from ..message import Config, WebsocketMessage
+from ..message import Config
 from ...log import log_info, log_error
 from ...toast import toast_success
 from ...models.config import RovConfig
@@ -22,7 +22,6 @@ async def handle_get_config(
 
 async def handle_set_config(
     state: RovState,
-    _websocket: WebSocketServerProtocol,
     payload: RovConfig,
 ) -> None:
     try:

@@ -22,7 +22,7 @@ async def handle_message(
             case MessageType.GET_CONFIG:
                 await handle_get_config(state, websocket)
             case MessageType.SET_CONFIG:
-                await handle_set_config(state, websocket, cast(RovConfig, payload))
+                await handle_set_config(state, cast(RovConfig, payload))
             case _:
                 log_warn(f"Received unhandled message type: {message.type}")
     except Exception as exc:
