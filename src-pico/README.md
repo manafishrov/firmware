@@ -11,13 +11,13 @@ You can build either the dshot or pwm firmware by specifying the FIRMWARE_TYPE o
 Create the build directory:
 
 ```sh
-mkdir build
+mkdir src-pico/build
 ```
 
 Navigate to the build directory:
 
 ```sh
-cd build
+cd src-pico/build
 ```
 
 To build dshot firmware:
@@ -65,8 +65,8 @@ This should work regardless of if the Pico is in BOOTSEL mode or not.
 To make the pico firmware part of the main Manafish firmware, you need to copy the built `.uf2` file to the `src` directory. You can do this with the following commands:
 
 ```sh
-cp build/dshot/dshot_firmware.uf2 ../src/microcontroller_firmware/dshot.uf2
-cp build/pwm/pwm_firmware.uf2 ../src/microcontroller_firmware/pwm.uf2
+cp src-pico/build/dshot/dshot_firmware.uf2 src/microcontroller_firmware/dshot.uf2
+cp src-pico/build/pwm/pwm_firmware.uf2 src/microcontroller_firmware/pwm.uf2
 ```
 
 ## View firmware serial output

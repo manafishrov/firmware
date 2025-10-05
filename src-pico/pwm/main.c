@@ -10,12 +10,7 @@
 #define PWM_NEUTRAL 1500
 #define PWM_MAX 2000
 
-#define TELEMETRY_START_BYTE 0xA5
-#define TELEMETRY_PACKET_SIZE 8
-#define TELEMETRY_TYPE_ERPM 0
-#define TELEMETRY_TYPE_VOLTAGE 1
-#define TELEMETRY_TYPE_TEMPERATURE 2
-#define TELEMETRY_TYPE_CURRENT 3
+
 
 #define INPUT_START_BYTE 0x5A
 #define INPUT_PACKET_SIZE (1 + NUM_MOTORS * 2 + 1)
@@ -31,32 +26,9 @@ uint8_t calculate_checksum(const uint8_t* data, size_t len) {
     return checksum;
 }
 
-void send_telemetry(uint8_t motor_id, uint8_t type, int32_t value) {
-    uint8_t buf[TELEMETRY_PACKET_SIZE];
-    buf[0] = TELEMETRY_START_BYTE;
-    buf[1] = motor_id;
-    buf[2] = type;
-    memcpy(&buf[3], &value, 4);
-    buf[TELEMETRY_PACKET_SIZE - 1] = calculate_checksum(buf, TELEMETRY_PACKET_SIZE - 1);
-    fwrite(buf, 1, TELEMETRY_PACKET_SIZE, stdout);
-    fflush(stdout);
-}
 
-void send_erpm_telemetry(uint8_t motor_id) {
-    send_telemetry(motor_id, TELEMETRY_TYPE_ERPM, 0);
-}
 
-void send_voltage_telemetry(uint8_t motor_id) {
-    send_telemetry(motor_id, TELEMETRY_TYPE_VOLTAGE, 0);
-}
 
-void send_temperature_telemetry(uint8_t motor_id) {
-    send_telemetry(motor_id, TELEMETRY_TYPE_TEMPERATURE, 0);
-}
-
-void send_current_telemetry(uint8_t motor_id) {
-    send_telemetry(motor_id, TELEMETRY_TYPE_CURRENT, 0);
-}
 
 int main() {
     stdio_init_all();
@@ -104,10 +76,6 @@ int main() {
         }
         for (int i = 0; i < NUM_MOTORS; ++i) {
             pwm_set_throttle(&controller, i, thruster_values[i]);
-            send_erpm_telemetry(i);
-            send_voltage_telemetry(i);
-            send_temperature_telemetry(i);
-            send_current_telemetry(i);
         }
     }
     return 0;
