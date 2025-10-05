@@ -12,9 +12,12 @@ class ToastType(str, Enum):
     LOADING = "loading"
 
 
+ToastCancel = Union[CancelRegulatorAutoTuning, CancelThrusterTest]
+
+
 class Toast(CamelCaseModel):
     id: Optional[str]
     toast_type: Optional[ToastType]
     message: str
     description: Optional[str]
-    cancel: Optional[Union[CancelRegulatorAutoTuning, CancelThrusterTest]]
+    cancel: Optional[ToastCancel]

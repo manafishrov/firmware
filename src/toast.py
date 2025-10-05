@@ -3,7 +3,7 @@ from typing import Optional, Union
 
 import asyncio
 from .websocket.message import ShowToast, CancelRegulatorAutoTuning, CancelThrusterTest
-from .models.toast import Toast, ToastType
+from .models.toast import Toast, ToastType, ToastCancel
 
 _main_event_loop: Optional[asyncio.AbstractEventLoop] = None
 
@@ -18,7 +18,7 @@ async def _toast_message_async(
     toast_type: Optional[ToastType],
     message: str,
     description: Optional[str],
-    cancel: Optional[Union[CancelRegulatorAutoTuning, CancelThrusterTest]],
+    cancel: Optional[ToastCancel],
 ) -> None:
     from .websocket.server import get_message_queue
 
@@ -40,7 +40,7 @@ def _toast_message(
     toast_type: Optional[ToastType],
     message: str,
     description: Optional[str],
-    cancel: Optional[Union[CancelRegulatorAutoTuning, CancelThrusterTest]],
+    cancel: Optional[ToastCancel],
 ) -> None:
     if _main_event_loop and _main_event_loop.is_running():
         asyncio.run_coroutine_threadsafe(
@@ -57,7 +57,7 @@ def toast(
     id: Optional[str],
     message: str,
     description: Optional[str],
-    cancel: Optional[Union[CancelRegulatorAutoTuning, CancelThrusterTest]],
+    cancel: Optional[ToastCancel],
 ) -> None:
     _toast_message(id, None, message, description, cancel)
 
@@ -66,7 +66,7 @@ def toast_success(
     id: Optional[str],
     message: str,
     description: Optional[str],
-    cancel: Optional[Union[CancelRegulatorAutoTuning, CancelThrusterTest]],
+    cancel: Optional[ToastCancel],
 ) -> None:
     _toast_message(id, ToastType.SUCCESS, message, description, cancel)
 
@@ -75,7 +75,7 @@ def toast_info(
     id: Optional[str],
     message: str,
     description: Optional[str],
-    cancel: Optional[Union[CancelRegulatorAutoTuning, CancelThrusterTest]],
+    cancel: Optional[ToastCancel],
 ) -> None:
     _toast_message(id, ToastType.INFO, message, description, cancel)
 
@@ -84,7 +84,7 @@ def toast_warn(
     id: Optional[str],
     message: str,
     description: Optional[str],
-    cancel: Optional[Union[CancelRegulatorAutoTuning, CancelThrusterTest]],
+    cancel: Optional[ToastCancel],
 ) -> None:
     _toast_message(id, ToastType.WARN, message, description, cancel)
 

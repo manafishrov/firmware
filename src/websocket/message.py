@@ -2,7 +2,7 @@ from enum import Enum
 
 from ..models.log import LogEntry
 from ..models.toast import Toast
-from ..models.config import RovConfig
+from ..models.config import RovConfig, ThrusterTest, FirmwareVersion
 from ..models.rov_telemetry import RovTelemetry
 from ..models.rov_status import RovStatus
 from ..models.base import CamelCaseModel
@@ -32,7 +32,7 @@ class StatusUpdate(CamelCaseModel):
 
 class FirmwareVersion(CamelCaseModel):
     type: MessageType = MessageType.FIRMWARE_VERSION
-    payload: str
+    payload: FirmwareVersion
 
 
 class ConfigMessage(CamelCaseModel):
@@ -56,4 +56,4 @@ class CancelRegulatorAutoTuning(CamelCaseModel):
 
 class CancelThrusterTest(CamelCaseModel):
     type: MessageType = MessageType.CANCEL_THRUSTER_TEST
-    payload: int
+    payload: ThrusterTest

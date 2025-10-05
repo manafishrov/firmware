@@ -108,3 +108,14 @@ class RovConfig(CamelCaseModel):
     def save(self):
         with open(self._config_path, "w") as f:
             f.write(self.json(by_alias=True, indent=2))
+
+
+ThrusterTest = int
+
+FirmwareVersion = str
+
+
+class RegulatorSuggestions(CamelCaseModel):
+    pitch: RegulatorPID
+    roll: RegulatorPID
+    depth: RegulatorPID
