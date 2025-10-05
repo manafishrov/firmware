@@ -12,11 +12,11 @@ FLASH_TOAST_ID = "flash-microcontroller-firmware"
 def flash_microcontroller_firmware(firmware_variant: str) -> None:
     if firmware_variant == "pwm":
         firmware_path = os.path.join(
-            os.path.dirname(__file__), "pico_firmware", "pwm.uf2"
+            os.path.dirname(__file__), "microcontroller_firmware", "pwm.uf2"
         )
     elif firmware_variant == "dshot":
         firmware_path = os.path.join(
-            os.path.dirname(__file__), "pico_firmware", "dshot.uf2"
+            os.path.dirname(__file__), "microcontroller_firmware", "dshot.uf2"
         )
     else:
         log_error(f"Unknown firmware variant: {firmware_variant}")

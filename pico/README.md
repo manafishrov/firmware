@@ -65,8 +65,8 @@ This should work regardless of if the Pico is in BOOTSEL mode or not.
 To make the pico firmware part of the main Manafish firmware, you need to copy the built `.uf2` file to the `src` directory. You can do this with the following commands:
 
 ```sh
-cp build/dshot/dshot_firmware.uf2 ../src/pico/dshot.uf2
-cp build/pwm/pwm_firmware.uf2 ../src/pico/pwm.uf2
+cp build/dshot/dshot_firmware.uf2 ../src/microcontroller_firmware/dshot.uf2
+cp build/pwm/pwm_firmware.uf2 ../src/microcontroller_firmware/pwm.uf2
 ```
 
 ## View firmware serial output
