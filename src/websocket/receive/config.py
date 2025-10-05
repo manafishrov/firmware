@@ -6,7 +6,7 @@ if TYPE_CHECKING:
     from rov_state import RovState
 
 from ..message import Config
-from ...log import log_info, log_error
+from ...log import log_info
 from ...toast import toast_success
 from ...models.config import RovConfig
 

@@ -7,8 +7,9 @@ if TYPE_CHECKING:
 from websockets.server import WebSocketServerProtocol
 from ..log import log_warn
 from .receive.config import handle_get_config, handle_set_config
+from .receive.microcontroller import handle_flash_microcontroller_firmware
 from .message import MessageType, WebsocketMessage
-from ..models.config import RovConfig
+from ..models.config import RovConfig, MicrocontrollerFirmwareVariant
 
 
 async def handle_message(
@@ -22,5 +23,9 @@ async def handle_message(
             await handle_get_config(state, websocket)
         case MessageType.SET_CONFIG:
             await handle_set_config(state, cast(RovConfig, payload))
+        case MessageType.FLASH_MICROCONTROLLER_FIRMWARE:
+            await handle_flash_microcontroller_firmware(
+                cast(MicrocontrollerFirmwareVariant, payload)
+            )
         case _:
             log_warn(f"Received unhandled message type: {message.type}")

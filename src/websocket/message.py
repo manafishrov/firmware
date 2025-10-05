@@ -11,6 +11,7 @@ from ..models.config import (
     ThrusterTest,
     FirmwareVersion,
     RegulatorSuggestions,
+    MicrocontrollerFirmwareVariant,
 )
 from ..models.rov_telemetry import RovTelemetry
 from ..models.rov_status import RovStatus
@@ -117,6 +118,7 @@ class ToggleDepthStabilization(CamelCaseModel):
 
 class FlashMicrocontrollerFirmware(CamelCaseModel):
     type: MessageType = MessageType.FLASH_MICROCONTROLLER_FIRMWARE
+    payload: MicrocontrollerFirmwareVariant
 
 
 WebsocketMessage = Annotated[

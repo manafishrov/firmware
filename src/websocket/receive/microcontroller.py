@@ -3,23 +3,26 @@ from __future__ import annotations
 import subprocess
 import os
 import re
-from .log import log_info, log_error, log_warn
-from .toast import toast_error, toast_warn, toast_loading, toast_success, toast_info
+from ...log import log_info, log_error, log_warn
+from ...toast import toast_error, toast_warn, toast_loading, toast_success, toast_info
+from ...models.config import MicrocontrollerFirmwareVariant
 
 FLASH_TOAST_ID = "flash-microcontroller-firmware"
 
 
-def flash_microcontroller_firmware(firmware_variant: str) -> None:
-    if firmware_variant == "pwm":
+async def handle_flash_microcontroller_firmware(
+    payload: MicrocontrollerFirmwareVariant,
+) -> None:
+    if payload == MicrocontrollerFirmwareVariant.PWM:
         firmware_path = os.path.join(
             os.path.dirname(__file__), "microcontroller_firmware", "pwm.uf2"
         )
-    elif firmware_variant == "dshot":
+    elif payload == MicrocontrollerFirmwareVariant.DSHOT:
         firmware_path = os.path.join(
             os.path.dirname(__file__), "microcontroller_firmware", "dshot.uf2"
         )
     else:
-        log_error(f"Unknown firmware variant: {firmware_variant}")
+        log_error(f"Unknown firmware variant: {payload}")
         toast_error(
             id=None,
             message="Tried to flash unknown firmware variant",
@@ -28,7 +31,7 @@ def flash_microcontroller_firmware(firmware_variant: str) -> None:
         )
         return
 
-    log_info(f"Flashing firmware '{firmware_variant}' from {firmware_path}")
+    log_info(f"Flashing firmware '{payload.value}' from {firmware_path}")
     try:
         process = subprocess.Popen(
             ["picotool", "load", "-f", "-x", firmware_path],
@@ -108,3 +111,4 @@ def flash_microcontroller_firmware(firmware_variant: str) -> None:
             cancel=None,
         )
         log_error(f"Unexpected error: {ex}")
+
