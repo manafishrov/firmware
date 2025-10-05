@@ -1,5 +1,8 @@
 from typing import Union
 from enum import Enum
+
+from ..models.log import LogEntry
+from ..models.toast import Toast
 from ..models.config import RovConfig
 from ..models.rov_telemetry import RovTelemetry
 from ..models.rov_status import RovStatus
@@ -12,6 +15,10 @@ class MessageType(str, Enum):
     FIRMWARE_VERSION = "firmwareVersion"
     CONFIG = "config"
     SET_CONFIG = "setConfig"
+    SHOW_TOAST = "showToast"
+    LOG_MESSAGE = "logMessage"
+    CANCEL_REGULATOR_AUTO_TUNING = "cancelRegulatorAutoTuning"
+    CANCEL_THRUSTER_TEST = "cancelThrusterTest"
 
 
 class Telemetry(CamelCaseModel):
@@ -34,4 +41,19 @@ class ConfigMessage(CamelCaseModel):
     payload: RovConfig
 
 
-Message = Union[Telemetry, StatusUpdate, FirmwareVersion, ConfigMessage]
+class ShowToast(CamelCaseModel):
+    type: MessageType = MessageType.SHOW_TOAST
+    payload: Toast
+
+
+class LogMessage(CamelCaseModel):
+    type: MessageType = MessageType.LOG_MESSAGE
+    payload: LogEntry
+
+
+class CancelRegulatorAutoTuning(CamelCaseModel):
+    type: MessageType = MessageType.CANCEL_REGULATOR_AUTO_TUNING
+
+
+class CancelThrusterTest(CamelCaseModel):
+    type: MessageType = MessageType.CANCEL_THRUSTER_TEST

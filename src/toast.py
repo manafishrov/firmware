@@ -5,6 +5,8 @@ if TYPE_CHECKING:
     from .websocket.message import Message
 
 import asyncio
+from .websocket.message import ShowToast, ToastType
+from .models.toast import Toast
 
 _main_event_loop: Optional[asyncio.AbstractEventLoop] = None
 
@@ -23,18 +25,19 @@ async def _toast_message_async(
 ) -> None:
     from .websocket.server import get_message_queue
 
-    await get_message_queue().put(
-        {
-            "type": "showToast",
-            "payload": {
-                "id": id,
-                "toastType": toast_type,
-                "message": message,
-                "description": description,
-                "cancel": cancel,
-            },
-        }
+    toast_type_enum = None
+    if toast_type:
+        toast_type_enum = ToastType(toast_type)
+
+    payload = Toast(
+        id=id,
+        toast_type=toast_type_enum,
+        message=message,
+        description=description,
+        cancel=cancel,
     )
+    message_model = ShowToast(payload=payload)
+    await get_message_queue().put(message_model)
 
 
 def _toast_message(

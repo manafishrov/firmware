@@ -54,7 +54,10 @@ class WebsocketSenders:
     async def message_sender(self) -> None:
         queue = get_message_queue()
         while True:
-            message_dict = await queue.get()
-            message_str = json.dumps(message_dict)
+            message = await queue.get()
+            if hasattr(message, "json"):
+                message_str = message.json(by_alias=True)
+            else:
+                message_str = json.dumps(message)
             await self._send_message(message_str)
             queue.task_done()
