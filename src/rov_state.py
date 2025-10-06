@@ -13,6 +13,7 @@ class RovState:
     system_status: SystemStatus
     imu: ImuData
     pressure: PressureData
+    esc: EscData
     regulator: RegulatorData
 
     def __init__(self) -> None:
