@@ -1,4 +1,9 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from rov_state import RovState
+
 import glob
 import sys
 from serial.aio import Serial
@@ -6,7 +11,8 @@ from .log import log_error
 
 
 class SerialManager:
-    def __init__(self):
+    def __init__(self, state: RovState):
+        self.state: RovState = state
         self.serial: Serial | None = None
 
     async def _find_microcontroller_port(self) -> str:
@@ -23,6 +29,7 @@ class SerialManager:
         serial_port = await self._find_microcontroller_port()
         self.serial = Serial(serial_port, baudrate=115200)
         await self.serial.open()
+        self.state.system_health.microcontroller_ok = True
 
     def get_serial(self) -> Serial:
         if self.serial is None:
@@ -32,3 +39,4 @@ class SerialManager:
     async def shutdown(self) -> None:
         if self.serial:
             await self.serial.close()
+        self.state.system_health.microcontroller_ok = False

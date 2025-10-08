@@ -13,7 +13,7 @@ from .log import log_info
 
 async def main() -> None:
     state = RovState()
-    serial_manager = SerialManager()
+    serial_manager = SerialManager(state)
     await serial_manager.initialize()
 
     imu = Imu(state)
