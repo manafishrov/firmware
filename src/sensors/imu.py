@@ -61,3 +61,10 @@ class Imu:
         except Exception as e:
             log_error(f"Error reading IMU data: {e}")
             return None
+
+    async def read_loop(self) -> None:
+        while True:
+            data = await asyncio.to_thread(self.read_data)
+            if data:
+                self.state.imu = data
+            await asyncio.sleep(1 / 100)

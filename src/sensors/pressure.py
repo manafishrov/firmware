@@ -56,3 +56,10 @@ class PressureSensor:
         except Exception as e:
             log_error(f"Error reading pressure sensor data: {e}")
             return None
+
+    async def read_loop(self) -> None:
+        while True:
+            data = await asyncio.to_thread(self.read_data)
+            if data:
+                self.state.pressure = data
+            await asyncio.sleep(1 / 50)
