@@ -6,21 +6,24 @@ from .thrusters import Thrusters
 from .sensors.imu import Imu
 from .sensors.pressure import PressureSensor
 from .sensors.esc import EscSensor
+from .serial import SerialManager
 from .websocket.server import WebsocketServer
 from .log import log_info
 
 
 async def main() -> None:
     state = RovState()
+    serial_manager = SerialManager()
+    await serial_manager.initialize()
+
     imu = Imu(state)
     pressure = PressureSensor(state)
-    esc = EscSensor(state)
-    thrusters = Thrusters(state, esc.serial)
+    esc = EscSensor(state, serial_manager)
+    thrusters = Thrusters(state, serial_manager)
     ws_server = WebsocketServer(state)
 
     await imu.initialize()
     await pressure.initialize()
-    await esc.initialize()
 
     await ws_server.start()
 
@@ -32,6 +35,8 @@ async def main() -> None:
         ws_server.wait_closed(),
     ]
     await asyncio.gather(*tasks)
+
+    await serial_manager.shutdown()
 
 
 if __name__ == "__main__":

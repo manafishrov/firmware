@@ -3,42 +3,24 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from rov_state import RovState
+    from serial_manager import SerialManager
 
-import glob
 import struct
-import sys
-from serial.aio import Serial
-from ..log import log_error
 
 TELEMETRY_START_BYTE = 0xA5
 NUM_MOTORS = 8
 
 
-class EscTelemetry:
-    def __init__(self, state: RovState):
+class EscSensor:
+    def __init__(self, state: RovState, serial_manager: SerialManager):
         self.state: RovState = state
-        self.serial: Serial | None = None
-
-    async def _find_pico_port(self) -> str:
-        pico_ports = glob.glob("/dev/serial/by-id/usb-Raspberry_Pi_Pico*")
-        if not pico_ports:
-            pico_ports = glob.glob("/dev/ttyACM*")
-        if pico_ports:
-            return pico_ports[0]
-        else:
-            log_error("Error: Could not find Raspberry Pi Pico serial port.")
-            sys.exit(1)
-
-    async def initialize(self) -> None:
-        serial_port = await self._find_pico_port()
-        self.serial = Serial(serial_port, baudrate=115200)
-        await self.serial.open()
+        self.serial_manager: SerialManager = serial_manager
 
     async def read_loop(self) -> None:
-        assert self.serial is not None
+        serial = self.serial_manager.get_serial()
         read_buffer = bytearray()
         while True:
-            data = await self.serial.read(1)
+            data = await serial.read(1)
             if data:
                 read_buffer.extend(data)
                 while len(read_buffer) >= 8:

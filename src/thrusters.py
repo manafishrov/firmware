@@ -4,10 +4,10 @@ import asyncio
 import time
 import struct
 import numpy as np
-from serial.aio import Serial
 
 if TYPE_CHECKING:
     from rov_state import RovState
+    from serial_manager import SerialManager
 
 INPUT_START_BYTE = 0x5A
 NUM_MOTORS = 8
@@ -18,11 +18,12 @@ TIMEOUT_MS = 200
 
 
 class Thrusters:
-    def __init__(self, state: RovState, serial: Serial):
+    def __init__(self, state: RovState, serial_manager: SerialManager):
         self.state: RovState = state
-        self.serial: Serial = serial
+        self.serial_manager: SerialManager = serial_manager
 
     async def send_loop(self) -> None:
+        serial = self.serial_manager.get_serial()
         last_thrust = np.zeros(NUM_MOTORS)
         last_send_time = time.time()
         while True:
@@ -50,5 +51,5 @@ class Thrusters:
             for b in packet:
                 checksum ^= b
             packet.append(checksum)
-            await self.serial.write(packet)
+            await serial.write(packet)
             await asyncio.sleep(1 / 60)
