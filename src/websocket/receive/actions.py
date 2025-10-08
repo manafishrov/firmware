@@ -15,8 +15,8 @@ async def handle_direction_vector(
     payload: DirectionVector,
 ) -> None:
     log_info(f"Received direction vector: {payload}")
-    state.direction_vector = payload.values
-    state.last_direction_time = time.time()
+    state.thruster_data.direction_vector = payload.values
+    state.thruster_data.last_direction_time = time.time()
 
 
 async def handle_start_thruster_test(

@@ -32,11 +32,11 @@ class Thrusters:
                 continue
             current_time = time.time()
             if (
-                self.state.direction_vector is not None
-                and current_time - self.state.last_direction_time < TIMEOUT_MS / 1000
+                self.state.thruster_data.last_direction_time > 0
+                and current_time - self.state.thruster_data.last_direction_time
+                < TIMEOUT_MS / 1000
             ):
-                imu_data = self.state.imu
-                last_thrust = self.state.direction_vector
+                last_thrust = self.state.thruster_data.direction_vector
                 last_send_time = current_time
             elif current_time - last_send_time > TIMEOUT_MS / 1000:
                 last_thrust = np.zeros(NUM_MOTORS)
