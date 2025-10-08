@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from rov_state import RovState
 
+import time
 from ...log import log_info
 from ...models.actions import DirectionVector, CustomAction
 from ...models.config import ThrusterTest
@@ -14,6 +15,8 @@ async def handle_direction_vector(
     payload: DirectionVector,
 ) -> None:
     log_info(f"Received direction vector: {payload}")
+    state.direction_vector = payload.values
+    state.last_direction_time = time.time()
 
 
 async def handle_start_thruster_test(
@@ -35,4 +38,3 @@ async def handle_custom_action(
     payload: CustomAction,
 ) -> None:
     log_info(f"Received custom action: {payload}")
-

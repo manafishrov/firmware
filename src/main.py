@@ -2,12 +2,16 @@ from __future__ import annotations
 
 import asyncio
 from .rov_state import RovState
+from .thrusters import Thrusters
 from .websocket.server import WebsocketServer
 from .log import log_info
 
 
 async def main() -> None:
     state = RovState()
+    thrusters = Thrusters(state)
+    await thrusters.initialize()
+    thrusters.start_tasks()
     ws_server = WebsocketServer(state)
 
     await ws_server.start()
