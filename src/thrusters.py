@@ -27,6 +27,9 @@ class Thrusters:
         last_thrust = np.zeros(NUM_MOTORS)
         last_send_time = time.time()
         while True:
+            if not self.state.system_health.microcontroller_ok:
+                await asyncio.sleep(1)
+                continue
             current_time = time.time()
             if (
                 self.state.direction_vector is not None

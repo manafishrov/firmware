@@ -5,6 +5,7 @@ if TYPE_CHECKING:
     from rov_state import RovState
     from serial_manager import SerialManager
 
+import asyncio
 import struct
 
 TELEMETRY_START_BYTE = 0xA5
@@ -20,6 +21,9 @@ class EscSensor:
         serial = self.serial_manager.get_serial()
         read_buffer = bytearray()
         while True:
+            if not self.state.system_health.microcontroller_ok:
+                await asyncio.sleep(1)
+                continue
             data = await serial.read(1)
             if data:
                 read_buffer.extend(data)

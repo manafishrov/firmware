@@ -51,8 +51,6 @@ class Imu:
 
     def read_data(self) -> Optional[ImuData]:
         try:
-            if not self.state.system_health.imu_ok:
-                return None
             return ImuData(
                 acceleration=self.imu.get_acc_data(),
                 gyroscope=self.imu.get_gyr_data(),
@@ -64,6 +62,9 @@ class Imu:
 
     async def read_loop(self) -> None:
         while True:
+            if not self.state.system_health.imu_ok:
+                await asyncio.sleep(1)
+                continue
             data = await asyncio.to_thread(self.read_data)
             if data:
                 self.state.imu = data

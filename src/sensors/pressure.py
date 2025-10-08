@@ -38,9 +38,6 @@ class PressureSensor:
 
     def read_data(self) -> Optional[PressureData]:
         try:
-            if not self.state.system_health.pressure_sensor_ok:
-                return None
-
             if self.sensor.read():
                 if self.state.rov_config.fluid_type == "saltwater":
                     depth = self.sensor.depth(ms5837.DENSITY_SALTWATER)
@@ -59,6 +56,9 @@ class PressureSensor:
 
     async def read_loop(self) -> None:
         while True:
+            if not self.state.system_health.pressure_sensor_ok:
+                await asyncio.sleep(1)
+                continue
             data = await asyncio.to_thread(self.read_data)
             if data:
                 self.state.pressure = data
