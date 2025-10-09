@@ -1,14 +1,15 @@
 from __future__ import annotations
 from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from rov_state import RovState
+    from serial import SerialManager
+
 import asyncio
 import time
 import struct
 import numpy as np
-
-if TYPE_CHECKING:
-    from rov_state import RovState
-    from serial_manager import SerialManager
-    from numpy.typing import NDArray
+from numpy.typing import NDArray
 
 INPUT_START_BYTE = 0x5A
 NUM_MOTORS = 8
@@ -57,6 +58,39 @@ class Thrusters:
             reordered[i] = thrust_vector[identifiers[i]]
         return reordered
 
+    def _prepare_thrust_vector(
+        self, direction_vector: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
+        direction_vector = self._scale_direction_vector_with_user_max_power(
+            direction_vector
+        )
+        thrust_vector = self._create_thrust_vector_from_thruster_allocation(
+            direction_vector
+        )
+        thrust_vector = self._correct_thrust_vector_spin_directions(thrust_vector)
+        thrust_vector = self._reorder_thrust_vector(thrust_vector)
+        return thrust_vector
+
+    def _compute_thrust_values(self, thrust_vector: NDArray[np.float64]) -> list[int]:
+        thrust_values = []
+        for val in thrust_vector:
+            if val >= 0:
+                thruster_val = int(NEUTRAL + val * FORWARD_RANGE)
+            else:
+                thruster_val = int(NEUTRAL + val * REVERSE_RANGE)
+            thrust_values.append(thruster_val)
+        thrust_values = (thrust_values + [NEUTRAL] * NUM_MOTORS)[:NUM_MOTORS]
+        return thrust_values
+
+    async def _send_packet(self, serial, thrust_values: list[int]) -> None:
+        data_payload = struct.pack(f"<{NUM_MOTORS}H", *thrust_values)
+        packet = bytearray([INPUT_START_BYTE]) + data_payload
+        checksum = 0
+        for b in packet:
+            checksum ^= b
+        packet.append(checksum)
+        await serial.write(packet)
+
     async def send_loop(self) -> None:
         serial = self.serial_manager.get_serial()
         thrust_vector = np.zeros(NUM_MOTORS)
@@ -72,32 +106,10 @@ class Thrusters:
                 < TIMEOUT_MS / 1000
             ):
                 direction_vector = self.state.thruster_data.direction_vector
-                direction_vector = self._scale_direction_vector_with_user_max_power(
-                    direction_vector
-                )
-                thrust_vector = self._create_thrust_vector_from_thruster_allocation(
-                    direction_vector
-                )
-                thrust_vector = self._correct_thrust_vector_spin_directions(
-                    thrust_vector
-                )
-                thrust_vector = self._reorder_thrust_vector(thrust_vector)
+                thrust_vector = self._prepare_thrust_vector(direction_vector)
                 last_send_time = current_time
             elif current_time - last_send_time > TIMEOUT_MS / 1000:
                 thrust_vector = np.zeros(NUM_MOTORS)
-            thrust_values = []
-            for val in thrust_vector:
-                if val >= 0:
-                    thruster_val = int(NEUTRAL + val * FORWARD_RANGE)
-                else:
-                    thruster_val = int(NEUTRAL + val * REVERSE_RANGE)
-                thrust_values.append(thruster_val)
-            thrust_values = (thrust_values + [NEUTRAL] * NUM_MOTORS)[:NUM_MOTORS]
-            data_payload = struct.pack(f"<{NUM_MOTORS}H", *thrust_values)
-            packet = bytearray([INPUT_START_BYTE]) + data_payload
-            checksum = 0
-            for b in packet:
-                checksum ^= b
-            packet.append(checksum)
-            await serial.write(packet)
+            thrust_values = self._compute_thrust_values(thrust_vector)
+            await self._send_packet(serial, thrust_values)
             await asyncio.sleep(1 / 60)
