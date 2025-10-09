@@ -33,9 +33,7 @@ class Thrusters:
     def _create_thrust_vector_from_thruster_allocation(
         self, direction_vector: NDArray[np.float64]
     ) -> NDArray[np.float64]:
-        allocation_matrix = np.array(
-            self.state.rov_config.thruster_allocation, dtype=float
-        )
+        allocation_matrix = self.state.rov_config.thruster_allocation
         direction_vector_np = direction_vector.reshape(-1)
         cols = direction_vector_np.shape[0]
         allocation_matrix = allocation_matrix[:, :cols]
@@ -45,9 +43,7 @@ class Thrusters:
     def _correct_thrust_vector_spin_directions(
         self, thrust_vector: NDArray[np.float64]
     ) -> NDArray[np.float64]:
-        spin_directions = np.array(
-            self.state.rov_config.thruster_pin_setup.spin_directions, dtype=float
-        )
+        spin_directions = self.state.rov_config.thruster_pin_setup.spin_directions
         thrust_vector = thrust_vector * spin_directions
         np.clip(thrust_vector, -1, 1, out=thrust_vector)
         return thrust_vector

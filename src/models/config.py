@@ -1,5 +1,7 @@
 import os
 from enum import Enum
+from pydantic import validator
+import numpy as np
 from .base import CamelCaseModel
 
 
@@ -14,8 +16,18 @@ class FluidType(str, Enum):
 
 
 class ThrusterPinSetup(CamelCaseModel):
-    identifiers: tuple[int, int, int, int, int, int, int, int]
-    spin_directions: tuple[int, int, int, int, int, int, int, int]
+    identifiers: np.ndarray
+    spin_directions: np.ndarray
+
+    @validator("identifiers", pre=True)
+    @classmethod
+    def to_int_array(cls, v):
+        return np.array(v, dtype=int)
+
+    @validator("spin_directions", pre=True)
+    @classmethod
+    def to_float_array(cls, v):
+        return np.array(v, dtype=float)
 
 
 class RegulatorPID(CamelCaseModel):
@@ -56,24 +68,17 @@ class RovConfig(CamelCaseModel):
         identifiers=(0, 1, 2, 3, 4, 5, 6, 7),
         spin_directions=(1, 1, 1, 1, 1, 1, 1, 1),
     )
-    thruster_allocation: tuple[
-        tuple[int, int, int, int, int, int, int, int],
-        tuple[int, int, int, int, int, int, int, int],
-        tuple[int, int, int, int, int, int, int, int],
-        tuple[int, int, int, int, int, int, int, int],
-        tuple[int, int, int, int, int, int, int, int],
-        tuple[int, int, int, int, int, int, int, int],
-        tuple[int, int, int, int, int, int, int, int],
-        tuple[int, int, int, int, int, int, int, int],
-    ] = (
-        (1, 1, 0, 0, 0, 0, -1, -1),
-        (1, -1, 0, 0, 0, 0, -1, 1),
-        (0, 0, 1, 1, 1, 1, 0, 0),
-        (0, 0, 1, 1, -1, -1, 0, 0),
-        (-1, 1, 0, 0, 0, 0, 1, -1),
-        (0, 0, 1, -1, 1, -1, 0, 0),
-        (0, 0, 0, 0, 0, 0, 0, 0),
-        (0, 0, 0, 0, 0, 0, 0, 0),
+    thruster_allocation: np.ndarray = np.array(
+        (
+            (1, 1, 0, 0, 0, 0, -1, -1),
+            (1, -1, 0, 0, 0, 0, -1, 1),
+            (0, 0, 1, 1, 1, 1, 0, 0),
+            (0, 0, 1, 1, -1, -1, 0, 0),
+            (-1, 1, 0, 0, 0, 0, 1, -1),
+            (0, 0, 1, -1, 1, -1, 0, 0),
+            (0, 0, 0, 0, 0, 0, 0, 0),
+            (0, 0, 0, 0, 0, 0, 0, 0),
+        )
     )
     regulator: Regulator = Regulator(
         turn_speed=40,
@@ -95,6 +100,11 @@ class RovConfig(CamelCaseModel):
         battery_min_voltage=9.6,
         battery_max_voltage=12.6,
     )
+
+    @validator("thruster_allocation", pre=True)
+    @classmethod
+    def to_float_array(cls, v):
+        return np.array(v, dtype=float)
 
     _config_path = os.path.join(os.path.dirname(__file__), "config.json")
 

@@ -1,12 +1,12 @@
 from .base import CamelCaseModel
-from pydantic import field_validator
+from pydantic import validator
 import numpy as np
 
 
 class DirectionVector(CamelCaseModel):
-    values: np.ndarray
+    __root__: np.ndarray
 
-    @field_validator("values", mode="before")
+    @validator("__root__", pre=True)
     @classmethod
     def to_array(cls, v):
         return np.array(v) if isinstance(v, (list, tuple)) else v
