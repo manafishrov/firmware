@@ -8,8 +8,8 @@ class DirectionVector(CamelCaseModel):
 
     @validator("__root__", pre=True)
     @classmethod
-    def to_array(cls, v):
-        return np.array(v) if isinstance(v, (list, tuple)) else v
+    def to_float_array(cls, v):
+        return np.array(v, dtype=float)
 
 
 CustomAction = str
