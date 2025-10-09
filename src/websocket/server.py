@@ -16,9 +16,7 @@ from .message import WebsocketMessage
 from .send.telemetry import handle_telemetry
 from .send.status import handle_status_update
 
-FIRMWARE_VERSION = "1.0.0"
-IP_ADDRESS = "10.10.10.10"
-PORT = 9000
+from .constants import FIRMWARE_VERSION, WEBSOCKET_IP_ADDRESS, WEBSOCKET_PORT
 
 message_queue: asyncio.Queue = asyncio.Queue()
 
@@ -87,8 +85,10 @@ class WebsocketServer:
             log_info("Client disconnected.")
 
     async def start(self) -> None:
-        self.server = await websockets.serve(self.handler, IP_ADDRESS, PORT)
-        log_info(f"Websocket server started on {IP_ADDRESS}:{PORT}")
+        self.server = await websockets.serve(
+            self.handler, WEBSOCKET_IP_ADDRESS, WEBSOCKET_PORT
+        )
+        log_info(f"Websocket server started on {WEBSOCKET_IP_ADDRESS}:{WEBSOCKET_PORT}")
 
     async def _send_from_queue(self, websocket: WebSocketServerProtocol) -> None:
         try:

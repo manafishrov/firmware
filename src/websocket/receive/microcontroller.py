@@ -6,8 +6,7 @@ import re
 from ...log import log_info, log_error, log_warn
 from ...toast import toast_error, toast_warn, toast_loading, toast_success, toast_info
 from ...models.config import MicrocontrollerFirmwareVariant
-
-FLASH_TOAST_ID = "flash-microcontroller-firmware"
+from ...constants import FLASH_TOAST_ID
 
 
 async def handle_flash_microcontroller_firmware(
@@ -111,4 +110,3 @@ async def handle_flash_microcontroller_firmware(
             cancel=None,
         )
         log_error(f"Unexpected error: {ex}")
-
