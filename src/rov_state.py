@@ -16,7 +16,7 @@ class RovState:
     pressure: PressureData
     esc: EscData
     regulator: RegulatorData
-    thruster_data: ThrusterData
+    thrusters: ThrusterData
 
     def __init__(self) -> None:
         self.rov_config = RovConfig.load()
@@ -26,4 +26,4 @@ class RovState:
         self.pressure = PressureData()
         self.esc = EscData()
         self.regulator = RegulatorData()
-        self.thruster_data = ThrusterData()
+        self.thrusters = ThrusterData()

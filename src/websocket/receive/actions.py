@@ -17,8 +17,8 @@ async def handle_direction_vector(
     payload: DirectionVector,
 ) -> None:
     log_info(f"Received direction vector: {payload}")
-    state.thruster_data.direction_vector = payload.root
-    state.thruster_data.last_direction_time = time.time()
+    state.thrusters.direction_vector = payload.root
+    state.thrusters.last_direction_time = time.time()
 
 
 async def handle_start_thruster_test(
@@ -26,9 +26,9 @@ async def handle_start_thruster_test(
     payload: ThrusterTest,
 ) -> None:
     log_info(f"Starting thruster test: {payload}")
-    state.thruster_data.test_thruster = payload
-    state.thruster_data.test_start_time = time.time()
-    state.thruster_data.last_remaining = 10
+    state.thrusters.test_thruster = payload
+    state.thrusters.test_start_time = time.time()
+    state.thrusters.last_remaining = 10
     toast_loading(
         id="thruster-test",
         message=f"Testing thruster {payload}",
@@ -42,7 +42,7 @@ async def handle_cancel_thruster_test(
     payload: ThrusterTest,
 ) -> None:
     log_info(f"Cancelling thruster test: {payload}")
-    state.thruster_data.test_thruster = None
+    state.thrusters.test_thruster = None
     toast_info(
         id="thruster-test",
         message="Thruster test cancelled",

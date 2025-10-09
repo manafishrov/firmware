@@ -86,10 +86,10 @@ class Thrusters:
     def _handle_thruster_test(
         self, current_time: float
     ) -> Optional[NDArray[np.float64]]:
-        if self.state.thruster_data.test_thruster is not None:
-            elapsed = current_time - self.state.thruster_data.test_start_time
+        if self.state.thrusters.test_thruster is not None:
+            elapsed = current_time - self.state.thrusters.test_start_time
             if elapsed >= 10:
-                self.state.thruster_data.test_thruster = None
+                self.state.thrusters.test_thruster = None
                 toast_success(
                     id="thruster-test",
                     message="Thruster test completed",
@@ -99,14 +99,14 @@ class Thrusters:
                 return None
             else:
                 thrust_vector = np.zeros(NUM_MOTORS)
-                logical_index = self.state.thruster_data.test_thruster
+                logical_index = self.state.thrusters.test_thruster
                 hardware_index = self.state.rov_config.thruster_pin_setup.identifiers[
                     logical_index
                 ]
                 thrust_vector[hardware_index] = 0.1
                 remaining = int(10 - elapsed)
-                if remaining != self.state.thruster_data.last_remaining:
-                    self.state.thruster_data.last_remaining = remaining
+                if remaining != self.state.thrusters.last_remaining:
+                    self.state.thrusters.last_remaining = remaining
                     toast_loading(
                         id="thruster-test",
                         message=f"Testing thruster {logical_index}",
@@ -138,11 +138,11 @@ class Thrusters:
             if test_vector is not None:
                 thrust_vector = test_vector
             elif (
-                self.state.thruster_data.last_direction_time > 0
-                and current_time - self.state.thruster_data.last_direction_time
+                self.state.thrusters.last_direction_time > 0
+                and current_time - self.state.thrusters.last_direction_time
                 < TIMEOUT_MS / 1000
             ):
-                direction_vector = self.state.thruster_data.direction_vector
+                direction_vector = self.state.thrusters.direction_vector
                 thrust_vector = self._prepare_thrust_vector(direction_vector)
                 last_send_time = current_time
             elif current_time - last_send_time > TIMEOUT_MS / 1000:
