@@ -96,9 +96,8 @@ class Regulator:
         power = self.state.rov_config.power.regulator_max_power
 
         if self.state.system_status.depth_stabilization:
-            if self.state.regulator.desired_depth == 0.0:
-                self.state.regulator.desired_depth = self.state.pressure.depth
-                self.integral_value_depth = 0.0
+            self.state.regulator.desired_depth = self.state.pressure.depth
+            self.integral_value_depth = 0.0
 
         if self.state.system_status.pitch_stabilization:
             pitch_change = direction_vector[3]
