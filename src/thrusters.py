@@ -8,6 +8,7 @@ import numpy as np
 if TYPE_CHECKING:
     from rov_state import RovState
     from serial_manager import SerialManager
+    from numpy.typing import NDArray
 
 INPUT_START_BYTE = 0x5A
 NUM_MOTORS = 8
@@ -22,9 +23,47 @@ class Thrusters:
         self.state: RovState = state
         self.serial_manager: SerialManager = serial_manager
 
+    def _scale_direction_vector_with_user_max_power(
+        self, direction_vector: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
+        scale = self.state.rov_config.power.user_max_power
+        np.multiply(direction_vector, scale, out=direction_vector)
+        return direction_vector
+
+    def _create_thrust_vector_from_thruster_allocation(
+        self, direction_vector: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
+        allocation_matrix = np.array(
+            self.state.rov_config.thruster_allocation, dtype=float
+        )
+        direction_vector_np = direction_vector.reshape(-1)
+        cols = direction_vector_np.shape[0]
+        allocation_matrix = allocation_matrix[:, :cols]
+        thrust_vector = allocation_matrix @ direction_vector_np
+        return thrust_vector
+
+    def _correct_thrust_vector_spin_directions(
+        self, thrust_vector: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
+        spin_directions = np.array(
+            self.state.rov_config.thruster_pin_setup.spin_directions, dtype=float
+        )
+        thrust_vector = thrust_vector * spin_directions
+        np.clip(thrust_vector, -1, 1, out=thrust_vector)
+        return thrust_vector
+
+    def _reorder_thrust_vector(
+        self, thrust_vector: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
+        identifiers = self.state.rov_config.thruster_pin_setup.identifiers
+        reordered = np.zeros(len(identifiers))
+        for i in range(len(identifiers)):
+            reordered[i] = thrust_vector[identifiers[i]]
+        return reordered
+
     async def send_loop(self) -> None:
         serial = self.serial_manager.get_serial()
-        last_thrust = np.zeros(NUM_MOTORS)
+        thrust_vector = np.zeros(NUM_MOTORS)
         last_send_time = time.time()
         while True:
             if not self.state.system_health.microcontroller_ok:
@@ -36,12 +75,22 @@ class Thrusters:
                 and current_time - self.state.thruster_data.last_direction_time
                 < TIMEOUT_MS / 1000
             ):
-                last_thrust = self.state.thruster_data.direction_vector
+                direction_vector = self.state.thruster_data.direction_vector
+                direction_vector = self._scale_direction_vector_with_user_max_power(
+                    direction_vector
+                )
+                thrust_vector = self._create_thrust_vector_from_thruster_allocation(
+                    direction_vector
+                )
+                thrust_vector = self._correct_thrust_vector_spin_directions(
+                    thrust_vector
+                )
+                thrust_vector = self._reorder_thrust_vector(thrust_vector)
                 last_send_time = current_time
             elif current_time - last_send_time > TIMEOUT_MS / 1000:
-                last_thrust = np.zeros(NUM_MOTORS)
+                thrust_vector = np.zeros(NUM_MOTORS)
             thrust_values = []
-            for val in last_thrust:
+            for val in thrust_vector:
                 if val >= 0:
                     thruster_val = int(NEUTRAL + val * FORWARD_RANGE)
                 else:
