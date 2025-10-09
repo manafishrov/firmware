@@ -5,10 +5,11 @@ if TYPE_CHECKING:
     from rov_state import RovState
 
 import time
-from ...log import log_info
+import importlib
+from ...log import log_info, log_warn, log_error
 from ...models.actions import DirectionVector, CustomAction
 from ...models.config import ThrusterTest
-from ...toast import toast_loading, toast_success, toast_info
+from ...toast import toast_loading, toast_info
 from ...websocket.message import CancelThrusterTest
 
 
@@ -56,3 +57,13 @@ async def handle_custom_action(
     payload: CustomAction,
 ) -> None:
     log_info(f"Received custom action: {payload}")
+    try:
+        module = importlib.import_module(f"src.custom_actions.{payload}")
+        if hasattr(module, "execute"):
+            await module.execute(state)
+        else:
+            log_warn(f"Custom action {payload} has no 'execute' function")
+    except ImportError:
+        log_warn(f"Custom action {payload} not found")
+    except Exception as e:
+        log_error(f"Error executing custom action {payload}: {e}")
