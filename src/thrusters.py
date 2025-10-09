@@ -19,6 +19,7 @@ NEUTRAL = 1000
 FORWARD_RANGE = 1000
 REVERSE_RANGE = 1000
 TIMEOUT_MS = 200
+THRUSTER_TEST_TOAST_ID = "thruster-test"
 
 
 class Thrusters:
@@ -102,7 +103,7 @@ class Thrusters:
             if elapsed >= 10:
                 self.state.thrusters.test_thruster = None
                 toast_success(
-                    id="thruster-test",
+                    id=THRUSTER_TEST_TOAST_ID,
                     message="Thruster test completed",
                     description=None,
                     cancel=None,
@@ -119,7 +120,7 @@ class Thrusters:
                 if remaining != self.state.thrusters.last_remaining:
                     self.state.thrusters.last_remaining = remaining
                     toast_loading(
-                        id="thruster-test",
+                        id=THRUSTER_TEST_TOAST_ID,
                         message=f"Testing thruster {logical_index}",
                         description=f"{remaining} seconds remaining",
                         cancel=None,
