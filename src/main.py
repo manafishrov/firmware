@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from .rov_state import RovState
 from .thrusters import Thrusters
 from .sensors.imu import Imu
@@ -24,6 +25,15 @@ async def main() -> None:
     thrusters: Thrusters = Thrusters(state, serial_manager, regulator)
     ws_server: WebsocketServer = WebsocketServer(state)
 
+    async def health_check(state: RovState) -> None:
+        while True:
+            now = time.time()
+            if state.imu.measured_at and now - state.imu.measured_at > 0.5:
+                state.system_health.imu_ok = False
+            if state.pressure.measured_at and now - state.pressure.measured_at > 1:
+                state.system_health.pressure_sensor_ok = False
+            await asyncio.sleep(1)
+
     await imu.initialize()
     await pressure.initialize()
 
@@ -34,6 +44,7 @@ async def main() -> None:
         pressure.read_loop(),
         esc.read_loop(),
         thrusters.send_loop(),
+        health_check(state),
         ws_server.wait_closed(),
     ]
     await asyncio.gather(*tasks)

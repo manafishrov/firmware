@@ -57,11 +57,23 @@ class PressureSensor:
             return None
 
     async def read_loop(self) -> None:
+        failure_count = 0
         while True:
             if not self.state.system_health.pressure_sensor_ok:
                 await asyncio.sleep(1)
                 continue
-            data = await asyncio.to_thread(self.read_data)
-            if data:
-                self.state.pressure = data
+            try:
+                data = await asyncio.to_thread(self.read_data)
+                if data:
+                    self.state.pressure = data
+                    failure_count = 0
+                else:
+                    failure_count += 1
+            except Exception as e:
+                log_error(f"Pressure sensor read_loop error: {e}")
+                failure_count += 1
+            if failure_count >= 3:
+                self.state.system_health.pressure_sensor_ok = False
+                failure_count = 0
+                log_error("Pressure sensor failed 3 times, disabling pressure sensor")
             await asyncio.sleep(1 / 50)

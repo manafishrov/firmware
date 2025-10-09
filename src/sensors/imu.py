@@ -63,11 +63,23 @@ class Imu:
             return None
 
     async def read_loop(self) -> None:
+        failure_count = 0
         while True:
             if not self.state.system_health.imu_ok:
                 await asyncio.sleep(1)
                 continue
-            data = await asyncio.to_thread(self.read_data)
-            if data:
-                self.state.imu = data
+            try:
+                data = await asyncio.to_thread(self.read_data)
+                if data:
+                    self.state.imu = data
+                    failure_count = 0
+                else:
+                    failure_count += 1
+            except Exception as e:
+                log_error(f"IMU read_loop error: {e}")
+                failure_count += 1
+            if failure_count >= 3:
+                self.state.system_health.imu_ok = False
+                failure_count = 0
+                log_error("IMU failed 3 times, disabling IMU")
             await asyncio.sleep(1 / 100)

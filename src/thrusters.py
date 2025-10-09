@@ -11,7 +11,8 @@ import time
 import struct
 import numpy as np
 from numpy.typing import NDArray
-from toast import toast_loading, toast_success
+from .toast import toast_loading, toast_success
+from .log import log_error
 
 INPUT_START_BYTE = 0x5A
 NUM_MOTORS = 8
@@ -160,5 +161,18 @@ class Thrusters:
             elif current_time - last_send_time > TIMEOUT_MS / 1000:
                 thrust_vector = np.zeros(NUM_MOTORS)
             thrust_values = self._compute_thrust_values(thrust_vector)
-            await self._send_packet(serial, thrust_values)
+            success = False
+            for attempt in range(3):
+                try:
+                    await self._send_packet(serial, thrust_values)
+                    success = True
+                    break
+                except Exception as e:
+                    log_error(
+                        f"Thruster send_packet failed (attempt {attempt + 1}): {e}"
+                    )
+                    await asyncio.sleep(0.1)
+            if not success:
+                self.state.system_health.microcontroller_ok = False
+                log_error("Thruster send failed 3 times, disabling microcontroller")
             await asyncio.sleep(1 / 60)
