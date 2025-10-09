@@ -6,3 +6,4 @@ class RegulatorData(BaseModel):
     roll: float = 0.0
     desired_pitch: float = 0.0
     desired_roll: float = 0.0
+    desired_depth: float = 0.0

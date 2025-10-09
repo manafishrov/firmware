@@ -8,6 +8,7 @@ from .sensors.pressure import PressureSensor
 from .sensors.esc import EscSensor
 from .serial import SerialManager
 from .websocket.server import WebsocketServer
+from .regulator import Regulator
 from .log import log_info
 
 
@@ -16,10 +17,11 @@ async def main() -> None:
     serial_manager = SerialManager(state)
     await serial_manager.initialize()
 
+    regulator = Regulator(state)
     imu = Imu(state)
     pressure = PressureSensor(state)
     esc = EscSensor(state, serial_manager)
-    thrusters = Thrusters(state, serial_manager)
+    thrusters = Thrusters(state, serial_manager, regulator)
     ws_server = WebsocketServer(state)
 
     await imu.initialize()

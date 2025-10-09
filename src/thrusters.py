@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Optional
 if TYPE_CHECKING:
     from rov_state import RovState
     from serial import SerialManager
+    from regulator import Regulator
 
 import asyncio
 import time
@@ -21,9 +22,12 @@ TIMEOUT_MS = 200
 
 
 class Thrusters:
-    def __init__(self, state: RovState, serial_manager: SerialManager):
+    def __init__(
+        self, state: RovState, serial_manager: SerialManager, regulator: Regulator
+    ):
         self.state: RovState = state
         self.serial_manager: SerialManager = serial_manager
+        self.regulator: Regulator = regulator
 
     def _scale_direction_vector_with_user_max_power(
         self, direction_vector: NDArray[np.float64]
@@ -62,6 +66,13 @@ class Thrusters:
     def _prepare_thrust_vector(
         self, direction_vector: NDArray[np.float64]
     ) -> NDArray[np.float64]:
+        self.regulator.update_data()
+        if (
+            self.state.system_status.pitch_stabilization
+            or self.state.system_status.roll_stabilization
+            or self.state.system_status.depth_stabilization
+        ):
+            direction_vector = self.regulator.stabilize(direction_vector)
         direction_vector = self._scale_direction_vector_with_user_max_power(
             direction_vector
         )
