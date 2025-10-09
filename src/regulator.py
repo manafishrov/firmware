@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from rov_state import RovState
 
-import time
 import numpy as np
 from numpy.typing import NDArray
 
