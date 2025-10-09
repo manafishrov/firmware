@@ -1,15 +1,12 @@
-from .base import CamelCaseModel
-from pydantic import validator
+from pydantic import RootModel, field_validator
 import numpy as np
 
 
-class DirectionVector(CamelCaseModel):
-    __root__: np.ndarray
-
-    @validator("__root__", pre=True)
+class DirectionVector(RootModel[np.ndarray]):
+    @field_validator("root", mode="before")
     @classmethod
     def to_float_array(cls, v):
-        return np.array(v, dtype=float)
+        return np.array(v, dtype=float) if isinstance(v, (list, tuple)) else v
 
 
 CustomAction = str

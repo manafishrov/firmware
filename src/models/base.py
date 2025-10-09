@@ -1,8 +1,6 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from ..utils import to_camel
 
 
 class CamelCaseModel(BaseModel):
-    class Config:
-        alias_generator = to_camel
-        allow_population_by_field_name = True
+    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
