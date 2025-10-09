@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from rov_state import RovState
@@ -10,6 +10,7 @@ import time
 import struct
 import numpy as np
 from numpy.typing import NDArray
+from toast import toast_loading, toast_success
 
 INPUT_START_BYTE = 0x5A
 NUM_MOTORS = 8
@@ -82,6 +83,39 @@ class Thrusters:
         thrust_values = (thrust_values + [NEUTRAL] * NUM_MOTORS)[:NUM_MOTORS]
         return thrust_values
 
+    def _handle_thruster_test(
+        self, current_time: float
+    ) -> Optional[NDArray[np.float64]]:
+        if self.state.thruster_data.test_thruster is not None:
+            elapsed = current_time - self.state.thruster_data.test_start_time
+            if elapsed >= 10:
+                self.state.thruster_data.test_thruster = None
+                toast_success(
+                    id="thruster-test",
+                    message="Thruster test completed",
+                    description=None,
+                    cancel=None,
+                )
+                return None
+            else:
+                thrust_vector = np.zeros(NUM_MOTORS)
+                logical_index = self.state.thruster_data.test_thruster
+                hardware_index = self.state.rov_config.thruster_pin_setup.identifiers[
+                    logical_index
+                ]
+                thrust_vector[hardware_index] = 0.1
+                remaining = int(10 - elapsed)
+                if remaining != self.state.thruster_data.last_remaining:
+                    self.state.thruster_data.last_remaining = remaining
+                    toast_loading(
+                        id="thruster-test",
+                        message=f"Testing thruster {logical_index}",
+                        description=f"{remaining} seconds remaining",
+                        cancel=None,
+                    )
+                return thrust_vector
+        return None
+
     async def _send_packet(self, serial, thrust_values: list[int]) -> None:
         data_payload = struct.pack(f"<{NUM_MOTORS}H", *thrust_values)
         packet = bytearray([INPUT_START_BYTE]) + data_payload
@@ -100,7 +134,10 @@ class Thrusters:
                 await asyncio.sleep(1)
                 continue
             current_time = time.time()
-            if (
+            test_vector = self._handle_thruster_test(current_time)
+            if test_vector is not None:
+                thrust_vector = test_vector
+            elif (
                 self.state.thruster_data.last_direction_time > 0
                 and current_time - self.state.thruster_data.last_direction_time
                 < TIMEOUT_MS / 1000
