@@ -2,17 +2,22 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
+    from numpy.typing import NDArray
     from rov_state import RovState
     from serial import SerialManager
     from regulator import Regulator
+    from .websocket.server import WebsocketServer
 
 import asyncio
 import time
 import struct
+import json
 import numpy as np
-from numpy.typing import NDArray
 from .toast import toast_loading, toast_success
 from .log import log_error
+from .models.config import RegulatorPID
+from .websocket.message import RegulatorSuggestions
+
 
 INPUT_START_BYTE = 0x5A
 NUM_MOTORS = 8
@@ -25,11 +30,16 @@ THRUSTER_TEST_TOAST_ID = "thruster-test"
 
 class Thrusters:
     def __init__(
-        self, state: RovState, serial_manager: SerialManager, regulator: Regulator
+        self,
+        state: RovState,
+        serial_manager: SerialManager,
+        regulator: Regulator,
+        ws_server: WebsocketServer,
     ):
         self.state: RovState = state
         self.serial_manager: SerialManager = serial_manager
         self.regulator: Regulator = regulator
+        self.ws_server: WebsocketServer = ws_server
 
     def _scale_direction_vector_with_user_max_power(
         self, direction_vector: NDArray[np.float64]
@@ -147,19 +157,43 @@ class Thrusters:
                 await asyncio.sleep(1)
                 continue
             current_time = time.time()
-            test_vector = self._handle_thruster_test(current_time)
-            if test_vector is not None:
-                thrust_vector = test_vector
-            elif (
-                self.state.thrusters.last_direction_time > 0
-                and current_time - self.state.thrusters.last_direction_time
-                < TIMEOUT_MS / 1000
-            ):
-                direction_vector = self.state.thrusters.direction_vector
-                thrust_vector = self._prepare_thrust_vector(direction_vector)
-                last_send_time = current_time
-            elif current_time - last_send_time > TIMEOUT_MS / 1000:
-                thrust_vector = np.zeros(NUM_MOTORS)
+            tuning_vector, completed = self.regulator.handle_auto_tuning(current_time)
+            if completed:
+                suggestions = RegulatorSuggestions(
+                    payload={
+                        "pitch": self.regulator.auto_tuning_params.get(
+                            "pitch", RegulatorPID(kp=0, ki=0, kd=0)
+                        ),
+                        "roll": self.regulator.auto_tuning_params.get(
+                            "roll", RegulatorPID(kp=0, ki=0, kd=0)
+                        ),
+                        "depth": self.regulator.auto_tuning_params.get(
+                            "depth", RegulatorPID(kp=0, ki=0, kd=0)
+                        ),
+                    }
+                )
+                if self.ws_server.client:
+                    asyncio.create_task(
+                        self.ws_server.client.send(
+                            json.dumps(suggestions.model_dump(by_alias=True))
+                        )
+                    )
+            if tuning_vector is not None:
+                thrust_vector = self._prepare_thrust_vector(tuning_vector)
+            else:
+                test_vector = self._handle_thruster_test(current_time)
+                if test_vector is not None:
+                    thrust_vector = test_vector
+                elif (
+                    self.state.thrusters.last_direction_time > 0
+                    and current_time - self.state.thrusters.last_direction_time
+                    < TIMEOUT_MS / 1000
+                ):
+                    direction_vector = self.state.thrusters.direction_vector
+                    thrust_vector = self._prepare_thrust_vector(direction_vector)
+                    last_send_time = current_time
+                elif current_time - last_send_time > TIMEOUT_MS / 1000:
+                    thrust_vector = np.zeros(NUM_MOTORS)
             thrust_values = self._compute_thrust_values(thrust_vector)
             success = False
             for attempt in range(3):

@@ -3,13 +3,19 @@ from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from rov_state import RovState
+    from numpy.typing import NDArray
 
 import numpy as np
-from numpy.typing import NDArray
+from scipy.optimize import curve_fit
+from .log import log_info, log_error
+from .toast import toast_loading, toast_success
+from .websocket.message import RegulatorSuggestions
+from .models.config import RegulatorPID
 
 COMPLEMENTARY_FILTER_ALPHA = 0.98
 GYRO_HIGH_PASS_FILTER_TAU = 0.1
 DEPTH_DERIVATIVE_EMA_TAU = 0.064
+REGULATOR_AUTO_TUNING_TOAST_ID = "regulator-auto-tuning"
 
 
 class Regulator:
@@ -25,6 +31,16 @@ class Regulator:
         self.integral_value_depth: float = 0.0
         self.previous_depth: float = 0.0
         self.current_dt_depth: float = 0.0
+
+        # Auto tuning variables
+        self.auto_tuning_phase: str = ""
+        self.auto_tuning_step: str = ""
+        self.auto_tuning_data: list = []
+        self.auto_tuning_params: dict = {}
+        self.auto_tuning_last_update: float = 0.0
+        self.auto_tuning_zero_actuation: float = 0.0
+        self.auto_tuning_amplitude: float = 0.0
+        self.auto_tuning_oscillation_start: float = 0.0
 
     def _filter_gyro_data(self, gyro: np.ndarray, delta_t: float) -> np.ndarray:
         if self.prev_gyro is None:
@@ -279,3 +295,285 @@ class Regulator:
         self._apply_actuation_to_direction_vector(direction_vector, regulator_actuation)
 
         return direction_vector
+
+    def handle_auto_tuning(
+        self, current_time: float
+    ) -> tuple[Optional[NDArray[np.float64]], bool]:
+        if not self.state.regulator.auto_tuning_active:
+            return None, False
+
+        if not self.auto_tuning_phase:
+            self.auto_tuning_phase = "pitch"
+            self.auto_tuning_step = "find_zero"
+            self.auto_tuning_data = []
+            self.auto_tuning_params = {}
+            self.auto_tuning_last_update = current_time
+            self.auto_tuning_zero_actuation = 0.0
+            self.auto_tuning_amplitude = 0.0
+            self.auto_tuning_oscillation_start = 0.0
+            log_info("Starting regulator auto tuning")
+
+        dt = current_time - self.auto_tuning_last_update
+        if dt < 1 / 60:
+            return np.zeros(6), False
+
+        self.auto_tuning_last_update = current_time
+
+        if self.auto_tuning_phase == "pitch":
+            return self._handle_pitch_tuning(current_time), False
+        elif self.auto_tuning_phase == "roll":
+            return self._handle_roll_tuning(current_time), False
+        elif self.auto_tuning_phase == "depth":
+            return self._handle_depth_tuning(current_time), False
+        else:
+            self.state.regulator.auto_tuning_active = False
+            toast_success(
+                id=REGULATOR_AUTO_TUNING_TOAST_ID,
+                message="Auto tuning completed",
+                description="PID parameters updated",
+                cancel=None,
+            )
+            log_info("Regulator auto tuning completed")
+            return None, True
+
+    def _handle_pitch_tuning(self, current_time: float) -> NDArray[np.float64]:
+        pitch = self.state.regulator.pitch
+
+        if self.auto_tuning_step == "find_zero":
+            toast_loading(
+                id=REGULATOR_AUTO_TUNING_TOAST_ID,
+                message="Tuning pitch",
+                description="Finding zero point...",
+                cancel=None,
+            )
+            if abs(pitch) < 3:
+                self.auto_tuning_step = "find_amplitude"
+                log_info(
+                    f"Pitch zero found at actuation {self.auto_tuning_zero_actuation}"
+                )
+            else:
+                self.auto_tuning_zero_actuation += 0.001 if pitch > 0 else -0.001
+                return np.array([0, 0, 0, self.auto_tuning_zero_actuation, 0, 0])
+
+        elif self.auto_tuning_step == "find_amplitude":
+            toast_loading(
+                id=REGULATOR_AUTO_TUNING_TOAST_ID,
+                message="Tuning pitch",
+                description="Finding oscillation amplitude...",
+                cancel=None,
+            )
+            self.auto_tuning_amplitude += 0.002
+            actuation = (
+                self.auto_tuning_zero_actuation + self.auto_tuning_amplitude
+                if pitch > 0
+                else self.auto_tuning_zero_actuation - self.auto_tuning_amplitude
+            )
+            if abs(pitch) > 30:
+                self.auto_tuning_step = "oscillate"
+                self.auto_tuning_oscillation_start = current_time
+                log_info(f"Pitch amplitude found: {self.auto_tuning_amplitude}")
+            return np.array([0, 0, 0, actuation, 0, 0])
+
+        elif self.auto_tuning_step == "oscillate":
+            elapsed = current_time - self.auto_tuning_oscillation_start
+            if elapsed >= 10:
+                self.auto_tuning_step = "fit_curve"
+                self._fit_curve("pitch")
+                return np.zeros(6)
+            actuation = (
+                self.auto_tuning_zero_actuation + self.auto_tuning_amplitude
+                if pitch > 0
+                else self.auto_tuning_zero_actuation - self.auto_tuning_amplitude
+            )
+            self.auto_tuning_data.append((current_time, pitch))
+            toast_loading(
+                id=REGULATOR_AUTO_TUNING_TOAST_ID,
+                message="Tuning pitch",
+                description=f"Oscillating... {int(elapsed)}s",
+                cancel=None,
+            )
+            return np.array([0, 0, 0, actuation, 0, 0])
+
+        elif self.auto_tuning_step == "fit_curve":
+            self.auto_tuning_phase = "roll"
+            self.auto_tuning_step = "find_zero"
+            self.auto_tuning_data = []
+            self.auto_tuning_zero_actuation = 0.0
+            self.auto_tuning_amplitude = 0.0
+            log_info("Pitch tuning complete, starting roll")
+            return np.zeros(6)
+
+        return np.zeros(6)
+
+    def _handle_roll_tuning(self, current_time: float) -> NDArray[np.float64]:
+        roll = self.state.regulator.roll
+        pitch = self.state.regulator.pitch
+
+        if self.auto_tuning_step == "find_zero":
+            toast_loading(
+                id=REGULATOR_AUTO_TUNING_TOAST_ID,
+                message="Tuning roll",
+                description="Finding zero point...",
+                cancel=None,
+            )
+            if abs(roll) < 3:
+                self.auto_tuning_step = "find_amplitude"
+                log_info(
+                    f"Roll zero found at actuation {self.auto_tuning_zero_actuation}"
+                )
+            else:
+                self.auto_tuning_zero_actuation += 0.001 if roll > 0 else -0.001
+                pitch_comp = -pitch * self.state.rov_config.regulator.pitch.kp * 0.5
+                return np.array(
+                    [0, 0, 0, pitch_comp, 0, self.auto_tuning_zero_actuation]
+                )
+
+        elif self.auto_tuning_step == "find_amplitude":
+            toast_loading(
+                id=REGULATOR_AUTO_TUNING_TOAST_ID,
+                message="Tuning roll",
+                description="Finding oscillation amplitude...",
+                cancel=None,
+            )
+            self.auto_tuning_amplitude += 0.002
+            actuation = (
+                self.auto_tuning_zero_actuation + self.auto_tuning_amplitude
+                if roll > 0
+                else self.auto_tuning_zero_actuation - self.auto_tuning_amplitude
+            )
+            pitch_comp = -pitch * self.state.rov_config.regulator.pitch.kp * 0.5
+            if abs(roll) > 30:
+                self.auto_tuning_step = "oscillate"
+                self.auto_tuning_oscillation_start = current_time
+                log_info(f"Roll amplitude found: {self.auto_tuning_amplitude}")
+            return np.array([0, 0, 0, pitch_comp, 0, actuation])
+
+        elif self.auto_tuning_step == "oscillate":
+            elapsed = current_time - self.auto_tuning_oscillation_start
+            if elapsed >= 10:
+                self.auto_tuning_step = "fit_curve"
+                self._fit_curve("roll")
+                return np.zeros(6)
+            actuation = (
+                self.auto_tuning_zero_actuation + self.auto_tuning_amplitude
+                if roll > 0
+                else self.auto_tuning_zero_actuation - self.auto_tuning_amplitude
+            )
+            pitch_comp = -pitch * self.state.rov_config.regulator.pitch.kp * 0.5
+            self.auto_tuning_data.append((current_time, roll))
+            toast_loading(
+                id=REGULATOR_AUTO_TUNING_TOAST_ID,
+                message="Tuning roll",
+                description=f"Oscillating... {int(elapsed)}s",
+                cancel=None,
+            )
+            return np.array([0, 0, 0, pitch_comp, 0, actuation])
+
+        elif self.auto_tuning_step == "fit_curve":
+            self.auto_tuning_phase = "depth"
+            self.auto_tuning_step = "find_zero"
+            self.auto_tuning_data = []
+            self.auto_tuning_zero_actuation = 0.0
+            self.auto_tuning_amplitude = 0.0
+            log_info("Roll tuning complete, starting depth")
+            return np.zeros(6)
+
+        return np.zeros(6)
+
+    def _handle_depth_tuning(self, current_time: float) -> NDArray[np.float64]:
+        depth = self.state.pressure.depth
+
+        if self.auto_tuning_step == "find_zero":
+            toast_loading(
+                id=REGULATOR_AUTO_TUNING_TOAST_ID,
+                message="Tuning depth",
+                description="Finding zero point...",
+                cancel=None,
+            )
+            if abs(depth - self.state.regulator.desired_depth) < 0.1:
+                self.auto_tuning_step = "find_amplitude"
+                log_info(
+                    f"Depth zero found at actuation {self.auto_tuning_zero_actuation}"
+                )
+            else:
+                self.auto_tuning_zero_actuation += (
+                    0.001 if depth > self.state.regulator.desired_depth else -0.001
+                )
+                return np.array([0, 0, self.auto_tuning_zero_actuation, 0, 0, 0])
+
+        elif self.auto_tuning_step == "find_amplitude":
+            toast_loading(
+                id=REGULATOR_AUTO_TUNING_TOAST_ID,
+                message="Tuning depth",
+                description="Finding oscillation amplitude...",
+                cancel=None,
+            )
+            self.auto_tuning_amplitude += 0.002
+            actuation = (
+                self.auto_tuning_zero_actuation + self.auto_tuning_amplitude
+                if depth > self.state.regulator.desired_depth
+                else self.auto_tuning_zero_actuation - self.auto_tuning_amplitude
+            )
+            if abs(depth - self.state.regulator.desired_depth) > 0.5:
+                self.auto_tuning_step = "oscillate"
+                self.auto_tuning_oscillation_start = current_time
+                log_info(f"Depth amplitude found: {self.auto_tuning_amplitude}")
+            return np.array([0, 0, actuation, 0, 0, 0])
+
+        elif self.auto_tuning_step == "oscillate":
+            elapsed = current_time - self.auto_tuning_oscillation_start
+            if elapsed >= 10:
+                self.auto_tuning_step = "fit_curve"
+                self._fit_curve("depth")
+                return np.zeros(6)
+            actuation = (
+                self.auto_tuning_zero_actuation + self.auto_tuning_amplitude
+                if depth > self.state.regulator.desired_depth
+                else self.auto_tuning_zero_actuation - self.auto_tuning_amplitude
+            )
+            self.auto_tuning_data.append((current_time, depth))
+            toast_loading(
+                id=REGULATOR_AUTO_TUNING_TOAST_ID,
+                message="Tuning depth",
+                description=f"Oscillating... {int(elapsed)}s",
+                cancel=None,
+            )
+            return np.array([0, 0, actuation, 0, 0, 0])
+
+        elif self.auto_tuning_step == "fit_curve":
+            self.auto_tuning_phase = "done"
+            log_info("Depth tuning complete")
+            return np.zeros(6)
+
+        return np.zeros(6)
+
+    def _fit_curve(self, axis: str):
+        if not self.auto_tuning_data:
+            log_error(f"No data for {axis} curve fitting")
+            return
+
+        times, values = zip(*self.auto_tuning_data)
+        times = np.array(times) - times[0]
+        values = np.array(values)
+
+        def sine_wave(x, A, f, phi, offset):
+            return A * np.sin(2 * np.pi * f * x + phi) + offset
+
+        try:
+            params, _ = curve_fit(
+                sine_wave,
+                times,
+                values,
+                p0=[(np.max(values) - np.min(values)) / 2, 1 / 10, 0, np.mean(values)],
+            )
+            A, f, _, _ = params
+            T_u = 1 / f
+            K_u = (4 * self.auto_tuning_amplitude) / (np.pi * A)
+            K_p = 0.6 * K_u
+            K_i = 1.2 * K_u / T_u
+            K_d = 0.075 * K_u * T_u
+            self.auto_tuning_params[axis] = RegulatorPID(kp=K_p, ki=K_i, kd=K_d)
+            log_info(f"{axis} PID: Kp={K_p:.3f}, Ki={K_i:.3f}, Kd={K_d:.3f}")
+        except Exception as e:
+            log_error(f"Curve fitting failed for {axis}: {e}")
+            self.auto_tuning_params[axis] = RegulatorPID(kp=0, ki=0, kd=0)

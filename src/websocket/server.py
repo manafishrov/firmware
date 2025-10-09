@@ -13,6 +13,8 @@ from ..websocket.handler import handle_message
 from ..websocket.send.config import handle_send_firmware_version, handle_send_config
 from ..log import set_log_is_client_connected_status, log_info, log_error, log_warn
 from .message import WebsocketMessage
+from .send.telemetry import handle_telemetry
+from .send.status import handle_status_update
 
 FIRMWARE_VERSION = "1.0.0"
 IP_ADDRESS = "10.10.10.10"
@@ -103,8 +105,6 @@ class WebsocketServer:
     async def _send_status_periodically(
         self, websocket: WebSocketServerProtocol, state: RovState
     ) -> None:
-        from .send.status import handle_status_update
-
         try:
             while True:
                 await handle_status_update(websocket, state)
@@ -115,8 +115,6 @@ class WebsocketServer:
     async def _send_telemetry_periodically(
         self, websocket: WebSocketServerProtocol, state: RovState
     ) -> None:
-        from .send.telemetry import handle_telemetry
-
         try:
             while True:
                 await handle_telemetry(websocket, state)

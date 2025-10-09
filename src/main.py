@@ -22,8 +22,8 @@ async def main() -> None:
     imu: Imu = Imu(state)
     pressure: PressureSensor = PressureSensor(state)
     esc: EscSensor = EscSensor(state, serial_manager)
-    thrusters: Thrusters = Thrusters(state, serial_manager, regulator)
     ws_server: WebsocketServer = WebsocketServer(state)
+    thrusters: Thrusters = Thrusters(state, serial_manager, regulator, ws_server)
 
     async def health_check(state: RovState) -> None:
         while True:
