@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from rov_state import RovState
@@ -16,15 +16,15 @@ class Regulator:
     def __init__(self, state: RovState):
         self.state: RovState = state
 
-        self.prev_gyro = None
-        self.filtered_gyro = np.array([0.0, 0.0, 0.0])
-        self.previous_imu_measurement = 0.0
-        self.imu_measurement_delta = 0.01
-        self.integral_value_pitch = 0.0
-        self.integral_value_roll = 0.0
-        self.integral_value_depth = 0.0
-        self.previous_depth = 0.0
-        self.current_dt_depth = 0.0
+        self.prev_gyro: Optional[np.ndarray] = None
+        self.filtered_gyro: np.ndarray = np.array([0.0, 0.0, 0.0])
+        self.previous_imu_measurement: float = 0.0
+        self.imu_measurement_delta: float = 0.01
+        self.integral_value_pitch: float = 0.0
+        self.integral_value_roll: float = 0.0
+        self.integral_value_depth: float = 0.0
+        self.previous_depth: float = 0.0
+        self.current_dt_depth: float = 0.0
 
     def _filter_gyro_data(self, gyro: np.ndarray, delta_t: float) -> np.ndarray:
         if self.prev_gyro is None:

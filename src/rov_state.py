@@ -19,11 +19,11 @@ class RovState:
     thrusters: ThrusterData
 
     def __init__(self) -> None:
-        self.rov_config = RovConfig.load()
-        self.system_health = SystemHealth()
-        self.system_status = SystemStatus()
-        self.imu = ImuData()
-        self.pressure = PressureData()
-        self.esc = EscData()
-        self.regulator = RegulatorData()
-        self.thrusters = ThrusterData()
+        self.rov_config: RovConfig = RovConfig.load()
+        self.system_health: SystemHealth = SystemHealth()
+        self.system_status: SystemStatus = SystemStatus()
+        self.imu: ImuData = ImuData()
+        self.pressure: PressureData = PressureData()
+        self.esc: EscData = EscData()
+        self.regulator: RegulatorData = RegulatorData()
+        self.thrusters: ThrusterData = ThrusterData()

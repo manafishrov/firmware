@@ -13,16 +13,16 @@ from .log import log_info
 
 
 async def main() -> None:
-    state = RovState()
-    serial_manager = SerialManager(state)
+    state: RovState = RovState()
+    serial_manager: SerialManager = SerialManager(state)
     await serial_manager.initialize()
 
-    regulator = Regulator(state)
-    imu = Imu(state)
-    pressure = PressureSensor(state)
-    esc = EscSensor(state, serial_manager)
-    thrusters = Thrusters(state, serial_manager, regulator)
-    ws_server = WebsocketServer(state)
+    regulator: Regulator = Regulator(state)
+    imu: Imu = Imu(state)
+    pressure: PressureSensor = PressureSensor(state)
+    esc: EscSensor = EscSensor(state, serial_manager)
+    thrusters: Thrusters = Thrusters(state, serial_manager, regulator)
+    ws_server: WebsocketServer = WebsocketServer(state)
 
     await imu.initialize()
     await pressure.initialize()

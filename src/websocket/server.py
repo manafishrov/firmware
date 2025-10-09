@@ -27,7 +27,7 @@ def get_message_queue() -> asyncio.Queue:
 
 class WebsocketServer:
     def __init__(self, state: RovState) -> None:
-        self.state = state
+        self.state: RovState = state
         self.server: Optional[WebSocketServer] = None
         self.client: Optional[WebSocketServerProtocol] = None
 
@@ -101,7 +101,7 @@ class WebsocketServer:
             pass
 
     async def _send_status_periodically(
-        self, websocket: WebSocketServerProtocol, state
+        self, websocket: WebSocketServerProtocol, state: RovState
     ) -> None:
         from .send.status import handle_status_update
 
@@ -113,7 +113,7 @@ class WebsocketServer:
             pass
 
     async def _send_telemetry_periodically(
-        self, websocket: WebSocketServerProtocol, state
+        self, websocket: WebSocketServerProtocol, state: RovState
     ) -> None:
         from .send.telemetry import handle_telemetry
 
