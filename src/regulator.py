@@ -12,7 +12,6 @@ from .toast import toast_loading, toast_success
 from .models.config import RegulatorPID
 from .constants import (
     COMPLEMENTARY_FILTER_ALPHA,
-    GYRO_HIGH_PASS_FILTER_TAU,
     DEPTH_DERIVATIVE_EMA_TAU,
     AUTO_TUNING_TOAST_ID,
 )
@@ -22,8 +21,7 @@ class Regulator:
     def __init__(self, state: RovState):
         self.state: RovState = state
 
-        self.prev_gyro: Optional[np.ndarray] = None
-        self.filtered_gyro: np.ndarray = np.array([0.0, 0.0, 0.0])
+        self.gyro: NDArray[np.float64] = np.array([0.0, 0.0, 0.0])
         self.previous_imu_measurement: float = 0.0
         self.imu_measurement_delta: float = 0.01
         self.integral_value_pitch: float = 0.0
@@ -41,14 +39,6 @@ class Regulator:
         self.auto_tuning_amplitude: float = 0.0
         self.auto_tuning_oscillation_start: float = 0.0
 
-    def _filter_gyro_data(self, gyro: np.ndarray, delta_t: float) -> np.ndarray:
-        if self.prev_gyro is None:
-            self.filtered_gyro = gyro.copy()
-        else:
-            alpha = GYRO_HIGH_PASS_FILTER_TAU / (GYRO_HIGH_PASS_FILTER_TAU + delta_t)
-            self.filtered_gyro = alpha * (self.filtered_gyro + gyro - self.prev_gyro)
-        self.prev_gyro = gyro.copy()
-        return self.filtered_gyro
 
     def _apply_complementary_filter(
         self,
@@ -61,18 +51,18 @@ class Regulator:
         if current_roll >= 90 or current_roll <= -90:
             current_pitch = (
                 COMPLEMENTARY_FILTER_ALPHA
-                * (current_pitch + self.filtered_gyro[1] * delta_t)
+                * (current_pitch + self.gyro[1] * delta_t)
                 + (1 - COMPLEMENTARY_FILTER_ALPHA) * accel_pitch
             )
         else:
             current_pitch = (
                 COMPLEMENTARY_FILTER_ALPHA
-                * (current_pitch - self.filtered_gyro[1] * delta_t)
+                * (current_pitch - self.gyro[1] * delta_t)
                 + (1 - COMPLEMENTARY_FILTER_ALPHA) * accel_pitch
             )
         current_roll = (
             COMPLEMENTARY_FILTER_ALPHA
-            * (current_roll + self.filtered_gyro[0] * delta_t)
+            * (current_roll + self.gyro[0] * delta_t)
             + (1 - COMPLEMENTARY_FILTER_ALPHA) * accel_roll
         )
         return current_pitch, current_roll
@@ -97,7 +87,7 @@ class Regulator:
         imu_data = self.state.imu
         accel = np.array(imu_data.acceleration)
         gyr = np.array(imu_data.gyroscope)
-        gyro = np.degrees(gyr)
+        self.gyro = np.degrees(gyr)
 
         if self.previous_imu_measurement > 0:
             self.imu_measurement_delta = (
@@ -107,7 +97,6 @@ class Regulator:
             self.imu_measurement_delta = 0.01
         self.previous_imu_measurement = self.state.imu.measured_at
 
-        self._filter_gyro_data(gyro, self.imu_measurement_delta)
 
         current_pitch = self.state.regulator.pitch
         current_roll = self.state.regulator.roll
@@ -194,7 +183,7 @@ class Regulator:
             actuation = (
                 config.pitch.kp * (desired_pitch - current_pitch)
                 + config.pitch.ki * self.integral_value_pitch
-                - config.pitch.kd * -self.filtered_gyro[1]
+                - config.pitch.kd * -self.gyro[1]
             )
             current_roll = self.state.regulator.roll
             if current_roll >= 90 or current_roll <= -90:
@@ -230,7 +219,7 @@ class Regulator:
             actuation = (
                 config.roll.kp * (desired_roll - current_roll)
                 + config.roll.ki * self.integral_value_roll
-                - config.roll.kd * self.filtered_gyro[0]
+                - config.roll.kd * self.gyro[0]
             )
         return actuation
 
