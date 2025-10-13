@@ -7,8 +7,7 @@ if TYPE_CHECKING:
 
 from ...models.config import FirmwareVersion
 from ..message import Config, FirmwareVersion as FirmwareVersionMessage
-
-FIRMWARE_VERSION = "1.0.0"
+from ...constants import FIRMWARE_VERSION
 
 
 async def handle_send_firmware_version(
