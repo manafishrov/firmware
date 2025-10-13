@@ -39,7 +39,6 @@ class Regulator:
         self.auto_tuning_amplitude: float = 0.0
         self.auto_tuning_oscillation_start: float = 0.0
 
-
     def _apply_complementary_filter(
         self,
         current_pitch: float,
@@ -50,19 +49,16 @@ class Regulator:
     ) -> tuple[float, float]:
         if current_roll >= 90 or current_roll <= -90:
             current_pitch = (
-                COMPLEMENTARY_FILTER_ALPHA
-                * (current_pitch + self.gyro[1] * delta_t)
+                COMPLEMENTARY_FILTER_ALPHA * (current_pitch + self.gyro[1] * delta_t)
                 + (1 - COMPLEMENTARY_FILTER_ALPHA) * accel_pitch
             )
         else:
             current_pitch = (
-                COMPLEMENTARY_FILTER_ALPHA
-                * (current_pitch - self.gyro[1] * delta_t)
+                COMPLEMENTARY_FILTER_ALPHA * (current_pitch - self.gyro[1] * delta_t)
                 + (1 - COMPLEMENTARY_FILTER_ALPHA) * accel_pitch
             )
         current_roll = (
-            COMPLEMENTARY_FILTER_ALPHA
-            * (current_roll + self.gyro[0] * delta_t)
+            COMPLEMENTARY_FILTER_ALPHA * (current_roll + self.gyro[0] * delta_t)
             + (1 - COMPLEMENTARY_FILTER_ALPHA) * accel_roll
         )
         return current_pitch, current_roll
@@ -96,7 +92,6 @@ class Regulator:
         else:
             self.imu_measurement_delta = 0.01
         self.previous_imu_measurement = self.state.imu.measured_at
-
 
         current_pitch = self.state.regulator.pitch
         current_roll = self.state.regulator.roll
@@ -287,9 +282,6 @@ class Regulator:
     def handle_auto_tuning(
         self, current_time: float
     ) -> tuple[Optional[NDArray[np.float64]], bool]:
-        if not self.state.regulator.auto_tuning_active:
-            return None, False
-
         if not self.auto_tuning_phase:
             self.auto_tuning_phase = "pitch"
             self.auto_tuning_step = "find_zero"

@@ -109,37 +109,35 @@ class Thrusters:
         return thrust_values
 
     def _handle_thruster_test(
-        self, current_time: float
+        self, current_time: float, test_thruster: int
     ) -> Optional[NDArray[np.float64]]:
-        if self.state.thrusters.test_thruster is not None:
-            elapsed = current_time - self.state.thrusters.test_start_time
-            if elapsed >= 10:
-                self.state.thrusters.test_thruster = None
-                toast_success(
+        elapsed = current_time - self.state.thrusters.test_start_time
+        if elapsed >= 10:
+            self.state.thrusters.test_thruster = None
+            toast_success(
+                id=THRUSTER_TEST_TOAST_ID,
+                message="Thruster test completed",
+                description=None,
+                cancel=None,
+            )
+            return None
+        else:
+            thrust_vector = np.zeros(THRUSTER_NUM_MOTORS)
+            logical_index = test_thruster
+            hardware_index = self.state.rov_config.thruster_pin_setup.identifiers[
+                logical_index
+            ]
+            thrust_vector[hardware_index] = 0.1
+            remaining = int(10 - elapsed)
+            if remaining != self.state.thrusters.last_remaining:
+                self.state.thrusters.last_remaining = remaining
+                toast_loading(
                     id=THRUSTER_TEST_TOAST_ID,
-                    message="Thruster test completed",
-                    description=None,
+                    message=f"Testing thruster {logical_index}",
+                    description=f"{remaining} seconds remaining",
                     cancel=None,
                 )
-                return None
-            else:
-                thrust_vector = np.zeros(THRUSTER_NUM_MOTORS)
-                logical_index = self.state.thrusters.test_thruster
-                hardware_index = self.state.rov_config.thruster_pin_setup.identifiers[
-                    logical_index
-                ]
-                thrust_vector[hardware_index] = 0.1
-                remaining = int(10 - elapsed)
-                if remaining != self.state.thrusters.last_remaining:
-                    self.state.thrusters.last_remaining = remaining
-                    toast_loading(
-                        id=THRUSTER_TEST_TOAST_ID,
-                        message=f"Testing thruster {logical_index}",
-                        description=f"{remaining} seconds remaining",
-                        cancel=None,
-                    )
-                return thrust_vector
-        return None
+            return thrust_vector
 
     async def _send_packet(self, serial, thrust_values: list[int]) -> None:
         data_payload = struct.pack(f"<{THRUSTER_NUM_MOTORS}H", *thrust_values)
@@ -150,6 +148,67 @@ class Thrusters:
         packet.append(checksum)
         await serial.write(packet)
 
+    def _handle_auto_tuning_completion(self) -> None:
+        suggestions = RegulatorSuggestions(
+            payload={
+                "pitch": self.regulator.auto_tuning_params.get(
+                    "pitch", RegulatorPID(kp=0, ki=0, kd=0)
+                ),
+                "roll": self.regulator.auto_tuning_params.get(
+                    "roll", RegulatorPID(kp=0, ki=0, kd=0)
+                ),
+                "depth": self.regulator.auto_tuning_params.get(
+                    "depth", RegulatorPID(kp=0, ki=0, kd=0)
+                ),
+            }
+        )
+        if self.ws_server.client:
+            asyncio.create_task(
+                self.ws_server.client.send(
+                    json.dumps(suggestions.model_dump(by_alias=True))
+                )
+            )
+
+    def _determine_thrust_vector(
+        self, current_time: float, last_send_time: float
+    ) -> tuple[NDArray[np.float64], float]:
+        if self.state.regulator.auto_tuning_active:
+            tuning_vector, completed = self.regulator.handle_auto_tuning(current_time)
+            if completed:
+                self._handle_auto_tuning_completion()
+            if tuning_vector is not None:
+                return self._prepare_thrust_vector(tuning_vector), last_send_time
+
+        if self.state.thrusters.test_thruster is not None:
+            test_vector = self._handle_thruster_test(
+                current_time, self.state.thrusters.test_thruster
+            )
+            if test_vector is not None:
+                return test_vector, last_send_time
+
+        if (
+            self.state.thrusters.last_direction_time > 0
+            and current_time - self.state.thrusters.last_direction_time
+            < THRUSTER_TIMEOUT_MS / 1000
+        ):
+            direction_vector = self.state.thrusters.direction_vector
+            return self._prepare_thrust_vector(direction_vector), current_time
+
+        if current_time - last_send_time > THRUSTER_TIMEOUT_MS / 1000:
+            return np.zeros(THRUSTER_NUM_MOTORS), last_send_time
+
+        return None, last_send_time
+
+    async def _send_with_retries(self, serial, thrust_values: list[int]) -> bool:
+        for attempt in range(3):
+            try:
+                await self._send_packet(serial, thrust_values)
+                return True
+            except Exception as e:
+                log_error(f"Thruster send_packet failed (attempt {attempt + 1}): {e}")
+                await asyncio.sleep(0.1)
+        return False
+
     async def send_loop(self) -> None:
         serial = self.serial_manager.get_serial()
         thrust_vector = np.zeros(THRUSTER_NUM_MOTORS)
@@ -158,57 +217,19 @@ class Thrusters:
             if not self.state.system_health.microcontroller_ok:
                 await asyncio.sleep(1)
                 continue
+
             current_time = time.time()
-            tuning_vector, completed = self.regulator.handle_auto_tuning(current_time)
-            if completed:
-                suggestions = RegulatorSuggestions(
-                    payload={
-                        "pitch": self.regulator.auto_tuning_params.get(
-                            "pitch", RegulatorPID(kp=0, ki=0, kd=0)
-                        ),
-                        "roll": self.regulator.auto_tuning_params.get(
-                            "roll", RegulatorPID(kp=0, ki=0, kd=0)
-                        ),
-                        "depth": self.regulator.auto_tuning_params.get(
-                            "depth", RegulatorPID(kp=0, ki=0, kd=0)
-                        ),
-                    }
-                )
-                if self.ws_server.client:
-                    asyncio.create_task(
-                        self.ws_server.client.send(
-                            json.dumps(suggestions.model_dump(by_alias=True))
-                        )
-                    )
-            if tuning_vector is not None:
-                thrust_vector = self._prepare_thrust_vector(tuning_vector)
-            else:
-                test_vector = self._handle_thruster_test(current_time)
-                if test_vector is not None:
-                    thrust_vector = test_vector
-                elif (
-                    self.state.thrusters.last_direction_time > 0
-                    and current_time - self.state.thrusters.last_direction_time
-                    < THRUSTER_TIMEOUT_MS / 1000
-                ):
-                    direction_vector = self.state.thrusters.direction_vector
-                    thrust_vector = self._prepare_thrust_vector(direction_vector)
-                    last_send_time = current_time
-                elif current_time - last_send_time > THRUSTER_TIMEOUT_MS / 1000:
-                    thrust_vector = np.zeros(THRUSTER_NUM_MOTORS)
+            new_thrust_vector, updated_last_send_time = self._determine_thrust_vector(
+                current_time, last_send_time
+            )
+            if new_thrust_vector is not None:
+                thrust_vector = new_thrust_vector
+                last_send_time = updated_last_send_time
+
             thrust_values = self._compute_thrust_values(thrust_vector)
-            success = False
-            for attempt in range(3):
-                try:
-                    await self._send_packet(serial, thrust_values)
-                    success = True
-                    break
-                except Exception as e:
-                    log_error(
-                        f"Thruster send_packet failed (attempt {attempt + 1}): {e}"
-                    )
-                    await asyncio.sleep(0.1)
+            success = await self._send_with_retries(serial, thrust_values)
             if not success:
                 self.state.system_health.microcontroller_ok = False
                 log_error("Thruster send failed 3 times, disabling microcontroller")
+
             await asyncio.sleep(1 / 60)
