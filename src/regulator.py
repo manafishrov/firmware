@@ -229,19 +229,19 @@ class Regulator:
 
         A = np.array([[cp, sp * sr, -sp * cr], [0, cr, sr], [sp, cp * (-sr), cp * cr]])
         dir_coeffs = self.state.rov_config.direction_coefficients
-        forward_coeff = dir_coeffs.horizontal
-        sideways_coeff = dir_coeffs.strafe
-        upward_coeff = dir_coeffs.vertical
-        if upward_coeff == 0:
-            upward_coeff = 1
-        forward_coeff /= upward_coeff
-        sideways_coeff /= upward_coeff
-        upward_coeff = 1
-        if forward_coeff < 0.1:
-            forward_coeff = 0.1
-        if sideways_coeff < 0.1:
-            sideways_coeff = 0.1
-        speed_coeffs = np.diag([forward_coeff, sideways_coeff, upward_coeff])
+        surge_coeff = dir_coeffs.surge
+        sway_coeff = dir_coeffs.sway
+        heave_coeff = dir_coeffs.heave
+        if heave_coeff == 0:
+            heave_coeff = 1
+        surge_coeff /= heave_coeff
+        sway_coeff /= heave_coeff
+        heave_coeff = 1
+        if surge_coeff < 0.1:
+            surge_coeff = 0.1
+        if sway_coeff < 0.1:
+            sway_coeff = 0.1
+        speed_coeffs = np.diag([surge_coeff, sway_coeff, heave_coeff])
         A = A @ speed_coeffs
 
         try:

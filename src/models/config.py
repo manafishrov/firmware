@@ -44,9 +44,9 @@ class Regulator(CamelCaseModel):
 
 
 class DirectionCoefficients(CamelCaseModel):
-    horizontal: float
-    strafe: float
-    vertical: float
+    surge: float
+    sway: float
+    heave: float
     pitch: float
     yaw: float
     roll: float
@@ -87,9 +87,9 @@ class RovConfig(CamelCaseModel):
         depth=RegulatorPID(kp=0, ki=0.05, kd=0.1),
     )
     direction_coefficients: DirectionCoefficients = DirectionCoefficients(
-        horizontal=0.8,
-        strafe=0.35,
-        vertical=0.5,
+        surge=0.8,
+        sway=0.35,
+        heave=0.5,
         pitch=0.4,
         yaw=0.3,
         roll=0.8,
