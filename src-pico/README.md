@@ -49,13 +49,13 @@ After building, the .uf2 file will be located in either `build/dshot/` or `build
 To flash the DShot firmware:
 
 ```sh
-picotool load -f -x build/dshot/dshot_firmware.uf2
+picotool load -f -x dshot/dshot_firmware.uf2
 ```
 
 To flash the PWM firmware:
 
 ```sh
-picotool load -f -x build/pwm/pwm_firmware.uf2
+picotool load -f -x pwm/pwm_firmware.uf2
 ```
 
 This should work regardless of if the Pico is in BOOTSEL mode or not.
