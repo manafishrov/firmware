@@ -1,4 +1,5 @@
 from __future__ import annotations
+from time import time
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
@@ -22,8 +23,8 @@ class Regulator:
         self.state: RovState = state
 
         self.gyro: NDArray[np.float64] = np.array([0.0, 0.0, 0.0])
-        self.previous_imu_measurement: float = 0.0
-        self.imu_measurement_delta: float = 0.01
+        self.last_measurement_time: float = 0.0
+        self.delta_t: float = 0.0
         self.integral_value_pitch: float = 0.0
         self.integral_value_roll: float = 0.0
         self.integral_value_depth: float = 0.0
@@ -45,20 +46,21 @@ class Regulator:
         current_roll: float,
         accel_pitch: float,
         accel_roll: float,
-        delta_t: float,
     ) -> tuple[float, float]:
         if current_roll >= 90 or current_roll <= -90:
             current_pitch = (
-                COMPLEMENTARY_FILTER_ALPHA * (current_pitch + self.gyro[1] * delta_t)
+                COMPLEMENTARY_FILTER_ALPHA
+                * (current_pitch + self.gyro[1] * self.delta_t)
                 + (1 - COMPLEMENTARY_FILTER_ALPHA) * accel_pitch
             )
         else:
             current_pitch = (
-                COMPLEMENTARY_FILTER_ALPHA * (current_pitch - self.gyro[1] * delta_t)
+                COMPLEMENTARY_FILTER_ALPHA
+                * (current_pitch - self.gyro[1] * self.delta_t)
                 + (1 - COMPLEMENTARY_FILTER_ALPHA) * accel_pitch
             )
         current_roll = (
-            COMPLEMENTARY_FILTER_ALPHA * (current_roll + self.gyro[0] * delta_t)
+            COMPLEMENTARY_FILTER_ALPHA * (current_roll + self.gyro[0] * self.delta_t)
             + (1 - COMPLEMENTARY_FILTER_ALPHA) * accel_roll
         )
         return current_pitch, current_roll
@@ -76,7 +78,7 @@ class Regulator:
             pitch_change = direction_vector[3]
             desired_pitch = (
                 self.state.regulator.desired_pitch
-                + pitch_change * config.turn_speed * self.imu_measurement_delta
+                + pitch_change * config.turn_speed * self.delta_t
             )
             desired_pitch = np.clip(desired_pitch, -80, 80)
             self.state.regulator.desired_pitch = desired_pitch
@@ -85,7 +87,7 @@ class Regulator:
             roll_change = direction_vector[5]
             desired_roll = (
                 self.state.regulator.desired_roll
-                + roll_change * config.turn_speed * self.imu_measurement_delta
+                + roll_change * config.turn_speed * self.delta_t
             )
             if desired_roll > 180:
                 desired_roll -= 360
@@ -115,13 +117,10 @@ class Regulator:
         gyr = np.array(imu_data.gyroscope)
         self.gyro = np.degrees(gyr)
 
-        if self.previous_imu_measurement > 0:
-            self.imu_measurement_delta = (
-                self.state.imu.measured_at - self.previous_imu_measurement
-            )
-        else:
-            self.imu_measurement_delta = 0.01
-        self.previous_imu_measurement = self.state.imu.measured_at
+        now = time.time()
+        if self.last_measurement_time > 0:
+            self.delta_t = now - self.last_measurement_time
+        self.last_measurement_time = now
 
         current_pitch = self.state.regulator.pitch
         current_roll = self.state.regulator.roll
@@ -141,7 +140,6 @@ class Regulator:
             current_roll,
             accel_pitch,
             accel_roll,
-            self.imu_measurement_delta,
         )
 
         current_pitch, current_roll = self._normalize_angles(
@@ -159,17 +157,13 @@ class Regulator:
 
             current_depth = self.state.pressure.depth
             desired_depth = self.state.regulator.desired_depth
-            self.integral_value_depth += (
-                desired_depth - current_depth
-            ) * self.imu_measurement_delta
+            self.integral_value_depth += (desired_depth - current_depth) * self.delta_t
             self.integral_value_depth = np.clip(self.integral_value_depth, -3, 3)
 
-            alpha = np.exp(-self.imu_measurement_delta / DEPTH_DERIVATIVE_EMA_TAU)
+            alpha = np.exp(-self.delta_t / DEPTH_DERIVATIVE_EMA_TAU)
             self.current_dt_depth = (
                 alpha * self.current_dt_depth
-                + (1 - alpha)
-                * (current_depth - self.previous_depth)
-                / self.imu_measurement_delta
+                + (1 - alpha) * (current_depth - self.previous_depth) / self.delta_t
             )
             self.previous_depth = current_depth
 
@@ -193,9 +187,7 @@ class Regulator:
             desired_pitch = self.state.regulator.desired_pitch
 
             current_pitch = self.state.regulator.pitch
-            self.integral_value_pitch += (
-                desired_pitch - current_pitch
-            ) * self.imu_measurement_delta
+            self.integral_value_pitch += (desired_pitch - current_pitch) * self.delta_t
             self.integral_value_pitch = np.clip(self.integral_value_pitch, -100, 100)
             actuation = (
                 config.pitch.kp * (desired_pitch - current_pitch)
@@ -214,9 +206,7 @@ class Regulator:
             desired_roll = self.state.regulator.desired_roll
 
             current_roll = self.state.regulator.roll
-            self.integral_value_roll += (
-                desired_roll - current_roll
-            ) * self.imu_measurement_delta
+            self.integral_value_roll += (desired_roll - current_roll) * self.delta_t
             self.integral_value_roll = np.clip(self.integral_value_roll, -100, 100)
             actuation = (
                 config.roll.kp * (desired_roll - current_roll)
