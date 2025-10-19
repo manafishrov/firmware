@@ -78,16 +78,20 @@ class Thrusters:
     def _prepare_thrust_vector(
         self, direction_vector: NDArray[np.float64]
     ) -> NDArray[np.float64]:
-        self.regulator.update_data()
+        self.regulator.update_regulator_data_from_imu()
+        self.regulator.update_desired_from_direction_vector(direction_vector)
+        direction_vector = self._scale_direction_vector_with_user_max_power(
+            direction_vector
+        )
         if (
             self.state.system_status.pitch_stabilization
             or self.state.system_status.roll_stabilization
             or self.state.system_status.depth_stabilization
         ):
-            direction_vector = self.regulator.stabilize(direction_vector)
-        direction_vector = self._scale_direction_vector_with_user_max_power(
-            direction_vector
-        )
+            regulator_actuation = self.regulator.get_actuation()
+        else:
+            regulator_actuation = np.zeros(6)
+        direction_vector += regulator_actuation
         thrust_vector = self._create_thrust_vector_from_thruster_allocation(
             direction_vector
         )
@@ -177,7 +181,15 @@ class Thrusters:
             if completed:
                 self._handle_auto_tuning_completion()
             if tuning_vector is not None:
-                return self._prepare_thrust_vector(tuning_vector), last_send_time
+                direction_vector = tuning_vector
+                thrust_vector = self._create_thrust_vector_from_thruster_allocation(
+                    direction_vector
+                )
+                thrust_vector = self._correct_thrust_vector_spin_directions(
+                    thrust_vector
+                )
+                thrust_vector = self._reorder_thrust_vector(thrust_vector)
+                return thrust_vector, last_send_time
 
         if self.state.thrusters.test_thruster is not None:
             test_vector = self._handle_thruster_test(

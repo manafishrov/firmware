@@ -68,6 +68,36 @@ class Regulator:
         pitch = max(min(pitch, 90), -90)
         return pitch, roll
 
+    def update_desired_from_direction_vector(
+        self, direction_vector: NDArray[np.float64]
+    ):
+        if self.state.system_status.pitch_stabilization:
+            config = self.state.rov_config.regulator
+            pitch_change = direction_vector[3]
+            desired_pitch = (
+                self.state.regulator.desired_pitch
+                + pitch_change * config.turn_speed * self.imu_measurement_delta
+            )
+            desired_pitch = np.clip(desired_pitch, -80, 80)
+            self.state.regulator.desired_pitch = desired_pitch
+        if self.state.system_status.roll_stabilization:
+            config = self.state.rov_config.regulator
+            roll_change = direction_vector[5]
+            desired_roll = (
+                self.state.regulator.desired_roll
+                + roll_change * config.turn_speed * self.imu_measurement_delta
+            )
+            if desired_roll > 180:
+                desired_roll -= 360
+            if desired_roll < -180:
+                desired_roll += 360
+            current_roll = self.state.regulator.roll
+            if desired_roll - current_roll > 180:
+                desired_roll -= 360
+            if desired_roll - current_roll < -180:
+                desired_roll += 360
+            self.state.regulator.desired_roll = desired_roll
+
     def _update_regulator_data(self, pitch: float, roll: float):
         self.state.regulator.pitch = pitch
         self.state.regulator.roll = roll
@@ -76,7 +106,7 @@ class Regulator:
         if not self.state.system_status.roll_stabilization:
             self.state.regulator.desired_roll = roll
 
-    def update_data(self):
+    def update_regulator_data_from_imu(self):
         if not self.state.system_health.imu_ok:
             return
 
@@ -156,19 +186,11 @@ class Regulator:
             )
         return actuation
 
-    def _handle_pitch_stabilization(
-        self, direction_vector: NDArray[np.float64]
-    ) -> float:
+    def _handle_pitch_stabilization(self) -> float:
         actuation = 0.0
         if self.state.system_status.pitch_stabilization:
             config = self.state.rov_config.regulator
-            pitch_change = direction_vector[3]
-            desired_pitch = (
-                self.state.regulator.desired_pitch
-                + pitch_change * config.turn_speed * self.imu_measurement_delta
-            )
-            desired_pitch = np.clip(desired_pitch, -80, 80)
-            self.state.regulator.desired_pitch = desired_pitch
+            desired_pitch = self.state.regulator.desired_pitch
 
             current_pitch = self.state.regulator.pitch
             self.integral_value_pitch += (
@@ -185,28 +207,13 @@ class Regulator:
                 actuation = -actuation
         return actuation
 
-    def _handle_roll_stabilization(
-        self, direction_vector: NDArray[np.float64]
-    ) -> float:
+    def _handle_roll_stabilization(self) -> float:
         actuation = 0.0
         if self.state.system_status.roll_stabilization:
             config = self.state.rov_config.regulator
-            roll_change = direction_vector[5]
-            desired_roll = (
-                self.state.regulator.desired_roll
-                + roll_change * config.turn_speed * self.imu_measurement_delta
-            )
-            if desired_roll > 180:
-                desired_roll -= 360
-            if desired_roll < -180:
-                desired_roll += 360
-            current_roll = self.state.regulator.roll
-            if desired_roll - current_roll > 180:
-                desired_roll -= 360
-            if desired_roll - current_roll < -180:
-                desired_roll += 360
-            self.state.regulator.desired_roll = desired_roll
+            desired_roll = self.state.regulator.desired_roll
 
+            current_roll = self.state.regulator.roll
             self.integral_value_roll += (
                 desired_roll - current_roll
             ) * self.imu_measurement_delta
@@ -252,9 +259,8 @@ class Regulator:
 
     def _scale_regulator_actuation(self, actuation: np.ndarray) -> np.ndarray:
         power = self.state.rov_config.power.regulator_max_power
-        max_val = np.max(np.abs(actuation))
-        if max_val > power:
-            actuation *= power / max_val
+        for i in range(len(actuation)):
+            actuation[i] = np.clip(actuation[i], -power, power)
         return actuation
 
     def _apply_actuation_to_direction_vector(
@@ -262,22 +268,21 @@ class Regulator:
     ):
         direction_vector[0:6] += actuation
 
-    def stabilize(self, direction_vector: NDArray[np.float64]) -> NDArray[np.float64]:
+    def get_actuation(self) -> NDArray[np.float64]:
         regulator_actuation = np.zeros(6)
 
         depth_actuation = self._handle_depth_stabilization()
         regulator_actuation[0:3] = depth_actuation
 
-        pitch_actuation = self._handle_pitch_stabilization(direction_vector)
+        pitch_actuation = self._handle_pitch_stabilization()
         regulator_actuation[3] = pitch_actuation
 
-        roll_actuation = self._handle_roll_stabilization(direction_vector)
+        roll_actuation = self._handle_roll_stabilization()
         regulator_actuation[5] = roll_actuation
 
         regulator_actuation = self._scale_regulator_actuation(regulator_actuation)
-        self._apply_actuation_to_direction_vector(direction_vector, regulator_actuation)
 
-        return direction_vector
+        return regulator_actuation
 
     def handle_auto_tuning(
         self, current_time: float
