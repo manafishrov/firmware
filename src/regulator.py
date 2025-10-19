@@ -24,7 +24,7 @@ class Regulator:
 
         self.gyro: NDArray[np.float64] = np.array([0.0, 0.0, 0.0])
         self.last_measurement_time: float = 0.0
-        self.delta_t: float = 0.0
+        self.delta_t: float = 0.0167
         self.integral_value_pitch: float = 0.0
         self.integral_value_roll: float = 0.0
         self.integral_value_depth: float = 0.0
