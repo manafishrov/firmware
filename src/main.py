@@ -53,10 +53,10 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(log_info("Starting ROV Firmware..."))
+    log_info("Starting ROV Firmware...")
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         pass
     finally:
-        asyncio.run(log_info("Shutting down."))
+        log_info("Shutting down.")
