@@ -6,7 +6,6 @@ if TYPE_CHECKING:
 
 from bmi270.BMI270 import *
 import asyncio
-import time
 from ..log import log_error, log_info
 from ..toast import toast_error
 from ..models.sensors import ImuData
@@ -56,7 +55,6 @@ class Imu:
                 acceleration=self.imu.get_acc_data(),
                 gyroscope=self.imu.get_gyr_data(),
                 temperature=self.imu.get_temp_data(),
-                measured_at=time.time(),
             )
         except Exception as e:
             log_error(f"Error reading IMU data: {e}")

@@ -5,7 +5,6 @@ if TYPE_CHECKING:
     from rov_state import RovState
 
 import asyncio
-import time
 import ms5837
 from ..log import log_error, log_info
 from ..toast import toast_error
@@ -48,7 +47,6 @@ class PressureSensor:
                     pressure=self.sensor.pressure(),
                     temperature=self.sensor.temperature(),
                     depth=depth,
-                    measured_at=time.time(),
                 )
             else:
                 return None
