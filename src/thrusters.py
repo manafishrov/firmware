@@ -86,7 +86,7 @@ class Thrusters:
         if (
             self.state.system_status.pitch_stabilization
             or self.state.system_status.roll_stabilization
-            or self.state.system_status.depth_stabilization
+            or self.state.system_status.depth_hold
         ):
             regulator_actuation = self.regulator.get_actuation()
         else:

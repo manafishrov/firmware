@@ -36,7 +36,7 @@ class MessageType(str, Enum):
     CUSTOM_ACTION = "customAction"
     TOGGLE_PITCH_STABILIZATION = "togglePitchStabilization"
     TOGGLE_ROLL_STABILIZATION = "toggleRollStabilization"
-    TOGGLE_DEPTH_STABILIZATION = "toggleDepthStabilization"
+    TOGGLE_DEPTH_HOLD = "toggleDepthHold"
     FLASH_MICROCONTROLLER_FIRMWARE = "flashMicrocontrollerFirmware"
 
 
@@ -120,8 +120,8 @@ class ToggleRollStabilization(CamelCaseModel):
     type: MessageType = MessageType.TOGGLE_ROLL_STABILIZATION
 
 
-class ToggleDepthStabilization(CamelCaseModel):
-    type: MessageType = MessageType.TOGGLE_DEPTH_STABILIZATION
+class ToggleDepthHold(CamelCaseModel):
+    type: MessageType = MessageType.TOGGLE_DEPTH_HOLD
 
 
 class FlashMicrocontrollerFirmware(CamelCaseModel):
@@ -148,7 +148,7 @@ WebsocketMessage = Annotated[
         CustomAction,
         TogglePitchStabilization,
         ToggleRollStabilization,
-        ToggleDepthStabilization,
+        ToggleDepthHold,
         FlashMicrocontrollerFirmware,
     ],
     Field(discriminator="type"),

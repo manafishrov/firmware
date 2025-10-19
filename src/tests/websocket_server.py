@@ -15,7 +15,7 @@ shutdown: bool = False
 system_status = {
     "pitch_stabilization": False,
     "roll_stabilization": False,
-    "depth_stabilization": False,
+    "depth_hold": False,
 }
 
 on_going_thruster_tests: dict[Union[str, int], asyncio.Task] = {}
@@ -150,7 +150,7 @@ async def handle_client(
                     "payload": {
                         "pitchStabilization": system_status["pitch_stabilization"],
                         "rollStabilization": system_status["roll_stabilization"],
-                        "depthStabilization": system_status["depth_stabilization"],
+                        "depthHold": system_status["depth_hold"],
                         "batteryPercentage": battery_percentage,
                     },
                 }
@@ -330,12 +330,10 @@ async def handle_client(
                         f"Roll stabilization set to {system_status['roll_stabilization']}",
                     )
                 elif msg_type == "toggleDepthStabilization":
-                    system_status["depth_stabilization"] = not system_status[
-                        "depth_stabilization"
-                    ]
+                    system_status["depth_hold"] = not system_status["depth_hold"]
                     await log(
                         "info",
-                        f"Depth stabilization set to {system_status['depth_stabilization']}",
+                        f"Depth hold set to {system_status['depth_hold']}",
                     )
                 else:
                     await log(

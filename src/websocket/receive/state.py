@@ -25,12 +25,12 @@ async def handle_toggle_roll_stabilization(
     log_info(f"Toggled roll stabilization to {state.system_status.roll_stabilization}")
 
 
-async def handle_toggle_depth_stabilization(
+async def handle_toggle_depth_hold(
     state: RovState,
 ) -> None:
-    state.system_status.depth_stabilization = (
-        not state.system_status.depth_stabilization
+    state.system_status.depth_hold = (
+        not state.system_status.depth_hold
     )
     log_info(
-        f"Toggled depth stabilization to {state.system_status.depth_stabilization}"
+        f"Toggled depth hold to {state.system_status.depth_hold}"
     )

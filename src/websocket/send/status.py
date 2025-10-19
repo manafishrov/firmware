@@ -16,7 +16,7 @@ async def handle_status_update(
     payload = RovStatus(
         pitch_stabilization=state.system_status.pitch_stabilization,
         roll_stabilization=state.system_status.roll_stabilization,
-        depth_stabilization=state.system_status.depth_stabilization,
+        depth_hold=state.system_status.depth_hold,
         battery_percentage=0,
     )
     message = StatusUpdate(payload=payload).json(by_alias=True)

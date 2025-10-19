@@ -17,7 +17,7 @@ from .receive.actions import (
 from .receive.state import (
     handle_toggle_pitch_stabilization,
     handle_toggle_roll_stabilization,
-    handle_toggle_depth_stabilization,
+    handle_toggle_depth_hold,
 )
 from .receive.regulator import (
     handle_start_regulator_auto_tuning,
@@ -59,7 +59,7 @@ async def handle_message(
             await handle_toggle_pitch_stabilization(state)
         case MessageType.TOGGLE_ROLL_STABILIZATION:
             await handle_toggle_roll_stabilization(state)
-        case MessageType.TOGGLE_DEPTH_STABILIZATION:
-            await handle_toggle_depth_stabilization(state)
+        case MessageType.TOGGLE_DEPTH_HOLD:
+            await handle_toggle_depth_hold(state)
         case _:
             log_warn(f"Received unhandled message type: {message.type}")

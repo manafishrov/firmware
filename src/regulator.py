@@ -148,9 +148,9 @@ class Regulator:
 
         self._update_regulator_data(current_pitch, current_roll)
 
-    def _handle_depth_stabilization(self) -> np.ndarray:
+    def _handle_depth_hold(self) -> np.ndarray:
         actuation = np.zeros(3)
-        if self.state.system_status.depth_stabilization:
+        if self.state.system_status.depth_hold:
             if self.state.regulator.desired_depth == 0.0:
                 self.state.regulator.desired_depth = self.state.pressure.depth
                 self.integral_value_depth = 0.0
@@ -261,7 +261,7 @@ class Regulator:
     def get_actuation(self) -> NDArray[np.float64]:
         regulator_actuation = np.zeros(6)
 
-        depth_actuation = self._handle_depth_stabilization()
+        depth_actuation = self._handle_depth_hold()
         regulator_actuation[0:3] = depth_actuation
 
         pitch_actuation = self._handle_pitch_stabilization()
