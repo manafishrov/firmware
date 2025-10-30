@@ -126,15 +126,16 @@ in
       gcc-arm-embedded
       picotool
       pico-sdk-with-submodules
-      (python3.withPackages (pypkgs: with pypkgs; [
+      (python312.withPackages (pypkgs: with pypkgs; [
         pip
         numpy
         websockets
         smbus2
         pyserial
         pydantic
+        scipy
       ] ++ [
-        (pkgs.python3Packages.buildPythonPackage {
+        (pkgs.python312Packages.buildPythonPackage {
           pname = "bmi270";
           version = "0.4.3";
           format = "other";
@@ -147,14 +148,14 @@ in
           buildPhase = ":";
           installPhase = ''
             runHook preInstall
-            install -d $out/${pkgs.python3.sitePackages}
-            cp -r src/bmi270 $out/${pkgs.python3.sitePackages}/
+            install -d $out/${pkgs.python312.sitePackages}
+            cp -r src/bmi270 $out/${pkgs.python312.sitePackages}/
             runHook postInstall
           '';
 
           doCheck = false;
         })
-        (pkgs.python3Packages.buildPythonPackage {
+        (pkgs.python312Packages.buildPythonPackage {
           pname = "ms5837";
           version = "0.1.0";
           src = pkgs.fetchFromGitHub {

@@ -70,7 +70,7 @@ You need to tell your computer how to connect to the Pi without disrupting your 
 3. Click "Details..."
 4. Under "Configure IPv4", select "Manually"
 5. Set the following:
-   - IP Address: 10.10.10.11
+   - IP Address: 10.10.10.100
    - Subnet Mask: 255.255.255.0
 6. Click "OK" and "Apply"
 
@@ -81,8 +81,8 @@ You need to tell your computer how to connect to the Pi without disrupting your 
 2. Right-click your Ethernet connection and select "Properties"
 3. Select "Internet Protocol Version 4 (TCP/IPv4)" and click "Properties"
 4. Select "Use the following IP address" and enter:
-   - IP Address: 10.10.10.11
-   - Subnet Mask: 255.255.255.0
+   - IP Address: 10.10.10.100
+   - Subnet Mask: 255.255.25.0
 5. Click "OK" to save
 
 ### Linux
@@ -92,14 +92,14 @@ You need to tell your computer how to connect to the Pi without disrupting your 
    - Click the gear icon next to your Ethernet connection
    - Go to IPv4 tab
    - Select "Manual"
-   - Add Address: 10.10.10.11
+   - Add Address: 10.10.10.100
    - Netmask: 255.255.255.0
    - Click "Apply"
 
 2. For command line:
 
    ```sh
-   sudo ip addr add 10.10.10.11/24 dev eth0
+   sudo ip addr add 10.10.10.100/24 dev eth0
    ```
 
    Replace `eth0` with your Ethernet interface name if different.
