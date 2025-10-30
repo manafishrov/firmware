@@ -194,9 +194,10 @@ in
         activation.copyFirmwareFiles = home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
           if [ ! -f "$HOME/.firmware_initialized" ]; then
             tmpdir=$(mktemp -d)
-            cp -r ${./src}/* $tmpdir/
+            cp -r ${./src}/* $tmpdir/src
+            cp -r ${./tests}/* $tmpdir/tests
             chmod -R u+w $tmpdir/*
-            cp -rf $tmpdir/* $HOME/
+            cp -rf $tmpdir/* $HOME
             rm -rf $tmpdir
             touch "$HOME/.firmware_initialized"
           fi
@@ -215,7 +216,7 @@ in
         Type = "simple";
         User = "pi";
         WorkingDirectory = "/home/pi";
-        ExecStart = "${pkgs.python3}/bin/python3 main.py";
+        ExecStart = "${pkgs.python3}/bin/python3 -m src.main";
         Restart = "always";
         RestartSec = "5";
       };
