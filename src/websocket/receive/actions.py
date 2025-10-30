@@ -1,15 +1,18 @@
 from __future__ import annotations
+
 from typing import TYPE_CHECKING
+
 
 if TYPE_CHECKING:
     from rov_state import RovState
 
-import time
 import importlib
-from ...log import log_info, log_warn, log_error
-from ...models.actions import DirectionVector, CustomAction
+import time
+
+from ...log import log_error, log_info, log_warn
+from ...models.actions import CustomAction, DirectionVector
 from ...models.config import ThrusterTest
-from ...toast import toast_loading, toast_info
+from ...toast import toast_info, toast_loading
 from ...websocket.message import CancelThrusterTest
 
 

@@ -1,6 +1,7 @@
 # This script tests that the BMI270 IMU is working correctly by reading and printing accelerometer, gyroscope, and temperature data.
 
 import time
+
 from bmi270.BMI270 import *
 
 

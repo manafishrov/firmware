@@ -1,14 +1,25 @@
 from __future__ import annotations
+
 import asyncio
-from typing import Optional
+import logging
+
 from .models.log import LogEntry, LogLevel, LogOrigin
 from .websocket.message import LogMessage
 
+
 _is_client_connected: bool = False
-_main_event_loop: Optional[asyncio.AbstractEventLoop] = None
+_main_event_loop: asyncio.AbstractEventLoop | None = None
+
+_logger = logging.getLogger(__name__)
+_logger.setLevel(logging.INFO)
+
+if not _logger.handlers:
+    _handler = logging.StreamHandler()
+    _handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
+    _logger.addHandler(_handler)
 
 
-def initialize_sync_logging(loop: asyncio.AbstractEventLoop):
+def initialize_sync_logging(loop: asyncio.AbstractEventLoop) -> None:
     global _main_event_loop
     _main_event_loop = loop
 
@@ -28,7 +39,7 @@ async def _log_message_async(level: LogLevel, message: str) -> None:
         message_model = LogMessage(payload=payload)
         await get_message_queue().put(message_model)
     else:
-        print(f"{level.upper()}: {message}")
+        _logger.log(_map_log_level(level), message)
 
 
 def _log_message(level: LogLevel, message: str) -> None:
@@ -37,7 +48,16 @@ def _log_message(level: LogLevel, message: str) -> None:
             _log_message_async(level, message), _main_event_loop
         )
     else:
-        print(f"{level.upper()}: {message}")
+        _logger.log(_map_log_level(level), message)
+
+
+def _map_log_level(level: LogLevel) -> int:
+    mapping = {
+        LogLevel.INFO: logging.INFO,
+        LogLevel.WARN: logging.WARNING,
+        LogLevel.ERROR: logging.ERROR,
+    }
+    return mapping.get(level, logging.INFO)
 
 
 def log_info(message: str) -> None:

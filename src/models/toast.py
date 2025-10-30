@@ -1,7 +1,8 @@
 from enum import Enum
-from typing import Optional, Union
-from .base import CamelCaseModel
+from typing import Union
+
 from ..websocket.message import CancelRegulatorAutoTuning, CancelThrusterTest
+from .base import CamelCaseModel
 
 
 class ToastType(str, Enum):
@@ -16,8 +17,8 @@ ToastCancel = Union[CancelRegulatorAutoTuning, CancelThrusterTest]
 
 
 class Toast(CamelCaseModel):
-    id: Optional[str]
-    toast_type: Optional[ToastType]
+    id: str | None
+    toast_type: ToastType | None
     message: str
-    description: Optional[str]
-    cancel: Optional[ToastCancel]
+    description: str | None
+    cancel: ToastCancel | None

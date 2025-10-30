@@ -1,20 +1,24 @@
 from __future__ import annotations
-from typing import Optional, TYPE_CHECKING
+
+from typing import TYPE_CHECKING
+
 
 if TYPE_CHECKING:
     from rov_state import RovState
 
-from bmi270.BMI270 import *
 import asyncio
+
+from bmi270.BMI270 import *
+
 from ..log import log_error, log_info
-from ..toast import toast_error
 from ..models.sensors import ImuData
+from ..toast import toast_error
 
 
 class Imu:
     def __init__(self, state: RovState):
         self.state: RovState = state
-        self.imu: Optional[BMI270] = None
+        self.imu: BMI270 | None = None
 
     async def initialize(self) -> None:
         try:
@@ -49,7 +53,7 @@ class Imu:
                 cancel=None,
             )
 
-    def read_data(self) -> Optional[ImuData]:
+    def read_data(self) -> ImuData | None:
         try:
             return ImuData(
                 acceleration=self.imu.get_acc_data(),

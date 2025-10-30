@@ -1,22 +1,27 @@
 from __future__ import annotations
-from typing import Optional, TYPE_CHECKING
+
+from typing import TYPE_CHECKING
+
 
 if TYPE_CHECKING:
     from websockets.exceptions import ConnectionClosed
     from websockets.server import WebSocketServer, WebSocketServerProtocol
+
     from rov_state import RovState
 
 import asyncio
 import json
-import websockets
-from ..websocket.handler import handle_message
-from ..websocket.send.config import handle_send_firmware_version, handle_send_config
-from ..log import set_log_is_client_connected_status, log_info, log_error, log_warn
-from .message import WebsocketMessage
-from .send.telemetry import handle_telemetry
-from .send.status import handle_status_update
 
+import websockets
+
+from ..log import log_error, log_info, log_warn, set_log_is_client_connected_status
+from ..websocket.handler import handle_message
+from ..websocket.send.config import handle_send_config, handle_send_firmware_version
 from .constants import FIRMWARE_VERSION, WEBSOCKET_IP_ADDRESS, WEBSOCKET_PORT
+from .message import WebsocketMessage
+from .send.status import handle_status_update
+from .send.telemetry import handle_telemetry
+
 
 message_queue: asyncio.Queue = asyncio.Queue()
 
@@ -28,8 +33,8 @@ def get_message_queue() -> asyncio.Queue:
 class WebsocketServer:
     def __init__(self, state: RovState) -> None:
         self.state: RovState = state
-        self.server: Optional[WebSocketServer] = None
-        self.client: Optional[WebSocketServerProtocol] = None
+        self.server: WebSocketServer | None = None
+        self.client: WebSocketServerProtocol | None = None
 
     async def handler(self, websocket: WebSocketServerProtocol) -> None:
         self.client = websocket
@@ -44,7 +49,7 @@ class WebsocketServer:
             self._send_telemetry_periodically(websocket, self.state)
         )
 
-        async def send_firmware_version_on_connect():
+        async def send_firmware_version_on_connect() -> None:
             await asyncio.sleep(5)
             try:
                 await handle_send_firmware_version(websocket)

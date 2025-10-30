@@ -1,21 +1,25 @@
 from __future__ import annotations
+
 from time import time
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
+
 
 if TYPE_CHECKING:
-    from rov_state import RovState
     from numpy.typing import NDArray
+
+    from rov_state import RovState
 
 import numpy as np
 from scipy.optimize import curve_fit
-from .log import log_info, log_error
-from .toast import toast_loading, toast_success
-from .models.config import RegulatorPID
+
 from .constants import (
+    AUTO_TUNING_TOAST_ID,
     COMPLEMENTARY_FILTER_ALPHA,
     DEPTH_DERIVATIVE_EMA_TAU,
-    AUTO_TUNING_TOAST_ID,
 )
+from .log import log_error, log_info
+from .models.config import RegulatorPID
+from .toast import toast_loading, toast_success
 
 
 class Regulator:
@@ -72,7 +76,7 @@ class Regulator:
 
     def update_desired_from_direction_vector(
         self, direction_vector: NDArray[np.float64]
-    ):
+    ) -> None:
         if self.state.system_status.pitch_stabilization:
             config = self.state.rov_config.regulator
             pitch_change = direction_vector[3]
@@ -100,7 +104,7 @@ class Regulator:
                 desired_roll += 360
             self.state.regulator.desired_roll = desired_roll
 
-    def _update_regulator_data(self, pitch: float, roll: float):
+    def _update_regulator_data(self, pitch: float, roll: float) -> None:
         self.state.regulator.pitch = pitch
         self.state.regulator.roll = roll
         if not self.state.system_status.pitch_stabilization:
@@ -108,7 +112,7 @@ class Regulator:
         if not self.state.system_status.roll_stabilization:
             self.state.regulator.desired_roll = roll
 
-    def update_regulator_data_from_imu(self):
+    def update_regulator_data_from_imu(self) -> None:
         if not self.state.system_health.imu_ok:
             return
 
@@ -234,10 +238,8 @@ class Regulator:
         surge_coeff /= heave_coeff
         sway_coeff /= heave_coeff
         heave_coeff = 1
-        if surge_coeff < 0.1:
-            surge_coeff = 0.1
-        if sway_coeff < 0.1:
-            sway_coeff = 0.1
+        surge_coeff = max(surge_coeff, 0.1)
+        sway_coeff = max(sway_coeff, 0.1)
         speed_coeffs = np.diag([surge_coeff, sway_coeff, heave_coeff])
         A = A @ speed_coeffs
 
@@ -255,7 +257,7 @@ class Regulator:
 
     def _apply_actuation_to_direction_vector(
         self, direction_vector: NDArray[np.float64], actuation: np.ndarray
-    ):
+    ) -> None:
         direction_vector[0:6] += actuation
 
     def get_actuation(self) -> NDArray[np.float64]:
@@ -276,7 +278,7 @@ class Regulator:
 
     def handle_auto_tuning(
         self, current_time: float
-    ) -> tuple[Optional[NDArray[np.float64]], bool]:
+    ) -> tuple[NDArray[np.float64] | None, bool]:
         if not self.auto_tuning_phase:
             self.auto_tuning_phase = "pitch"
             self.auto_tuning_step = "find_zero"
@@ -522,12 +524,12 @@ class Regulator:
 
         return np.zeros(6)
 
-    def _fit_curve(self, axis: str):
+    def _fit_curve(self, axis: str) -> None:
         if not self.auto_tuning_data:
             log_error(f"No data for {axis} curve fitting")
             return
 
-        times, values = zip(*self.auto_tuning_data)
+        times, values = zip(*self.auto_tuning_data, strict=False)
         times = np.array(times) - times[0]
         values = np.array(values)
 

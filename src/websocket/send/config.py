@@ -1,13 +1,16 @@
 from __future__ import annotations
+
 from typing import TYPE_CHECKING
+
 
 if TYPE_CHECKING:
     from websockets.server import WebSocketServerProtocol
+
     from rov_state import RovState
 
+from ...constants import FIRMWARE_VERSION
 from ...models.config import FirmwareVersion
 from ..message import Config, FirmwareVersion as FirmwareVersionMessage
-from ...constants import FIRMWARE_VERSION
 
 
 async def handle_send_firmware_version(

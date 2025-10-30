@@ -1,5 +1,5 @@
-from pydantic import RootModel, field_validator
 import numpy as np
+from pydantic import RootModel, field_validator
 
 
 class DirectionVector(RootModel[np.ndarray]):

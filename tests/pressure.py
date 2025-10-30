@@ -1,7 +1,8 @@
 # This script tests that the pressure sensor is working correctly by reading and printing pressure, temperature, and depth data.
 
-import ms5837
 import time
+
+import ms5837
 
 
 def main() -> None:

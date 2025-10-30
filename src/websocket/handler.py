@@ -1,31 +1,34 @@
 from __future__ import annotations
+
 from typing import TYPE_CHECKING, cast
+
 
 if TYPE_CHECKING:
     from rov_state import RovState
 
 from websockets.server import WebSocketServerProtocol
+
 from ..log import log_warn
-from .receive.config import handle_get_config, handle_set_config
-from .receive.microcontroller import handle_flash_microcontroller_firmware
+from ..models.actions import CustomAction, DirectionVector
+from ..models.config import MicrocontrollerFirmwareVariant, RovConfig, ThrusterTest
+from .message import MessageType, WebsocketMessage
 from .receive.actions import (
-    handle_direction_vector,
-    handle_start_thruster_test,
     handle_cancel_thruster_test,
     handle_custom_action,
+    handle_direction_vector,
+    handle_start_thruster_test,
+)
+from .receive.config import handle_get_config, handle_set_config
+from .receive.microcontroller import handle_flash_microcontroller_firmware
+from .receive.regulator import (
+    handle_cancel_regulator_auto_tuning,
+    handle_start_regulator_auto_tuning,
 )
 from .receive.state import (
+    handle_toggle_depth_hold,
     handle_toggle_pitch_stabilization,
     handle_toggle_roll_stabilization,
-    handle_toggle_depth_hold,
 )
-from .receive.regulator import (
-    handle_start_regulator_auto_tuning,
-    handle_cancel_regulator_auto_tuning,
-)
-from .message import MessageType, WebsocketMessage
-from ..models.config import RovConfig, MicrocontrollerFirmwareVariant, ThrusterTest
-from ..models.actions import DirectionVector, CustomAction
 
 
 async def handle_message(

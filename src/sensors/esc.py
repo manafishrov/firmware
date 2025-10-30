@@ -1,12 +1,16 @@
 from __future__ import annotations
+
 from typing import TYPE_CHECKING
 
+
 if TYPE_CHECKING:
-    from rov_state import RovState
     from serial_manager import SerialManager
+
+    from rov_state import RovState
 
 import asyncio
 import struct
+
 
 TELEMETRY_START_BYTE = 0xA5
 NUM_MOTORS = 8

@@ -1,12 +1,16 @@
 from __future__ import annotations
+
 from typing import TYPE_CHECKING
+
 
 if TYPE_CHECKING:
     from rov_state import RovState
 
 import glob
 import sys
+
 from serial.aio import Serial
+
 from .log import log_error
 
 
@@ -33,7 +37,8 @@ class SerialManager:
 
     def get_serial(self) -> Serial:
         if self.serial is None:
-            raise RuntimeError("Serial not initialized")
+            msg = "Serial not initialized"
+            raise RuntimeError(msg)
         return self.serial
 
     async def shutdown(self) -> None:

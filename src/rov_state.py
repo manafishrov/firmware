@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from .models.config import RovConfig
+from .models.esc import EscData
+from .models.regulator import RegulatorData
 from .models.sensors import ImuData, PressureData
 from .models.system import SystemHealth, SystemStatus
-from .models.regulator import RegulatorData
-from .models.esc import EscData
 from .models.thruster import ThrusterData
 
 

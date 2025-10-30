@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import asyncio
+
+from .log import log_info
+from .regulator import Regulator
 from .rov_state import RovState
-from .thrusters import Thrusters
+from .sensors.esc import EscSensor
 from .sensors.imu import Imu
 from .sensors.pressure import PressureSensor
-from .sensors.esc import EscSensor
 from .serial import SerialManager
+from .thrusters import Thrusters
 from .websocket.server import WebsocketServer
-from .regulator import Regulator
-from .log import log_info
 
 
 async def main() -> None:

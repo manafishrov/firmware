@@ -1,12 +1,14 @@
 # This script checks sending thruster values and reading telemetry data to/from the Raspberry Pi Pico and its firmware.
 
-import serial
-import struct
-import time
 import glob
+import queue
+import struct
 import sys
 import threading
-import queue
+import time
+
+import serial
+
 
 TELEMETRY_START_BYTE = 0xA5
 TELEMETRY_PACKET_SIZE = 8

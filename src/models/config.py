@@ -1,7 +1,9 @@
-import os
 from enum import Enum
-from pydantic import validator
+import os
+
 import numpy as np
+from pydantic import validator
+
 from .base import CamelCaseModel
 
 
@@ -115,7 +117,7 @@ class RovConfig(CamelCaseModel):
             default_config.save()
         return cls.parse_file(cls._config_path)
 
-    def save(self):
+    def save(self) -> None:
         with open(self._config_path, "w") as f:
             f.write(self.json(by_alias=True, indent=2))
 

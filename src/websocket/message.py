@@ -1,21 +1,21 @@
 from enum import Enum
-from typing import Union, Annotated
+from typing import Annotated
 
 from pydantic import Field
 
-from ..models.actions import DirectionVector, CustomAction
-from ..models.log import LogEntry
-from ..models.toast import Toast
+from ..models.actions import CustomAction, DirectionVector
+from ..models.base import CamelCaseModel
 from ..models.config import (
+    FirmwareVersion,
+    MicrocontrollerFirmwareVariant,
+    RegulatorSuggestions,
     RovConfig,
     ThrusterTest,
-    FirmwareVersion,
-    RegulatorSuggestions,
-    MicrocontrollerFirmwareVariant,
 )
-from ..models.rov_telemetry import RovTelemetry
+from ..models.log import LogEntry
 from ..models.rov_status import RovStatus
-from ..models.base import CamelCaseModel
+from ..models.rov_telemetry import RovTelemetry
+from ..models.toast import Toast
 
 
 class MessageType(str, Enum):
@@ -130,26 +130,24 @@ class FlashMicrocontrollerFirmware(CamelCaseModel):
 
 
 WebsocketMessage = Annotated[
-    Union[
-        DirectionVector,
-        GetConfig,
-        SetConfig,
-        Config,
-        StartThrusterTest,
-        CancelThrusterTest,
-        StartRegulatorAutoTuning,
-        CancelRegulatorAutoTuning,
-        RegulatorSuggestions,
-        ShowToast,
-        LogMessage,
-        StatusUpdate,
-        Telemetry,
-        FirmwareVersion,
-        CustomAction,
-        TogglePitchStabilization,
-        ToggleRollStabilization,
-        ToggleDepthHold,
-        FlashMicrocontrollerFirmware,
-    ],
+    DirectionVector
+    | GetConfig
+    | SetConfig
+    | Config
+    | StartThrusterTest
+    | CancelThrusterTest
+    | StartRegulatorAutoTuning
+    | CancelRegulatorAutoTuning
+    | RegulatorSuggestions
+    | ShowToast
+    | LogMessage
+    | StatusUpdate
+    | Telemetry
+    | FirmwareVersion
+    | CustomAction
+    | TogglePitchStabilization
+    | ToggleRollStabilization
+    | ToggleDepthHold
+    | FlashMicrocontrollerFirmware,
     Field(discriminator="type"),
 ]

@@ -1,31 +1,37 @@
 from __future__ import annotations
-from typing import TYPE_CHECKING, Optional
+
+from typing import TYPE_CHECKING
+
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+
+    from regulator import Regulator
     from rov_state import RovState
     from serial import SerialManager
-    from regulator import Regulator
+
     from .websocket.server import WebsocketServer
 
 import asyncio
-import time
-import struct
 import json
+import struct
+import time
+
 import numpy as np
-from .toast import toast_loading, toast_success
+
+from .constants import (
+    THRUSTER_FORWARD_RANGE,
+    THRUSTER_INPUT_START_BYTE,
+    THRUSTER_NEUTRAL,
+    THRUSTER_NUM_MOTORS,
+    THRUSTER_REVERSE_RANGE,
+    THRUSTER_TEST_TOAST_ID,
+    THRUSTER_TIMEOUT_MS,
+)
 from .log import log_error
 from .models.config import RegulatorPID
+from .toast import toast_loading, toast_success
 from .websocket.message import RegulatorSuggestions
-from .constants import (
-    THRUSTER_INPUT_START_BYTE,
-    THRUSTER_NUM_MOTORS,
-    THRUSTER_NEUTRAL,
-    THRUSTER_FORWARD_RANGE,
-    THRUSTER_REVERSE_RANGE,
-    THRUSTER_TIMEOUT_MS,
-    THRUSTER_TEST_TOAST_ID,
-)
 
 
 class Thrusters:
@@ -114,7 +120,7 @@ class Thrusters:
 
     def _handle_thruster_test(
         self, current_time: float, test_thruster: int
-    ) -> Optional[NDArray[np.float64]]:
+    ) -> NDArray[np.float64] | None:
         elapsed = current_time - self.state.thrusters.test_start_time
         if elapsed >= 10:
             self.state.thrusters.test_thruster = None

@@ -1,24 +1,25 @@
 from __future__ import annotations
-from typing import Optional, Union
 
 import asyncio
-from .websocket.message import ShowToast, CancelRegulatorAutoTuning, CancelThrusterTest
-from .models.toast import Toast, ToastType, ToastCancel
 
-_main_event_loop: Optional[asyncio.AbstractEventLoop] = None
+from .models.toast import Toast, ToastCancel, ToastType
+from .websocket.message import CancelRegulatorAutoTuning, CancelThrusterTest, ShowToast
 
 
-def initialize_sync_toasting(loop: asyncio.AbstractEventLoop):
+_main_event_loop: asyncio.AbstractEventLoop | None = None
+
+
+def initialize_sync_toasting(loop: asyncio.AbstractEventLoop) -> None:
     global _main_event_loop
     _main_event_loop = loop
 
 
 async def _toast_message_async(
-    id: Optional[str],
-    toast_type: Optional[ToastType],
+    id: str | None,
+    toast_type: ToastType | None,
     message: str,
-    description: Optional[str],
-    cancel: Optional[ToastCancel],
+    description: str | None,
+    cancel: ToastCancel | None,
 ) -> None:
     from .websocket.server import get_message_queue
 
@@ -36,11 +37,11 @@ async def _toast_message_async(
 
 
 def _toast_message(
-    id: Optional[str],
-    toast_type: Optional[ToastType],
+    id: str | None,
+    toast_type: ToastType | None,
     message: str,
-    description: Optional[str],
-    cancel: Optional[ToastCancel],
+    description: str | None,
+    cancel: ToastCancel | None,
 ) -> None:
     if _main_event_loop and _main_event_loop.is_running():
         asyncio.run_coroutine_threadsafe(
@@ -48,60 +49,58 @@ def _toast_message(
             _main_event_loop,
         )
     else:
-        print(
-            f"[TOAST-{toast_type.upper() if toast_type else 'GENERAL'}] {message}: {description}"
-        )
+        pass
 
 
 def toast(
-    id: Optional[str],
+    id: str | None,
     message: str,
-    description: Optional[str],
-    cancel: Optional[ToastCancel],
+    description: str | None,
+    cancel: ToastCancel | None,
 ) -> None:
     _toast_message(id, None, message, description, cancel)
 
 
 def toast_success(
-    id: Optional[str],
+    id: str | None,
     message: str,
-    description: Optional[str],
-    cancel: Optional[ToastCancel],
+    description: str | None,
+    cancel: ToastCancel | None,
 ) -> None:
     _toast_message(id, ToastType.SUCCESS, message, description, cancel)
 
 
 def toast_info(
-    id: Optional[str],
+    id: str | None,
     message: str,
-    description: Optional[str],
-    cancel: Optional[ToastCancel],
+    description: str | None,
+    cancel: ToastCancel | None,
 ) -> None:
     _toast_message(id, ToastType.INFO, message, description, cancel)
 
 
 def toast_warn(
-    id: Optional[str],
+    id: str | None,
     message: str,
-    description: Optional[str],
-    cancel: Optional[ToastCancel],
+    description: str | None,
+    cancel: ToastCancel | None,
 ) -> None:
     _toast_message(id, ToastType.WARN, message, description, cancel)
 
 
 def toast_error(
-    id: Optional[str],
+    id: str | None,
     message: str,
-    description: Optional[str],
-    cancel: Optional[Union[CancelRegulatorAutoTuning, CancelThrusterTest]],
+    description: str | None,
+    cancel: CancelRegulatorAutoTuning | CancelThrusterTest | None,
 ) -> None:
     _toast_message(id, ToastType.ERROR, message, description, cancel)
 
 
 def toast_loading(
-    id: Optional[str],
+    id: str | None,
     message: str,
-    description: Optional[str],
-    cancel: Optional[Union[CancelRegulatorAutoTuning, CancelThrusterTest]],
+    description: str | None,
+    cancel: CancelRegulatorAutoTuning | CancelThrusterTest | None,
 ) -> None:
     _toast_message(id, ToastType.LOADING, message, description, cancel)

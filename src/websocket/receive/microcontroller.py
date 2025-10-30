@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import subprocess
 import os
 import re
-from ...log import log_info, log_error, log_warn
-from ...toast import toast_error, toast_warn, toast_loading, toast_success, toast_info
-from ...models.config import MicrocontrollerFirmwareVariant
+import subprocess
+
 from ...constants import FLASH_TOAST_ID
+from ...log import log_error, log_info, log_warn
+from ...models.config import MicrocontrollerFirmwareVariant
+from ...toast import toast_error, toast_info, toast_loading, toast_success, toast_warn
 
 
 async def handle_flash_microcontroller_firmware(

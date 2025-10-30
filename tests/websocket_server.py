@@ -2,12 +2,13 @@
 
 import asyncio
 import json
-import time
-import websockets
 import math
 import signal
-from typing import Optional, Union
+import time
+
+import websockets
 from websockets.legacy.server import WebSocketServerProtocol
+
 
 clients: set[WebSocketServerProtocol] = set()
 shutdown: bool = False
@@ -18,8 +19,8 @@ system_status = {
     "depth_hold": False,
 }
 
-on_going_thruster_tests: dict[Union[str, int], asyncio.Task] = {}
-on_going_regulator_autotune: Optional[asyncio.Task] = None
+on_going_thruster_tests: dict[str | int, asyncio.Task] = {}
+on_going_regulator_autotune: asyncio.Task | None = None
 
 rov_config = {
     "fluidType": "saltwater",
@@ -75,11 +76,11 @@ async def log(level: str, message: str) -> None:
 
 
 async def toast(
-    id: Optional[Union[str, int]],
+    id: str | int | None,
     toast_type: str,
     message: str,
-    description: Optional[str],
-    cancel: Optional[dict],
+    description: str | None,
+    cancel: dict | None,
 ) -> None:
     toast_msg = {
         "type": "showToast",

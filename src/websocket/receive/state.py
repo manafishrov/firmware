@@ -1,5 +1,7 @@
 from __future__ import annotations
+
 from typing import TYPE_CHECKING
+
 
 if TYPE_CHECKING:
     from rov_state import RovState
@@ -28,9 +30,5 @@ async def handle_toggle_roll_stabilization(
 async def handle_toggle_depth_hold(
     state: RovState,
 ) -> None:
-    state.system_status.depth_hold = (
-        not state.system_status.depth_hold
-    )
-    log_info(
-        f"Toggled depth hold to {state.system_status.depth_hold}"
-    )
+    state.system_status.depth_hold = not state.system_status.depth_hold
+    log_info(f"Toggled depth hold to {state.system_status.depth_hold}")
