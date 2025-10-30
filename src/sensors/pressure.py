@@ -1,3 +1,5 @@
+"""Pressure sensor interface for the ROV firmware."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -16,7 +18,14 @@ from ..toast import toast_error
 
 
 class PressureSensor:
+    """Pressure sensor class."""
+
     def __init__(self, state: RovState):
+        """Initialize the pressure sensor.
+
+        Args:
+            state: The ROV state.
+        """
         self.state: RovState = state
         self.sensor: ms5837.MS5837_30BA | None = None
 
@@ -34,7 +43,7 @@ class PressureSensor:
                 f"Failed to initialize MS5837 pressure sensor. Is it connected? Error: {e}"
             )
             toast_error(
-                id=None,
+                toast_id=None,
                 message="Pressure Sensor Init Failed!",
                 description="Failed to initialize pressure sensor. Check connections.",
                 cancel=None,

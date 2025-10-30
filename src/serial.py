@@ -1,3 +1,5 @@
+"""Serial communication manager for the ROV firmware."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -15,7 +17,14 @@ from .log import log_error
 
 
 class SerialManager:
+    """Serial manager class."""
+
     def __init__(self, state: RovState):
+        """Initialize the serial manager.
+
+        Args:
+            state: The ROV state.
+        """
         self.state: RovState = state
         self.serial: Serial | None = None
 

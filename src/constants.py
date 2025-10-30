@@ -1,3 +1,5 @@
+"""Constants used throughout the firmware."""
+
 # General
 FIRMWARE_VERSION = "1.0.0"
 

@@ -1,7 +1,11 @@
+"""ROV telemetry data models for the ROV firmware."""
+
 from .base import CamelCaseModel
 
 
 class RovTelemetry(CamelCaseModel):
+    """Model for ROV telemetry."""
+
     pitch: float
     roll: float
     desired_pitch: float

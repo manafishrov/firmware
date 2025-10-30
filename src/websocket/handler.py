@@ -1,3 +1,5 @@
+"""WebSocket message handler for the ROV firmware."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
@@ -31,11 +33,18 @@ from .receive.state import (
 )
 
 
-async def handle_message(
+async def handle_message(  # noqa: C901,PLR0912
     state: RovState,
     websocket: WebSocketServerProtocol,
     message: WebsocketMessage,
 ) -> None:
+    """Handle a WebSocket message.
+
+    Args:
+        state: The ROV state.
+        websocket: The WebSocket.
+        message: The message.
+    """
     payload = getattr(message, "payload", None)
     match message.type:
         case MessageType.GET_CONFIG:

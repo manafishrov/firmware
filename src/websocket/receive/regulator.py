@@ -1,3 +1,5 @@
+"""WebSocket regulator handlers for the ROV firmware."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -22,7 +24,7 @@ async def handle_start_regulator_auto_tuning(
     if not state.system_health.imu_ok:
         log_error("IMU not healthy, cannot start auto tuning")
         toast_error(
-            id=AUTO_TUNING_TOAST_ID,
+            toast_id=AUTO_TUNING_TOAST_ID,
             message="Auto tuning failed",
             description="IMU sensor not healthy",
             cancel=None,
@@ -32,7 +34,7 @@ async def handle_start_regulator_auto_tuning(
     if not state.system_health.pressure_sensor_ok:
         log_error("Pressure sensor not healthy, cannot start auto tuning")
         toast_error(
-            id=AUTO_TUNING_TOAST_ID,
+            toast_id=AUTO_TUNING_TOAST_ID,
             message="Auto tuning failed",
             description="Pressure sensor not healthy",
             cancel=None,
@@ -44,7 +46,7 @@ async def handle_start_regulator_auto_tuning(
             f"ROV roll too high: {state.regulator.roll}°, cannot start auto tuning"
         )
         toast_error(
-            id=AUTO_TUNING_TOAST_ID,
+            toast_id=AUTO_TUNING_TOAST_ID,
             message="Auto tuning failed",
             description=f"ROV roll is {state.regulator.roll:.1f}°, must be level",
             cancel=None,
@@ -56,7 +58,7 @@ async def handle_start_regulator_auto_tuning(
             f"ROV pitch too high: {state.regulator.pitch}°, cannot start auto tuning"
         )
         toast_error(
-            id=AUTO_TUNING_TOAST_ID,
+            toast_id=AUTO_TUNING_TOAST_ID,
             message="Auto tuning failed",
             description=f"ROV pitch is {state.regulator.pitch:.1f}°, must be level",
             cancel=None,
@@ -67,7 +69,7 @@ async def handle_start_regulator_auto_tuning(
     state.regulator.auto_tuning_active = True
     state.regulator.auto_tuning_start_time = time.time()
     toast_loading(
-        id=AUTO_TUNING_TOAST_ID,
+        toast_id=AUTO_TUNING_TOAST_ID,
         message="Starting regulator auto tuning",
         description="Preparing...",
         cancel=CancelRegulatorAutoTuning(),
@@ -80,7 +82,7 @@ async def handle_cancel_regulator_auto_tuning(
     log_info("Cancelling regulator auto tuning")
     state.regulator.auto_tuning_active = False
     toast_info(
-        id="regulator-auto-tuning",
+        toast_id="regulator-auto-tuning",
         message="Auto tuning cancelled",
         description=None,
         cancel=None,

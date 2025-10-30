@@ -1,3 +1,5 @@
+"""WebSocket microcontroller handlers for the ROV firmware."""
+
 from __future__ import annotations
 
 import os
@@ -24,7 +26,7 @@ async def handle_flash_microcontroller_firmware(
     else:
         log_error(f"Unknown firmware variant: {payload}")
         toast_error(
-            id=None,
+            toast_id=None,
             message="Tried to flash unknown firmware variant",
             description=None,
             cancel=None,
@@ -42,7 +44,7 @@ async def handle_flash_microcontroller_firmware(
         if process.stdout is None:
             log_warn("Could not capture process stdout.")
             toast_warn(
-                id=None,
+                toast_id=None,
                 message="Unable to show firmware flashing progress",
                 description=None,
                 cancel=None,
@@ -66,7 +68,7 @@ async def handle_flash_microcontroller_firmware(
                 ):
                     bootsel_toast_shown = True
                     toast_info(
-                        id=None,
+                        toast_id=None,
                         message="Microcontroller was asked to reboot into BOOTSEL mode",
                         description=None,
                         cancel=None,
@@ -78,7 +80,7 @@ async def handle_flash_microcontroller_firmware(
                         if new_percent != percent:
                             percent = new_percent
                             toast_loading(
-                                id=FLASH_TOAST_ID,
+                                toast_id=FLASH_TOAST_ID,
                                 message=f"Flashing firmware... {percent}%",
                                 description=None,
                                 cancel=None,
@@ -90,14 +92,14 @@ async def handle_flash_microcontroller_firmware(
         log_info(result_log)
         if flash_success and rc == 0:
             toast_success(
-                id=FLASH_TOAST_ID,
+                toast_id=FLASH_TOAST_ID,
                 message="Firmware flashed successfully",
                 description=None,
                 cancel=None,
             )
         else:
             toast_error(
-                id=FLASH_TOAST_ID,
+                toast_id=FLASH_TOAST_ID,
                 message="Firmware flashing failed",
                 description=None,
                 cancel=None,
@@ -105,7 +107,7 @@ async def handle_flash_microcontroller_firmware(
             log_error(f"Firmware flashing failed with return code {rc}.")
     except Exception as ex:
         toast_error(
-            id=FLASH_TOAST_ID,
+            toast_id=FLASH_TOAST_ID,
             message="Firmware flashing encountered an unexpected error",
             description=None,
             cancel=None,

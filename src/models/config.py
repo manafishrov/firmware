@@ -1,44 +1,63 @@
+"""Configuration models for the ROV firmware."""
+
 from enum import Enum
-import os
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
-from pydantic import validator
+from pydantic import field_validator
 
 from .base import CamelCaseModel
 
 
+if TYPE_CHECKING:
+    from .config import RovConfig
+
+
 class MicrocontrollerFirmwareVariant(str, Enum):
+    """Enum for microcontroller firmware variants."""
+
     PWM = "pwm"
     DSHOT = "dshot"
 
 
 class FluidType(str, Enum):
+    """Enum for fluid types."""
+
     FRESHWATER = "freshwater"
     SALTWATER = "saltwater"
 
 
 class ThrusterPinSetup(CamelCaseModel):
+    """Model for thruster pin setup."""
+
     identifiers: np.ndarray
     spin_directions: np.ndarray
 
-    @validator("identifiers", pre=True)
+    @field_validator("identifiers", mode="before")
     @classmethod
-    def to_int_array(cls, v):
+    def to_int_array(cls, v: list[int]) -> np.ndarray:
+        """Convert to int array."""
         return np.array(v, dtype=int)
 
-    @validator("spin_directions", pre=True)
+    @field_validator("spin_directions", mode="before")
     @classmethod
-    def to_float_array(cls, v):
+    def to_float_array(cls, v: list[float]) -> np.ndarray:
+        """Convert to float array."""
         return np.array(v, dtype=float)
 
 
 class RegulatorPID(CamelCaseModel):
+    """PID parameters for regulator."""
+
     kp: float
     ki: float
     kd: float
 
 
 class Regulator(CamelCaseModel):
+    """Regulator configuration."""
+
     turn_speed: int
     pitch: RegulatorPID
     roll: RegulatorPID
@@ -46,6 +65,8 @@ class Regulator(CamelCaseModel):
 
 
 class DirectionCoefficients(CamelCaseModel):
+    """Direction coefficients for movement."""
+
     surge: float
     sway: float
     heave: float
@@ -55,6 +76,8 @@ class DirectionCoefficients(CamelCaseModel):
 
 
 class Power(CamelCaseModel):
+    """Power configuration."""
+
     user_max_power: int
     regulator_max_power: int
     battery_min_voltage: float
@@ -62,13 +85,15 @@ class Power(CamelCaseModel):
 
 
 class RovConfig(CamelCaseModel):
+    """Main ROV configuration."""
+
     microcontroller_firmware_variant: MicrocontrollerFirmwareVariant = (
         MicrocontrollerFirmwareVariant.DSHOT
     )
     fluid_type: FluidType = FluidType.SALTWATER
     thruster_pin_setup: ThrusterPinSetup = ThrusterPinSetup(
-        identifiers=(0, 1, 2, 3, 4, 5, 6, 7),
-        spin_directions=(1, 1, 1, 1, 1, 1, 1, 1),
+        identifiers=np.array([0, 1, 2, 3, 4, 5, 6, 7], dtype=int),
+        spin_directions=np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], dtype=float),
     )
     thruster_allocation: np.ndarray = np.array(
         (
@@ -103,23 +128,27 @@ class RovConfig(CamelCaseModel):
         battery_max_voltage=12.6,
     )
 
-    @validator("thruster_allocation", pre=True)
+    @field_validator("thruster_allocation", mode="before")
     @classmethod
-    def to_float_array(cls, v):
+    def to_float_array(cls, v: list[float]) -> np.ndarray:
+        """Convert to float array."""
         return np.array(v, dtype=float)
 
-    _config_path = os.path.join(os.path.dirname(__file__), "config.json")
+    _config_path = Path(__file__).parent / "config.json"
 
     @classmethod
-    def load(cls):
-        if not os.path.exists(cls._config_path):
+    def load(cls) -> RovConfig:
+        """Load config from file."""
+        if not cls._config_path.exists():
             default_config = cls()
             default_config.save()
-        return cls.parse_file(cls._config_path)
+        with cls._config_path.open() as f:
+            return cls.model_validate_json(f.read())
 
     def save(self) -> None:
-        with open(self._config_path, "w") as f:
-            f.write(self.json(by_alias=True, indent=2))
+        """Save config to file."""
+        with self._config_path.open("w") as f:
+            f.write(self.model_dump_json(by_alias=True, indent=2))
 
 
 ThrusterTest = int
@@ -128,6 +157,8 @@ FirmwareVersion = str
 
 
 class RegulatorSuggestions(CamelCaseModel):
+    """Suggestions for regulator tuning."""
+
     pitch: RegulatorPID
     roll: RegulatorPID
     depth: RegulatorPID

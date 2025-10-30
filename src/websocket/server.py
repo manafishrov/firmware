@@ -1,3 +1,5 @@
+"""WebSocket server for the ROV firmware."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -14,10 +16,10 @@ import json
 
 import websockets
 
+from ..constants import FIRMWARE_VERSION, WEBSOCKET_IP_ADDRESS, WEBSOCKET_PORT
 from ..log import log_error, log_info, log_warn, set_log_is_client_connected_status
 from ..websocket.handler import handle_message
 from ..websocket.send.config import handle_send_config, handle_send_firmware_version
-from .constants import FIRMWARE_VERSION, WEBSOCKET_IP_ADDRESS, WEBSOCKET_PORT
 from .message import WebsocketMessage
 from .send.status import handle_status_update
 from .send.telemetry import handle_telemetry
@@ -27,16 +29,33 @@ message_queue: asyncio.Queue = asyncio.Queue()
 
 
 def get_message_queue() -> asyncio.Queue:
+    """Get the message queue.
+
+    Returns:
+        The message queue.
+    """
     return message_queue
 
 
 class WebsocketServer:
+    """WebSocket server class."""
+
     def __init__(self, state: RovState) -> None:
+        """Initialize the WebSocket server.
+
+        Args:
+            state: The ROV state.
+        """
         self.state: RovState = state
         self.server: WebSocketServer | None = None
         self.client: WebSocketServerProtocol | None = None
 
     async def handler(self, websocket: WebSocketServerProtocol) -> None:
+        """Handle WebSocket connection.
+
+        Args:
+            websocket: The WebSocket.
+        """
         self.client = websocket
         set_log_is_client_connected_status(True)
         log_info(f"Client connected: {websocket.remote_address}.")
@@ -90,6 +109,7 @@ class WebsocketServer:
             log_info("Client disconnected.")
 
     async def start(self) -> None:
+        """Start the WebSocket server."""
         self.server = await websockets.serve(
             self.handler, WEBSOCKET_IP_ADDRESS, WEBSOCKET_PORT
         )
@@ -128,5 +148,6 @@ class WebsocketServer:
             pass
 
     async def wait_closed(self) -> None:
+        """Wait for the server to close."""
         if self.server:
             await self.server.wait_closed()

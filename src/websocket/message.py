@@ -1,3 +1,5 @@
+"""WebSocket message models for the ROV firmware."""
+
 from enum import Enum
 from typing import Annotated
 
@@ -19,6 +21,8 @@ from ..models.toast import Toast
 
 
 class MessageType(str, Enum):
+    """Enum for WebSocket message types."""
+
     DIRECTION_VECTOR = "directionVector"
     GET_CONFIG = "getConfig"
     SET_CONFIG = "setConfig"
@@ -41,90 +45,128 @@ class MessageType(str, Enum):
 
 
 class DirectionVector(CamelCaseModel):
+    """WebSocket message for direction vector."""
+
     type: MessageType = MessageType.DIRECTION_VECTOR
     payload: DirectionVector
 
 
 class GetConfig(CamelCaseModel):
+    """WebSocket message for getting config."""
+
     type: MessageType = MessageType.GET_CONFIG
 
 
 class SetConfig(CamelCaseModel):
+    """WebSocket message for setting config."""
+
     type: MessageType = MessageType.SET_CONFIG
     payload: RovConfig
 
 
 class Config(CamelCaseModel):
+    """WebSocket message for config response."""
+
     type: MessageType = MessageType.CONFIG
     payload: RovConfig
 
 
 class StartThrusterTest(CamelCaseModel):
+    """WebSocket message for starting thruster test."""
+
     type: MessageType = MessageType.START_THRUSTER_TEST
     payload: ThrusterTest
 
 
 class CancelThrusterTest(CamelCaseModel):
+    """WebSocket message for canceling thruster test."""
+
     type: MessageType = MessageType.CANCEL_THRUSTER_TEST
     payload: ThrusterTest
 
 
 class StartRegulatorAutoTuning(CamelCaseModel):
+    """WebSocket message for starting regulator auto tuning."""
+
     type: MessageType = MessageType.START_REGULATOR_AUTO_TUNING
 
 
 class CancelRegulatorAutoTuning(CamelCaseModel):
+    """WebSocket message for canceling regulator auto tuning."""
+
     type: MessageType = MessageType.CANCEL_REGULATOR_AUTO_TUNING
 
 
 class RegulatorSuggestions(CamelCaseModel):
+    """WebSocket message for regulator suggestions."""
+
     type: MessageType = MessageType.REGULATOR_SUGGESTIONS
     payload: RegulatorSuggestions
 
 
 class ShowToast(CamelCaseModel):
+    """WebSocket message for showing toast."""
+
     type: MessageType = MessageType.SHOW_TOAST
     payload: Toast
 
 
 class LogMessage(CamelCaseModel):
+    """WebSocket message for log messages."""
+
     type: MessageType = MessageType.LOG_MESSAGE
     payload: LogEntry
 
 
 class StatusUpdate(CamelCaseModel):
+    """WebSocket message for status updates."""
+
     type: MessageType = MessageType.STATUS_UPDATE
     payload: RovStatus
 
 
 class Telemetry(CamelCaseModel):
+    """WebSocket message for telemetry."""
+
     type: MessageType = MessageType.TELEMETRY
     payload: RovTelemetry
 
 
 class FirmwareVersion(CamelCaseModel):
+    """WebSocket message for firmware version."""
+
     type: MessageType = MessageType.FIRMWARE_VERSION
     payload: FirmwareVersion
 
 
 class CustomAction(CamelCaseModel):
+    """WebSocket message for custom actions."""
+
     type: MessageType = MessageType.CUSTOM_ACTION
     payload: CustomAction
 
 
 class TogglePitchStabilization(CamelCaseModel):
+    """WebSocket message for toggling pitch stabilization."""
+
     type: MessageType = MessageType.TOGGLE_PITCH_STABILIZATION
 
 
 class ToggleRollStabilization(CamelCaseModel):
+    """WebSocket message for toggling roll stabilization."""
+
     type: MessageType = MessageType.TOGGLE_ROLL_STABILIZATION
 
 
 class ToggleDepthHold(CamelCaseModel):
+    """WebSocket message for toggling depth hold."""
+
     type: MessageType = MessageType.TOGGLE_DEPTH_HOLD
 
 
 class FlashMicrocontrollerFirmware(CamelCaseModel):
+    """WebSocket message for flashing microcontroller firmware."""
+
     type: MessageType = MessageType.FLASH_MICROCONTROLLER_FIRMWARE
     payload: MicrocontrollerFirmwareVariant
 

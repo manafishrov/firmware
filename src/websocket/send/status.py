@@ -1,3 +1,5 @@
+"""WebSocket status send handlers for the ROV firmware."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING

@@ -1,3 +1,5 @@
+"""WebSocket config handlers for the ROV firmware."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -18,7 +20,7 @@ async def handle_get_config(
     state: RovState,
     websocket: WebSocketServerProtocol,
 ) -> None:
-    msg = Config(payload=state.rov_config).json(by_alias=True)
+    msg = Config(payload=state.rov_config).model_dump_json(by_alias=True)
     await websocket.send(msg)
     log_info("Sent config to client.")
 
@@ -31,7 +33,7 @@ async def handle_set_config(
     state.rov_config.save()
     log_info("Received and applied new config.")
     toast_success(
-        id=None,
+        toast_id=None,
         message="ROV config set successfully",
         description=None,
         cancel=None,

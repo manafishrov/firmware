@@ -1,11 +1,14 @@
+"""Toast data models for the ROV firmware."""
+
 from enum import Enum
-from typing import Union
 
 from ..websocket.message import CancelRegulatorAutoTuning, CancelThrusterTest
 from .base import CamelCaseModel
 
 
 class ToastType(str, Enum):
+    """Enum for toast types."""
+
     SUCCESS = "success"
     INFO = "info"
     WARN = "warn"
@@ -13,11 +16,13 @@ class ToastType(str, Enum):
     LOADING = "loading"
 
 
-ToastCancel = Union[CancelRegulatorAutoTuning, CancelThrusterTest]
+ToastCancel = CancelRegulatorAutoTuning | CancelThrusterTest
 
 
 class Toast(CamelCaseModel):
-    id: str | None
+    """Model for toast notifications."""
+
+    toast_id: str | None
     toast_type: ToastType | None
     message: str
     description: str | None

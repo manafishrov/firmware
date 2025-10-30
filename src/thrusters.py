@@ -1,3 +1,5 @@
+"""Thruster control logic for the ROV firmware."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -35,6 +37,8 @@ from .websocket.message import RegulatorSuggestions
 
 
 class Thrusters:
+    """Thrusters control class."""
+
     def __init__(
         self,
         state: RovState,
@@ -42,6 +46,14 @@ class Thrusters:
         regulator: Regulator,
         ws_server: WebsocketServer,
     ):
+        """Initialize the thrusters.
+
+        Args:
+            state: The ROV state.
+            serial_manager: The serial manager.
+            regulator: The regulator.
+            ws_server: The WebSocket server.
+        """
         self.state: RovState = state
         self.serial_manager: SerialManager = serial_manager
         self.regulator: Regulator = regulator
@@ -125,7 +137,7 @@ class Thrusters:
         if elapsed >= 10:
             self.state.thrusters.test_thruster = None
             toast_success(
-                id=THRUSTER_TEST_TOAST_ID,
+                toast_id=THRUSTER_TEST_TOAST_ID,
                 message="Thruster test completed",
                 description=None,
                 cancel=None,
@@ -142,7 +154,7 @@ class Thrusters:
             if remaining != self.state.thrusters.last_remaining:
                 self.state.thrusters.last_remaining = remaining
                 toast_loading(
-                    id=THRUSTER_TEST_TOAST_ID,
+                    toast_id=THRUSTER_TEST_TOAST_ID,
                     message=f"Testing thruster {logical_index}",
                     description=f"{remaining} seconds remaining",
                     cancel=None,

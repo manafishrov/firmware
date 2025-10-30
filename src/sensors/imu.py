@@ -1,3 +1,5 @@
+"""IMU sensor interface for the ROV firmware."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -16,7 +18,14 @@ from ..toast import toast_error
 
 
 class Imu:
+    """IMU sensor class."""
+
     def __init__(self, state: RovState):
+        """Initialize the IMU sensor.
+
+        Args:
+            state: The ROV state.
+        """
         self.state: RovState = state
         self.imu: BMI270 | None = None
 
@@ -47,7 +56,7 @@ class Imu:
             self.state.system_health.imu_ok = False
             log_error(f"Failed to initialize BMI270 IMU. Is it connected? Error: {e}")
             toast_error(
-                id=None,
+                toast_id=None,
                 message="IMU Init Failed!",
                 description="Failed to initialize IMU. Check connections.",
                 cancel=None,

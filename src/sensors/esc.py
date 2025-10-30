@@ -1,3 +1,5 @@
+"""ESC sensor interface for the ROV firmware."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -17,7 +19,15 @@ NUM_MOTORS = 8
 
 
 class EscSensor:
+    """ESC sensor class."""
+
     def __init__(self, state: RovState, serial_manager: SerialManager):
+        """Initialize the ESC sensor.
+
+        Args:
+            state: The ROV state.
+            serial_manager: The serial manager.
+        """
         self.state: RovState = state
         self.serial_manager: SerialManager = serial_manager
 

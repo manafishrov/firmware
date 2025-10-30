@@ -1,3 +1,5 @@
+"""Toast notification utilities for the ROV firmware."""
+
 from __future__ import annotations
 
 import asyncio
@@ -10,12 +12,17 @@ _main_event_loop: asyncio.AbstractEventLoop | None = None
 
 
 def initialize_sync_toasting(loop: asyncio.AbstractEventLoop) -> None:
+    """Initialize synchronous toasting.
+
+    Args:
+        loop: The asyncio event loop.
+    """
     global _main_event_loop
     _main_event_loop = loop
 
 
 async def _toast_message_async(
-    id: str | None,
+    toast_id: str | None,
     toast_type: ToastType | None,
     message: str,
     description: str | None,
@@ -26,7 +33,7 @@ async def _toast_message_async(
     toast_type_enum = toast_type
 
     payload = Toast(
-        id=id,
+        toast_id=toast_id,
         toast_type=toast_type_enum,
         message=message,
         description=description,
@@ -37,7 +44,7 @@ async def _toast_message_async(
 
 
 def _toast_message(
-    id: str | None,
+    toast_id: str | None,
     toast_type: ToastType | None,
     message: str,
     description: str | None,
@@ -45,62 +52,108 @@ def _toast_message(
 ) -> None:
     if _main_event_loop and _main_event_loop.is_running():
         asyncio.run_coroutine_threadsafe(
-            _toast_message_async(id, toast_type, message, description, cancel),
+            _toast_message_async(toast_id, toast_type, message, description, cancel),
             _main_event_loop,
         )
-    else:
-        pass
 
 
 def toast(
-    id: str | None,
+    toast_id: str | None,
     message: str,
     description: str | None,
     cancel: ToastCancel | None,
 ) -> None:
-    _toast_message(id, None, message, description, cancel)
+    """Send a toast notification.
+
+    Args:
+        toast_id: The toast ID.
+        message: The message.
+        description: The description.
+        cancel: The cancel action.
+    """
+    _toast_message(toast_id, None, message, description, cancel)
 
 
 def toast_success(
-    id: str | None,
+    toast_id: str | None,
     message: str,
     description: str | None,
     cancel: ToastCancel | None,
 ) -> None:
-    _toast_message(id, ToastType.SUCCESS, message, description, cancel)
+    """Send a success toast notification.
+
+    Args:
+        toast_id: The toast ID.
+        message: The message.
+        description: The description.
+        cancel: The cancel action.
+    """
+    _toast_message(toast_id, ToastType.SUCCESS, message, description, cancel)
 
 
 def toast_info(
-    id: str | None,
+    toast_id: str | None,
     message: str,
     description: str | None,
     cancel: ToastCancel | None,
 ) -> None:
-    _toast_message(id, ToastType.INFO, message, description, cancel)
+    """Send an info toast notification.
+
+    Args:
+        toast_id: The toast ID.
+        message: The message.
+        description: The description.
+        cancel: The cancel action.
+    """
+    _toast_message(toast_id, ToastType.INFO, message, description, cancel)
 
 
 def toast_warn(
-    id: str | None,
+    toast_id: str | None,
     message: str,
     description: str | None,
     cancel: ToastCancel | None,
 ) -> None:
-    _toast_message(id, ToastType.WARN, message, description, cancel)
+    """Send a warning toast notification.
+
+    Args:
+        toast_id: The toast ID.
+        message: The message.
+        description: The description.
+        cancel: The cancel action.
+    """
+    _toast_message(toast_id, ToastType.WARN, message, description, cancel)
 
 
 def toast_error(
-    id: str | None,
+    toast_id: str | None,
     message: str,
     description: str | None,
     cancel: CancelRegulatorAutoTuning | CancelThrusterTest | None,
 ) -> None:
-    _toast_message(id, ToastType.ERROR, message, description, cancel)
+    """Send an error toast notification.
+
+    Args:
+        toast_id: The toast ID.
+        message: The message.
+        description: The description.
+        cancel: The cancel action.
+    """
+    _toast_message(toast_id, ToastType.ERROR, message, description, cancel)
 
 
 def toast_loading(
-    id: str | None,
+    toast_id: str | None,
     message: str,
     description: str | None,
     cancel: CancelRegulatorAutoTuning | CancelThrusterTest | None,
 ) -> None:
-    _toast_message(id, ToastType.LOADING, message, description, cancel)
+    """Send a loading toast notification.
+
+    Args:
+        toast_id: The toast ID.
+        message: The message.
+        description: The description.
+        cancel: The cancel action.
+    """
+    _toast_message(toast_id, ToastType.LOADING, message, description, cancel)

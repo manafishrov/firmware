@@ -1,3 +1,5 @@
+"""WebSocket action handlers for the ROV firmware."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -20,6 +22,12 @@ async def handle_direction_vector(
     state: RovState,
     payload: DirectionVector,
 ) -> None:
+    """Handle direction vector message.
+
+    Args:
+        state: The ROV state.
+        payload: The direction vector.
+    """
     log_info(f"Received direction vector: {payload}")
     state.thrusters.direction_vector = payload.root
     state.thrusters.last_direction_time = time.time()
@@ -34,7 +42,7 @@ async def handle_start_thruster_test(
     state.thrusters.test_start_time = time.time()
     state.thrusters.last_remaining = 10
     toast_loading(
-        id="thruster-test",
+        toast_id="thruster-test",
         message=f"Testing thruster {payload}",
         description="10 seconds remaining",
         cancel=CancelThrusterTest(payload=payload),
@@ -48,7 +56,7 @@ async def handle_cancel_thruster_test(
     log_info(f"Cancelling thruster test: {payload}")
     state.thrusters.test_thruster = None
     toast_info(
-        id="thruster-test",
+        toast_id="thruster-test",
         message="Thruster test cancelled",
         description=None,
         cancel=None,

@@ -1,3 +1,5 @@
+"""Central state management for the ROV firmware."""
+
 from __future__ import annotations
 
 from .models.config import RovConfig
@@ -9,6 +11,8 @@ from .models.thruster import ThrusterData
 
 
 class RovState:
+    """Central state class for the ROV."""
+
     rov_config: RovConfig
     system_health: SystemHealth
     system_status: SystemStatus
@@ -19,6 +23,7 @@ class RovState:
     thrusters: ThrusterData
 
     def __init__(self) -> None:
+        """Initialize the ROV state."""
         self.rov_config: RovConfig = RovConfig.load()
         self.system_health: SystemHealth = SystemHealth()
         self.system_status: SystemStatus = SystemStatus()

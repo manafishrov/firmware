@@ -1,3 +1,5 @@
+"""Logging utilities for the ROV firmware."""
+
 from __future__ import annotations
 
 import asyncio
@@ -20,11 +22,21 @@ if not _logger.handlers:
 
 
 def initialize_sync_logging(loop: asyncio.AbstractEventLoop) -> None:
+    """Initialize synchronous logging.
+
+    Args:
+        loop: The asyncio event loop.
+    """
     global _main_event_loop
     _main_event_loop = loop
 
 
 def set_log_is_client_connected_status(is_connected: bool) -> None:
+    """Set the log client connected status.
+
+    Args:
+        is_connected: Whether the client is connected.
+    """
     global _is_client_connected
     _is_client_connected = is_connected
 
@@ -61,12 +73,27 @@ def _map_log_level(level: LogLevel) -> int:
 
 
 def log_info(message: str) -> None:
+    """Log an info message.
+
+    Args:
+        message: The message to log.
+    """
     _log_message(LogLevel.INFO, message)
 
 
 def log_warn(message: str) -> None:
+    """Log a warning message.
+
+    Args:
+        message: The message to log.
+    """
     _log_message(LogLevel.WARN, message)
 
 
 def log_error(message: str) -> None:
+    """Log an error message.
+
+    Args:
+        message: The message to log.
+    """
     _log_message(LogLevel.ERROR, message)

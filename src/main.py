@@ -1,3 +1,5 @@
+"""Main entry point for the ROV firmware."""
+
 from __future__ import annotations
 
 import asyncio
@@ -14,6 +16,7 @@ from .websocket.server import WebsocketServer
 
 
 async def main() -> None:
+    """Run the main ROV firmware loop."""
     state: RovState = RovState()
     serial_manager: SerialManager = SerialManager(state)
     await serial_manager.initialize()
