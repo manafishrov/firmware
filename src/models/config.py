@@ -2,16 +2,11 @@
 
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import numpy as np
 from pydantic import field_validator
 
 from .base import CamelCaseModel
-
-
-if TYPE_CHECKING:
-    from .config import RovConfig
 
 
 class MicrocontrollerFirmwareVariant(str, Enum):
@@ -134,10 +129,10 @@ class RovConfig(CamelCaseModel):
         """Convert to float array."""
         return np.array(v, dtype=float)
 
-    _config_path = Path(__file__).parent / "config.json"
+    _config_path: Path = Path(__file__).parent / "config.json"
 
     @classmethod
-    def load(cls) -> RovConfig:
+    def load(cls) -> "RovConfig":
         """Load config from file."""
         if not cls._config_path.exists():
             default_config = cls()
@@ -148,7 +143,7 @@ class RovConfig(CamelCaseModel):
     def save(self) -> None:
         """Save config to file."""
         with self._config_path.open("w") as f:
-            f.write(self.model_dump_json(by_alias=True, indent=2))
+            _ = f.write(self.model_dump_json(by_alias=True, indent=2))
 
 
 ThrusterTest = int

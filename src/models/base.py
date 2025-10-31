@@ -1,5 +1,7 @@
 """Base models and utilities for the ROV firmware."""
 
+from typing import ClassVar
+
 from pydantic import BaseModel, ConfigDict
 
 
@@ -19,4 +21,6 @@ def to_camel(snake_str: str) -> str:
 class CamelCaseModel(BaseModel):
     """Base model with camel case aliasing."""
 
-    model_config = ConfigDict(alias_generator=to_camel, populate_by_name=True)
+    model_config: ClassVar[ConfigDict] = ConfigDict(
+        alias_generator=to_camel, populate_by_name=True
+    )

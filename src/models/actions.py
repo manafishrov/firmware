@@ -9,9 +9,9 @@ class DirectionVector(RootModel[np.ndarray]):
 
     @field_validator("root", mode="before")
     @classmethod
-    def to_float_array(cls, v: list[float]) -> None:
+    def to_float_array(cls, v: list[float]) -> np.ndarray:
         """Convert to float array."""
-        return np.array(v, dtype=float) if isinstance(v, (list, tuple)) else v
+        return np.array(v, dtype=float)
 
 
 CustomAction = str
