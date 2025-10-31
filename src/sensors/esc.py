@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from serial_manager import SerialManager
+    from ..serial import SerialManager
 
     from rov_state import RovState
 
@@ -32,13 +32,13 @@ class EscSensor:
         self.serial_manager: SerialManager = serial_manager
 
     async def read_loop(self) -> None:
-        serial = self.serial_manager.get_serial()
+        reader = self.serial_manager.get_reader()
         read_buffer = bytearray()
         while True:
             if not self.state.system_health.microcontroller_ok:
                 await asyncio.sleep(1)
                 continue
-            data = await serial.read(1)
+            data = await reader.read(1)
             if data:
                 read_buffer.extend(data)
                 while len(read_buffer) >= 8:

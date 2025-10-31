@@ -8,9 +8,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from numpy.typing import NDArray
 
-    from regulator import Regulator
-    from rov_state import RovState
-    from serial import SerialManager
+    from .regulator import Regulator
+    from .rov_state import RovState
+    from .serial import SerialManager
 
     from .websocket.server import WebsocketServer
 
@@ -159,14 +159,14 @@ class Thrusters:
                 )
             return thrust_vector
 
-    async def _send_packet(self, serial, thrust_values: list[int]) -> None:
+    async def _send_packet(self, writer, thrust_values: list[int]) -> None:
         data_payload = struct.pack(f"<{NUM_MOTORS}H", *thrust_values)
         packet = bytearray([INPUT_START_BYTE]) + data_payload
         checksum = 0
         for b in packet:
             checksum ^= b
         packet.append(checksum)
-        await serial.write(packet)
+        await writer.write(packet)
 
     def _handle_auto_tuning_completion(self) -> None:
         suggestions = RegulatorSuggestions(
@@ -227,10 +227,10 @@ class Thrusters:
 
         return None, last_send_time
 
-    async def _send_with_retries(self, serial, thrust_values: list[int]) -> bool:
+    async def _send_with_retries(self, writer, thrust_values: list[int]) -> bool:
         for attempt in range(3):
             try:
-                await self._send_packet(serial, thrust_values)
+                await self._send_packet(writer, thrust_values)
                 return True
             except Exception as e:
                 log_error(f"Thruster send_packet failed (attempt {attempt + 1}): {e}")
@@ -238,7 +238,7 @@ class Thrusters:
         return False
 
     async def send_loop(self) -> None:
-        serial = self.serial_manager.get_serial()
+        writer = self.serial_manager.get_writer()
         thrust_vector = np.zeros(NUM_MOTORS)
         last_send_time = time.time()
         while True:
@@ -255,7 +255,7 @@ class Thrusters:
                 last_send_time = updated_last_send_time
 
             thrust_values = self._compute_thrust_values(thrust_vector)
-            success = await self._send_with_retries(serial, thrust_values)
+            success = await self._send_with_retries(writer, thrust_values)
             if not success:
                 self.state.system_health.microcontroller_ok = False
                 log_error("Thruster send failed 3 times, disabling microcontroller")
