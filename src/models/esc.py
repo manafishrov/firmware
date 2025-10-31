@@ -3,10 +3,13 @@
 from .base import CamelCaseModel
 
 
+EscTuple = tuple[int, int, int, int, int, int, int, int]
+
+
 class EscData(CamelCaseModel):
     """Model for ESC data."""
 
-    erpm: tuple[int, int, int, int, int, int, int, int]
-    current_ca: tuple[int, int, int, int, int, int, int, int]
-    voltage_cv: tuple[int, int, int, int, int, int, int, int]
-    temperature: tuple[int, int, int, int, int, int, int, int]
+    erpm: EscTuple
+    current_ca: EscTuple
+    voltage_cv: EscTuple
+    temperature: EscTuple

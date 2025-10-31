@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from .regulator import Regulator
     from .rov_state import RovState
     from .serial import SerialManager
-
     from .websocket.server import WebsocketServer
 
 import asyncio
