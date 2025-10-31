@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from websockets.server import WebSocketServerProtocol
+    from websockets import ServerConnection
 
     from rov_state import RovState
 
@@ -16,7 +16,7 @@ from ..message import Config, FirmwareVersion as FirmwareVersionMessage
 
 
 async def handle_send_firmware_version(
-    websocket: WebSocketServerProtocol,
+    websocket: ServerConnection,
 ) -> None:
     message = FirmwareVersionMessage(payload=FirmwareVersion(FIRMWARE_VERSION)).json(
         by_alias=True
@@ -25,7 +25,7 @@ async def handle_send_firmware_version(
 
 
 async def handle_send_config(
-    websocket: WebSocketServerProtocol,
+    websocket: ServerConnection,
     state: RovState,
 ) -> None:
     message = Config(payload=state.rov_config).json(by_alias=True)

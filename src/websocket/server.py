@@ -6,8 +6,8 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
+    from websockets import Server, ServerConnection
     from websockets.exceptions import ConnectionClosed
-    from websockets.server import WebSocketServer, WebSocketServerProtocol
 
     from rov_state import RovState
 
@@ -47,10 +47,10 @@ class WebsocketServer:
             state: The ROV state.
         """
         self.state: RovState = state
-        self.server: WebSocketServer | None = None
-        self.client: WebSocketServerProtocol | None = None
+        self.server: Server | None = None
+        self.client: ServerConnection | None = None
 
-    async def handler(self, websocket: WebSocketServerProtocol) -> None:
+    async def handler(self, websocket: ServerConnection) -> None:
         """Handle WebSocket connection.
 
         Args:
@@ -87,7 +87,7 @@ class WebsocketServer:
         asyncio.create_task(send_firmware_version_on_connect())
 
         try:
-            for message in websocket:
+            async for message in websocket:
                 try:
                     data = json.loads(message)
                     deserialized_msg = WebsocketMessage(**data)
@@ -115,7 +115,7 @@ class WebsocketServer:
         )
         log_info(f"Websocket server started on {WEBSOCKET_IP_ADDRESS}:{WEBSOCKET_PORT}")
 
-    async def _send_from_queue(self, websocket: WebSocketServerProtocol) -> None:
+    async def _send_from_queue(self, websocket: ServerConnection) -> None:
         try:
             while True:
                 message = await message_queue.get()
@@ -128,7 +128,7 @@ class WebsocketServer:
             pass
 
     async def _send_status_periodically(
-        self, websocket: WebSocketServerProtocol, state: RovState
+        self, websocket: ServerConnection, state: RovState
     ) -> None:
         try:
             while True:
@@ -138,7 +138,7 @@ class WebsocketServer:
             pass
 
     async def _send_telemetry_periodically(
-        self, websocket: WebSocketServerProtocol, state: RovState
+        self, websocket: ServerConnection, state: RovState
     ) -> None:
         try:
             while True:

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from websockets.server import WebSocketServerProtocol
+    from websockets import ServerConnection
 
     from rov_state import RovState
 
@@ -15,7 +15,7 @@ from ..message import StatusUpdate
 
 
 async def handle_status_update(
-    websocket: WebSocketServerProtocol,
+    websocket: ServerConnection,
     state: RovState,
 ) -> None:
     payload = RovStatus(

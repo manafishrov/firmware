@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, cast
 if TYPE_CHECKING:
     from rov_state import RovState
 
-from websockets.server import WebSocketServerProtocol
+from websockets import ServerConnection
 
 from ..log import log_warn
 from ..models.actions import CustomAction, DirectionVector
@@ -35,7 +35,7 @@ from .receive.state import (
 
 async def handle_message(  # noqa: C901,PLR0912
     state: RovState,
-    websocket: WebSocketServerProtocol,
+    websocket: ServerConnection,
     message: WebsocketMessage,
 ) -> None:
     """Handle a WebSocket message.

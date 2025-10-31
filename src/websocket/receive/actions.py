@@ -37,6 +37,12 @@ async def handle_start_thruster_test(
     state: RovState,
     payload: ThrusterTest,
 ) -> None:
+    """Handle start thruster test message.
+
+    Args:
+        state: The ROV state.
+        payload: The thruster test index.
+    """
     log_info(f"Starting thruster test: {payload}")
     state.thrusters.test_thruster = payload
     state.thrusters.test_start_time = time.time()
@@ -53,6 +59,12 @@ async def handle_cancel_thruster_test(
     state: RovState,
     payload: ThrusterTest,
 ) -> None:
+    """Handle cancel thruster test message.
+
+    Args:
+        state: The ROV state.
+        payload: The thruster test configuration.
+    """
     log_info(f"Cancelling thruster test: {payload}")
     state.thrusters.test_thruster = None
     toast_info(
@@ -67,11 +79,17 @@ async def handle_custom_action(
     state: RovState,
     payload: CustomAction,
 ) -> None:
+    """Handle custom action message.
+
+    Args:
+        state: The ROV state.
+        payload: The custom action to execute.
+    """
     log_info(f"Received custom action: {payload}")
     try:
         module = importlib.import_module(f"src.custom_actions.{payload}")
         if hasattr(module, "execute"):
-            await module.execute(state)
+            await module.execute(state)  # pyright: ignore[reportAny]
         else:
             log_warn(f"Custom action {payload} has no 'execute' function")
     except ImportError:
