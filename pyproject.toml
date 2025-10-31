@@ -60,3 +60,4 @@ lint.flake8-annotations.ignore-fully-untyped = false
 [tool.basedpyright]
 reportMissingTypeStubs = false
 reportUnknownVariableType = false
+reportUnusedParameter = false
