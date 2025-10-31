@@ -1,23 +1,30 @@
 """WebSocket message models for the ROV firmware."""
 
 from enum import Enum
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from pydantic import Field
 
-from ..models.actions import CustomAction, DirectionVector
+from ..models.actions import CustomAction as CustomActionPayload
+
+
+if TYPE_CHECKING:
+    from ..models.actions import DirectionVector as DirectionVectorPayload
+    from ..models.config import (
+        FirmwareVersion as FirmwareVersionPayload,
+        RegulatorSuggestions as RegulatorSuggestionsPayload,
+    )
+    from ..models.toast import Toast
+
 from ..models.base import CamelCaseModel
 from ..models.config import (
-    FirmwareVersion,
     MicrocontrollerFirmwareVariant,
-    RegulatorSuggestions,
     RovConfig,
     ThrusterTest,
 )
 from ..models.log import LogEntry
 from ..models.rov_status import RovStatus
 from ..models.rov_telemetry import RovTelemetry
-from ..models.toast import Toast
 
 
 class MessageType(str, Enum):
@@ -48,7 +55,7 @@ class DirectionVector(CamelCaseModel):
     """WebSocket message for direction vector."""
 
     type: MessageType = MessageType.DIRECTION_VECTOR
-    payload: DirectionVector
+    payload: DirectionVectorPayload
 
 
 class GetConfig(CamelCaseModel):
@@ -101,7 +108,7 @@ class RegulatorSuggestions(CamelCaseModel):
     """WebSocket message for regulator suggestions."""
 
     type: MessageType = MessageType.REGULATOR_SUGGESTIONS
-    payload: RegulatorSuggestions
+    payload: RegulatorSuggestionsPayload
 
 
 class ShowToast(CamelCaseModel):
@@ -136,14 +143,14 @@ class FirmwareVersion(CamelCaseModel):
     """WebSocket message for firmware version."""
 
     type: MessageType = MessageType.FIRMWARE_VERSION
-    payload: FirmwareVersion
+    payload: FirmwareVersionPayload
 
 
 class CustomAction(CamelCaseModel):
     """WebSocket message for custom actions."""
 
     type: MessageType = MessageType.CUSTOM_ACTION
-    payload: CustomAction
+    payload: CustomActionPayload
 
 
 class TogglePitchStabilization(CamelCaseModel):
