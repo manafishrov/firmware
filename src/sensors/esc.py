@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, cast
 
 
 if TYPE_CHECKING:
-    from ..models.sensors import EscTuple
     from ..rov_state import RovState
     from ..serial import SerialManager
 
@@ -81,18 +80,10 @@ class EscSensor:
         value = cast(int, struct.unpack("<i", packet[3:7])[0])
         if 0 <= global_id < NUM_MOTORS:
             if packet_type == PACKET_TYPE_ERPM:
-                erpm = list(self.state.esc.erpm)
-                erpm[global_id] = value
-                self.state.esc.erpm = cast(EscTuple, tuple(erpm))
+                self.state.esc.erpm[global_id] = value  # pyright: ignore[reportUnknownMemberType]
             elif packet_type == PACKET_TYPE_VOLTAGE:
-                voltage = list(self.state.esc.voltage_cv)
-                voltage[global_id] = value
-                self.state.esc.voltage_cv = cast(EscTuple, tuple(voltage))
+                self.state.esc.voltage_cv[global_id] = value  # pyright: ignore[reportUnknownMemberType]
             elif packet_type == PACKET_TYPE_TEMPERATURE:
-                temp = list(self.state.esc.temperature)
-                temp[global_id] = value
-                self.state.esc.temperature = cast(EscTuple, tuple(temp))
+                self.state.esc.temperature[global_id] = value  # pyright: ignore[reportUnknownMemberType]
             elif packet_type == PACKET_TYPE_CURRENT:
-                current = list(self.state.esc.current_ca)
-                current[global_id] = value
-                self.state.esc.current_ca = cast(EscTuple, tuple(current))
+                self.state.esc.current_ca[global_id] = value  # pyright: ignore[reportUnknownMemberType]

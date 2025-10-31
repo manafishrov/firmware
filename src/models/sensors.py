@@ -11,10 +11,10 @@ EscTuple = tuple[int, int, int, int, int, int, int, int]
 class EscData(BaseModel):
     """Model for ESC data."""
 
-    erpm: EscTuple
-    current_ca: EscTuple
-    voltage_cv: EscTuple
-    temperature: EscTuple
+    erpm: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
+    current_ca: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
+    voltage_cv: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
+    temperature: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
 
 
 class ImuData(BaseModel):
