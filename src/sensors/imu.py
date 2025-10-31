@@ -10,8 +10,19 @@ if TYPE_CHECKING:
 
 import asyncio
 
-from bmi270.BMI270 import *
+from bmi270.BMI270 import (
+    ACC_BWP_NORMAL,
+    ACC_ODR_100,
+    ACC_RANGE_2G,
+    BMI270,
+    GYR_BWP_NORMAL,
+    GYR_ODR_100,
+    GYR_RANGE_1000,
+    I2C_PRIM_ADDR,
+    PERFORMANCE_MODE,
+)
 
+from ..constants import FAILURE_THRESHOLD
 from ..log import log_error, log_info
 from ..models.sensors import ImuData
 from ..toast import toast_error
@@ -30,6 +41,7 @@ class Imu:
         self.imu: BMI270 | None = None
 
     async def initialize(self) -> None:
+        """Initialize the BMI270 IMU sensor with performance settings."""
         try:
             log_info("Attempting to initialize BMI270 IMU...")
 
@@ -63,6 +75,9 @@ class Imu:
             )
 
     def read_data(self) -> ImuData | None:
+        """Read IMU data synchronously."""
+        if self.imu is None:
+            return None
         try:
             return ImuData(
                 acceleration=self.imu.get_acc_data(),
@@ -74,6 +89,7 @@ class Imu:
             return None
 
     async def read_loop(self) -> None:
+        """Continuously read IMU data in a loop."""
         failure_count = 0
         while True:
             if not self.state.system_health.imu_ok:
@@ -89,7 +105,7 @@ class Imu:
             except Exception as e:
                 log_error(f"IMU read_loop error: {e}")
                 failure_count += 1
-            if failure_count >= 3:
+            if failure_count >= FAILURE_THRESHOLD:
                 self.state.system_health.imu_ok = False
                 failure_count = 0
                 log_error("IMU failed 3 times, disabling IMU")

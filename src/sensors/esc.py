@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, cast
 
 
 if TYPE_CHECKING:
-    from ..models.esc import EscTuple
+    from ..models.sensors import EscTuple
     from ..rov_state import RovState
     from ..serial import SerialManager
 
