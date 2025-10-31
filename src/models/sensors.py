@@ -1,7 +1,6 @@
 """Sensor data models for the ROV firmware."""
 
 import numpy as np
-
 from pydantic import BaseModel
 
 
