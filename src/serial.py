@@ -8,10 +8,11 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from rov_state import RovState
 
-import glob
+import asyncio
+from pathlib import Path
 import sys
 
-from serial.aio import Serial
+from serial_asyncio import open_serial_connection
 
 from .log import log_error
 
@@ -26,31 +27,46 @@ class SerialManager:
             state: The ROV state.
         """
         self.state: RovState = state
-        self.serial: Serial | None = None
+        self.reader: asyncio.StreamReader | None = None
+        self.writer: asyncio.StreamWriter | None = None
 
     async def _find_microcontroller_port(self) -> str:
-        microcontroller_ports = glob.glob("/dev/serial/by-id/usb-Raspberry_Pi_Pico*")
+        microcontroller_ports = list(
+            Path("/dev/serial/by-id/").glob("usb-Raspberry_Pi_Pico*")
+        )
         if not microcontroller_ports:
-            microcontroller_ports = glob.glob("/dev/ttyACM*")
+            microcontroller_ports = list(Path("/dev/").glob("ttyACM*"))
         if microcontroller_ports:
-            return microcontroller_ports[0]
+            return str(microcontroller_ports[0])
         else:
             log_error("Error: Could not find microcontroller serial port.")
             sys.exit(1)
 
     async def initialize(self) -> None:
+        """Initialize the serial connection to the microcontroller."""
         serial_port = await self._find_microcontroller_port()
-        self.serial = Serial(serial_port, baudrate=115200)
-        await self.serial.open()
+        self.reader, self.writer = await open_serial_connection(
+            url=serial_port, baudrate=115200
+        )
         self.state.system_health.microcontroller_ok = True
 
-    def get_serial(self) -> Serial:
-        if self.serial is None:
+    def get_reader(self) -> asyncio.StreamReader:
+        """Get the serial reader."""
+        if self.reader is None:
             msg = "Serial not initialized"
             raise RuntimeError(msg)
-        return self.serial
+        return self.reader
+
+    def get_writer(self) -> asyncio.StreamWriter:
+        """Get the serial writer."""
+        if self.writer is None:
+            msg = "Serial not initialized"
+            raise RuntimeError(msg)
+        return self.writer
 
     async def shutdown(self) -> None:
-        if self.serial:
-            await self.serial.close()
+        """Shutdown the serial connection."""
+        if self.writer:
+            self.writer.close()
+            await self.writer.wait_closed()
         self.state.system_health.microcontroller_ok = False

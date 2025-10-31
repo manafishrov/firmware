@@ -12,13 +12,23 @@ wheels = [
 ]
 
 [[package]]
+name = "bmi270"
+version = "0.4.3"
+source = { git = "https://github.com/CoRoLab-Berlin/bmi270_python.git?rev=8309e687d6b346455833c5d0c2734eeb56e98789#8309e687d6b346455833c5d0c2734eeb56e98789" }
+dependencies = [
+    { name = "smbus2" },
+]
+
+[[package]]
 name = "manafish-firmware"
 version = "1.0.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "bmi270" },
+    { name = "ms5837" },
     { name = "numpy" },
     { name = "pydantic" },
-    { name = "pyserial" },
+    { name = "pyserial-asyncio" },
     { name = "scipy" },
     { name = "smbus2" },
     { name = "websockets" },
@@ -26,12 +36,22 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "numpy", specifier = ">=2.3.1" },
-    { name = "pydantic", specifier = ">=2.11.7" },
-    { name = "pyserial", specifier = ">=3.5" },
-    { name = "scipy", specifier = ">=1.16.3" },
-    { name = "smbus2", specifier = ">=0.5.0" },
-    { name = "websockets", specifier = ">=15.0.1" },
+    { name = "bmi270", git = "https://github.com/CoRoLab-Berlin/bmi270_python.git?rev=8309e687d6b346455833c5d0c2734eeb56e98789" },
+    { name = "ms5837", git = "https://github.com/bluerobotics/ms5837-python.git?rev=02996d71d2f08339b3d317b3f4da0a83781c706e" },
+    { name = "numpy", specifier = "==2.3.4" },
+    { name = "pydantic", specifier = "==2.12.3" },
+    { name = "pyserial-asyncio", specifier = ">=0.6" },
+    { name = "scipy", specifier = "==1.16.3" },
+    { name = "smbus2", specifier = "==0.5.0" },
+    { name = "websockets", specifier = "==15.0.1" },
+]
+
+[[package]]
+name = "ms5837"
+version = "1.0"
+source = { git = "https://github.com/bluerobotics/ms5837-python.git?rev=02996d71d2f08339b3d317b3f4da0a83781c706e#02996d71d2f08339b3d317b3f4da0a83781c706e" }
+dependencies = [
+    { name = "smbus2" },
 ]
 
 [[package]]
@@ -104,6 +124,18 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/1e/7d/ae3f0a63f41e4d2f6cb66a5b57197850f919f59e558159a4dd3a818f5082/pyserial-3.5.tar.gz", hash = "sha256:3c77e014170dfffbd816e6ffc205e9842efb10be9f58ec16d3e8675b4925cddb", size = 159125, upload-time = "2020-11-23T03:59:15.045Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/07/bc/587a445451b253b285629263eb51c2d8e9bcea4fc97826266d186f96f558/pyserial-3.5-py2.py3-none-any.whl", hash = "sha256:c4451db6ba391ca6ca299fb3ec7bae67a5c55dde170964c7a14ceefec02f2cf0", size = 90585, upload-time = "2020-11-23T03:59:13.41Z" },
+]
+
+[[package]]
+name = "pyserial-asyncio"
+version = "0.6"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyserial" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4a/9a/8477699dcbc1882ea51dcff4d3c25aa3f2063ed8f7d7a849fd8f610506b6/pyserial-asyncio-0.6.tar.gz", hash = "sha256:b6032923e05e9d75ec17a5af9a98429c46d2839adfaf80604d52e0faacd7a32f", size = 31322, upload-time = "2021-09-30T22:29:02.174Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/27/24/c820cf15f87f7b164e83710c1852d4f900d9793961579e5ef64189bc0c10/pyserial_asyncio-0.6-py3-none-any.whl", hash = "sha256:de9337922619421b62b9b1a84048634b3ac520e1d690a674ed246a2af7ce1fc5", size = 7594, upload-time = "2021-09-30T22:29:00.12Z" },
 ]
 
 [[package]]

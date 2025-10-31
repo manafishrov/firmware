@@ -22,13 +22,13 @@ import time
 import numpy as np
 
 from .constants import (
-    THRUSTER_FORWARD_RANGE,
-    THRUSTER_INPUT_START_BYTE,
-    THRUSTER_NEUTRAL,
-    THRUSTER_NUM_MOTORS,
-    THRUSTER_REVERSE_RANGE,
+    FORWARD_RANGE,
+    INPUT_START_BYTE,
+    NEUTRAL,
+    NUM_MOTORS,
+    REVERSE_RANGE,
     THRUSTER_TEST_TOAST_ID,
-    THRUSTER_TIMEOUT_MS,
+    TIMEOUT_MS,
 )
 from .log import log_error
 from .models.config import RegulatorPID
@@ -121,13 +121,11 @@ class Thrusters:
         thrust_values = []
         for val in thrust_vector:
             if val >= 0:
-                thruster_val = int(THRUSTER_NEUTRAL + val * THRUSTER_FORWARD_RANGE)
+                thruster_val = int(NEUTRAL + val * FORWARD_RANGE)
             else:
-                thruster_val = int(THRUSTER_NEUTRAL + val * THRUSTER_REVERSE_RANGE)
+                thruster_val = int(NEUTRAL + val * REVERSE_RANGE)
             thrust_values.append(thruster_val)
-        thrust_values = (thrust_values + [THRUSTER_NEUTRAL] * THRUSTER_NUM_MOTORS)[
-            :THRUSTER_NUM_MOTORS
-        ]
+        thrust_values = (thrust_values + [NEUTRAL] * NUM_MOTORS)[:NUM_MOTORS]
         return thrust_values
 
     def _handle_thruster_test(
@@ -144,7 +142,7 @@ class Thrusters:
             )
             return None
         else:
-            thrust_vector = np.zeros(THRUSTER_NUM_MOTORS)
+            thrust_vector = np.zeros(NUM_MOTORS)
             logical_index = test_thruster
             hardware_index = self.state.rov_config.thruster_pin_setup.identifiers[
                 logical_index
@@ -162,8 +160,8 @@ class Thrusters:
             return thrust_vector
 
     async def _send_packet(self, serial, thrust_values: list[int]) -> None:
-        data_payload = struct.pack(f"<{THRUSTER_NUM_MOTORS}H", *thrust_values)
-        packet = bytearray([THRUSTER_INPUT_START_BYTE]) + data_payload
+        data_payload = struct.pack(f"<{NUM_MOTORS}H", *thrust_values)
+        packet = bytearray([INPUT_START_BYTE]) + data_payload
         checksum = 0
         for b in packet:
             checksum ^= b
@@ -219,13 +217,13 @@ class Thrusters:
         if (
             self.state.thrusters.last_direction_time > 0
             and current_time - self.state.thrusters.last_direction_time
-            < THRUSTER_TIMEOUT_MS / 1000
+            < TIMEOUT_MS / 1000
         ):
             direction_vector = self.state.thrusters.direction_vector
             return self._prepare_thrust_vector(direction_vector), current_time
 
-        if current_time - last_send_time > THRUSTER_TIMEOUT_MS / 1000:
-            return np.zeros(THRUSTER_NUM_MOTORS), last_send_time
+        if current_time - last_send_time > TIMEOUT_MS / 1000:
+            return np.zeros(NUM_MOTORS), last_send_time
 
         return None, last_send_time
 
@@ -241,7 +239,7 @@ class Thrusters:
 
     async def send_loop(self) -> None:
         serial = self.serial_manager.get_serial()
-        thrust_vector = np.zeros(THRUSTER_NUM_MOTORS)
+        thrust_vector = np.zeros(NUM_MOTORS)
         last_send_time = time.time()
         while True:
             if not self.state.system_health.microcontroller_ok:
