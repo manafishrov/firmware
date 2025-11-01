@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 import time
 
-from ...constants import AUTO_TUNING_TOAST_ID
+from ...constants import AUTO_TUNING_TOAST_ID, MAX_AUTO_TUNING_ROLL_PITCH_DEGREES
 from ...log import log_error, log_info
 from ...toast import toast_error, toast_info, toast_loading
 from ...websocket.message import CancelRegulatorAutoTuning
@@ -19,6 +19,11 @@ from ...websocket.message import CancelRegulatorAutoTuning
 async def handle_start_regulator_auto_tuning(
     state: RovState,
 ) -> None:
+    """Handle starting regulator auto tuning.
+
+    Args:
+        state: The ROV state.
+    """
     log_info("Starting regulator auto tuning")
 
     if not state.system_health.imu_ok:
@@ -41,7 +46,7 @@ async def handle_start_regulator_auto_tuning(
         )
         return
 
-    if abs(state.regulator.roll) > 10:
+    if abs(state.regulator.roll) > MAX_AUTO_TUNING_ROLL_PITCH_DEGREES:
         log_error(
             f"ROV roll too high: {state.regulator.roll}°, cannot start auto tuning"
         )
@@ -53,7 +58,7 @@ async def handle_start_regulator_auto_tuning(
         )
         return
 
-    if abs(state.regulator.pitch) > 10:
+    if abs(state.regulator.pitch) > MAX_AUTO_TUNING_ROLL_PITCH_DEGREES:
         log_error(
             f"ROV pitch too high: {state.regulator.pitch}°, cannot start auto tuning"
         )
@@ -79,6 +84,11 @@ async def handle_start_regulator_auto_tuning(
 async def handle_cancel_regulator_auto_tuning(
     state: RovState,
 ) -> None:
+    """Handle cancelling regulator auto tuning.
+
+    Args:
+        state: The ROV state.
+    """
     log_info("Cancelling regulator auto tuning")
     state.regulator.auto_tuning_active = False
     toast_info(
