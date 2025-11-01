@@ -16,7 +16,7 @@ import json
 
 import websockets
 
-from ..constants import FIRMWARE_VERSION, WEBSOCKET_IP_ADDRESS, WEBSOCKET_PORT
+from ..constants import FIRMWARE_VERSION, IP_ADDRESS, PORT
 from ..log import log_error, log_info, log_warn, set_log_is_client_connected_status
 from ..websocket.handler import handle_message
 from ..websocket.send.config import handle_send_config, handle_send_firmware_version
@@ -110,10 +110,8 @@ class WebsocketServer:
 
     async def start(self) -> None:
         """Start the WebSocket server."""
-        self.server = await websockets.serve(
-            self.handler, WEBSOCKET_IP_ADDRESS, WEBSOCKET_PORT
-        )
-        log_info(f"Websocket server started on {WEBSOCKET_IP_ADDRESS}:{WEBSOCKET_PORT}")
+        self.server = await websockets.serve(self.handler, IP_ADDRESS, PORT)
+        log_info(f"Websocket server started on {IP_ADDRESS}:{PORT}")
 
     async def _send_from_queue(self, websocket: ServerConnection) -> None:
         try:

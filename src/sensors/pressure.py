@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from ..constants import FAILURE_THRESHOLD
+from ..constants import SYSTEM_FAILURE_THRESHOLD
 
 
 if TYPE_CHECKING:
@@ -106,7 +106,7 @@ class PressureSensor:
             except Exception as e:
                 log_error(f"Pressure sensor read_loop error: {e}")
                 failure_count += 1
-            if failure_count >= FAILURE_THRESHOLD:
+            if failure_count >= SYSTEM_FAILURE_THRESHOLD:
                 self.state.system_health.pressure_sensor_ok = False
                 failure_count = 0
                 log_error("Pressure sensor failed 3 times, disabling pressure sensor")

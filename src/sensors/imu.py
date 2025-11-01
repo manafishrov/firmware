@@ -22,7 +22,7 @@ from bmi270.BMI270 import (
     PERFORMANCE_MODE,
 )
 
-from ..constants import FAILURE_THRESHOLD
+from ..constants import SYSTEM_FAILURE_THRESHOLD
 from ..log import log_error, log_info
 from ..models.sensors import ImuData
 from ..toast import toast_error
@@ -105,7 +105,7 @@ class Imu:
             except Exception as e:
                 log_error(f"IMU read_loop error: {e}")
                 failure_count += 1
-            if failure_count >= FAILURE_THRESHOLD:
+            if failure_count >= SYSTEM_FAILURE_THRESHOLD:
                 self.state.system_health.imu_ok = False
                 failure_count = 0
                 log_error("IMU failed 3 times, disabling IMU")

@@ -21,13 +21,13 @@ import time
 import numpy as np
 
 from .constants import (
-    FORWARD_RANGE,
-    INPUT_START_BYTE,
-    NEUTRAL,
     NUM_MOTORS,
-    REVERSE_RANGE,
+    THRUSTER_FORWARD_PULSE_RANGE,
+    THRUSTER_INPUT_START_BYTE,
+    THRUSTER_NEUTRAL_PULSE_WIDTH,
+    THRUSTER_REVERSE_PULSE_RANGE,
     THRUSTER_TEST_TOAST_ID,
-    TIMEOUT_MS,
+    THRUSTER_TIMEOUT_MS,
 )
 from .log import log_error
 from .models.config import RegulatorPID
@@ -120,11 +120,17 @@ class Thrusters:
         thrust_values = []
         for val in thrust_vector:
             if val >= 0:
-                thruster_val = int(NEUTRAL + val * FORWARD_RANGE)
+                thruster_val = int(
+                    THRUSTER_NEUTRAL_PULSE_WIDTH + val * THRUSTER_FORWARD_PULSE_RANGE
+                )
             else:
-                thruster_val = int(NEUTRAL + val * REVERSE_RANGE)
+                thruster_val = int(
+                    THRUSTER_NEUTRAL_PULSE_WIDTH + val * THRUSTER_REVERSE_PULSE_RANGE
+                )
             thrust_values.append(thruster_val)
-        thrust_values = (thrust_values + [NEUTRAL] * NUM_MOTORS)[:NUM_MOTORS]
+        thrust_values = (thrust_values + [THRUSTER_NEUTRAL_PULSE_WIDTH] * NUM_MOTORS)[
+            :NUM_MOTORS
+        ]
         return thrust_values
 
     def _handle_thruster_test(
@@ -160,7 +166,7 @@ class Thrusters:
 
     async def _send_packet(self, writer, thrust_values: list[int]) -> None:
         data_payload = struct.pack(f"<{NUM_MOTORS}H", *thrust_values)
-        packet = bytearray([INPUT_START_BYTE]) + data_payload
+        packet = bytearray([THRUSTER_INPUT_START_BYTE]) + data_payload
         checksum = 0
         for b in packet:
             checksum ^= b
@@ -216,12 +222,12 @@ class Thrusters:
         if (
             self.state.thrusters.last_direction_time > 0
             and current_time - self.state.thrusters.last_direction_time
-            < TIMEOUT_MS / 1000
+            < THRUSTER_TIMEOUT_MS / 1000
         ):
             direction_vector = self.state.thrusters.direction_vector
             return self._prepare_thrust_vector(direction_vector), current_time
 
-        if current_time - last_send_time > TIMEOUT_MS / 1000:
+        if current_time - last_send_time > THRUSTER_TIMEOUT_MS / 1000:
             return np.zeros(NUM_MOTORS), last_send_time
 
         return None, last_send_time

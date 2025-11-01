@@ -13,14 +13,14 @@ import asyncio
 import struct
 
 from ..constants import (
-    MAX_READ_BUFFER_SIZE,
+    ESC_MAX_READ_BUFFER_SIZE,
+    ESC_PACKET_TYPE_CURRENT,
+    ESC_PACKET_TYPE_ERPM,
+    ESC_PACKET_TYPE_TEMPERATURE,
+    ESC_PACKET_TYPE_VOLTAGE,
+    ESC_TELEMETRY_PACKET_SIZE,
+    ESC_TELEMETRY_START_BYTE,
     NUM_MOTORS,
-    PACKET_TYPE_CURRENT,
-    PACKET_TYPE_ERPM,
-    PACKET_TYPE_TEMPERATURE,
-    PACKET_TYPE_VOLTAGE,
-    TELEMETRY_PACKET_SIZE,
-    TELEMETRY_START_BYTE,
 )
 
 
@@ -48,26 +48,29 @@ class EscSensor:
             data = await reader.read(1)
             if data:
                 read_buffer.extend(data)
-                while len(read_buffer) >= TELEMETRY_PACKET_SIZE:
+                while len(read_buffer) >= ESC_TELEMETRY_PACKET_SIZE:
                     start_idx = read_buffer.find(
-                        TELEMETRY_START_BYTE.to_bytes(1, "big")
+                        ESC_TELEMETRY_START_BYTE.to_bytes(1, "big")
                     )
                     if start_idx == -1:
-                        if len(read_buffer) > MAX_READ_BUFFER_SIZE:
+                        if len(read_buffer) > ESC_MAX_READ_BUFFER_SIZE:
                             read_buffer = bytearray()
                         break
                     if start_idx > 0:
                         read_buffer = read_buffer[start_idx:]
-                    if len(read_buffer) >= TELEMETRY_PACKET_SIZE:
-                        packet = read_buffer[:TELEMETRY_PACKET_SIZE]
+                    if len(read_buffer) >= ESC_TELEMETRY_PACKET_SIZE:
+                        packet = read_buffer[:ESC_TELEMETRY_PACKET_SIZE]
                         if self._validate_telemetry_packet(packet):
                             self._update_telemetry(packet)
-                        read_buffer = read_buffer[TELEMETRY_PACKET_SIZE:]
+                        read_buffer = read_buffer[ESC_TELEMETRY_PACKET_SIZE:]
                     else:
                         break
 
     def _validate_telemetry_packet(self, packet: bytearray) -> bool:
-        if len(packet) != TELEMETRY_PACKET_SIZE or packet[0] != TELEMETRY_START_BYTE:
+        if (
+            len(packet) != ESC_TELEMETRY_PACKET_SIZE
+            or packet[0] != ESC_TELEMETRY_START_BYTE
+        ):
             return False
         calculated_checksum = 0
         for b in packet[:7]:
@@ -79,11 +82,11 @@ class EscSensor:
         packet_type = packet[2]
         value = cast(int, struct.unpack("<i", packet[3:7])[0])
         if 0 <= global_id < NUM_MOTORS:
-            if packet_type == PACKET_TYPE_ERPM:
-                self.state.esc.erpm[global_id] = value  # pyright: ignore[reportUnknownMemberType]
-            elif packet_type == PACKET_TYPE_VOLTAGE:
-                self.state.esc.voltage_cv[global_id] = value  # pyright: ignore[reportUnknownMemberType]
-            elif packet_type == PACKET_TYPE_TEMPERATURE:
-                self.state.esc.temperature[global_id] = value  # pyright: ignore[reportUnknownMemberType]
-            elif packet_type == PACKET_TYPE_CURRENT:
-                self.state.esc.current_ca[global_id] = value  # pyright: ignore[reportUnknownMemberType]
+            if packet_type == ESC_PACKET_TYPE_ERPM:
+                self.state.esc.erpm[global_id] = value
+            elif packet_type == ESC_PACKET_TYPE_VOLTAGE:
+                self.state.esc.voltage_cv[global_id] = value
+            elif packet_type == ESC_PACKET_TYPE_TEMPERATURE:
+                self.state.esc.temperature[global_id] = value
+            elif packet_type == ESC_PACKET_TYPE_CURRENT:
+                self.state.esc.current_ca[global_id] = value
