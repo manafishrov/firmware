@@ -12,4 +12,4 @@ class RovTelemetry(CamelCaseModel):
     desired_roll: float
     depth: float
     temperature: float
-    thruster_rpms: tuple[int, int, int, int, int, int, int, int]
+    thruster_rpms: list[int]
