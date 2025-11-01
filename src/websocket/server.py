@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 
 if TYPE_CHECKING:
@@ -25,10 +25,10 @@ from .send.status import handle_status_update
 from .send.telemetry import handle_telemetry
 
 
-message_queue: asyncio.Queue = asyncio.Queue()
+message_queue: asyncio.Queue[WebsocketMessage] = asyncio.Queue()
 
 
-def get_message_queue() -> asyncio.Queue:
+def get_message_queue() -> asyncio.Queue[WebsocketMessage]:
     """Get the message queue.
 
     Returns:
@@ -58,7 +58,9 @@ class WebsocketServer:
         """
         self.client = websocket
         set_log_is_client_connected_status(True)
-        log_info(f"Client connected: {websocket.remote_address}.")
+        log_info(
+            f"Client connected: {cast(tuple[str, int] | None, websocket.remote_address)}."
+        )
 
         send_task = asyncio.create_task(self._send_from_queue(websocket))
         status_task = asyncio.create_task(
@@ -73,37 +75,42 @@ class WebsocketServer:
             try:
                 await handle_send_firmware_version(websocket)
                 log_info(
-                    f"Sent firmware version '{FIRMWARE_VERSION}' to {websocket.remote_address}"
+                    f"Sent firmware version '{FIRMWARE_VERSION}' to {cast(tuple[str, int] | None, websocket.remote_address)}"
                 )
                 await handle_send_config(websocket, self.state)
-                log_info(f"Sent config to {websocket.remote_address}")
+                log_info(
+                    f"Sent config to {cast(tuple[str, int] | None, websocket.remote_address)}"
+                )
             except ConnectionClosed:
                 log_warn(
-                    f"Client disconnected before firmware version and config could be sent to {websocket.remote_address}"
+                    f"Client disconnected before firmware version and config could be sent to {cast(tuple[str, int] | None, websocket.remote_address)}"
                 )
             except Exception as e:
                 log_error(f"Error sending initial data: {e}")
 
-        asyncio.create_task(send_firmware_version_on_connect())
+        firmware_task = asyncio.create_task(send_firmware_version_on_connect())
 
         try:
             async for message in websocket:
                 try:
-                    data = json.loads(message)
-                    deserialized_msg = WebsocketMessage(**data)
-                    await handle_message(self.state, websocket, deserialized_msg)
+                    data = json.loads(message)  # pyright: ignore[reportAny]
+                    deserialized_msg = WebsocketMessage(**data)  # pyright: ignore[reportCallIssue]
+                    await handle_message(self.state, websocket, deserialized_msg)  # pyright: ignore[reportUnknownArgumentType]
                 except json.JSONDecodeError:
                     log_warn(
-                        f"Failed to deserialize message from {websocket.remote_address}"
+                        f"Failed to deserialize message from {cast(tuple[str, int] | None, websocket.remote_address)}"
                     )
                 except Exception as e:
                     log_warn(f"Error processing message: {e}")
         except ConnectionClosed:
-            log_info(f"Client connection closed: {websocket.remote_address}")
+            log_info(
+                f"Client connection closed: {cast(tuple[str, int] | None, websocket.remote_address)}"
+            )
         finally:
-            send_task.cancel()
-            status_task.cancel()
-            telemetry_task.cancel()
+            _ = send_task.cancel()
+            _ = status_task.cancel()
+            _ = telemetry_task.cancel()
+            _ = firmware_task.cancel()
             self.client = None
             set_log_is_client_connected_status(False)
             log_info("Client disconnected.")
@@ -118,7 +125,7 @@ class WebsocketServer:
             while True:
                 message = await message_queue.get()
                 try:
-                    json_msg = message.json(by_alias=True)
+                    json_msg = message.model_dump_json(by_alias=True)
                     await websocket.send(json_msg)
                 except Exception as e:
                     log_error(f"Error sending queued message: {e}")
