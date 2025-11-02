@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from .models.config import RovConfig
 from .models.regulator import RegulatorData
-from .models.sensors import ImuData, PressureData, EscData
+from .models.sensors import EscData, ImuData, PressureData
 from .models.system import SystemHealth, SystemStatus
 from .models.thruster import ThrusterData
 

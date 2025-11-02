@@ -7,10 +7,9 @@ import logging
 
 from .models.log import LogEntry, LogLevel, LogOrigin
 from .websocket.message import LogMessage
+from .websocket.queue import get_message_queue
+from .websocket.state import set_client_connected, set_event_loop, websocket_state
 
-
-_is_client_connected: bool = False
-_main_event_loop: asyncio.AbstractEventLoop | None = None
 
 _logger = logging.getLogger(__name__)
 _logger.setLevel(logging.INFO)
@@ -27,8 +26,7 @@ def initialize_sync_logging(loop: asyncio.AbstractEventLoop) -> None:
     Args:
         loop: The asyncio event loop.
     """
-    global _main_event_loop
-    _main_event_loop = loop
+    set_event_loop(loop)
 
 
 def set_log_is_client_connected_status(is_connected: bool) -> None:
@@ -37,14 +35,11 @@ def set_log_is_client_connected_status(is_connected: bool) -> None:
     Args:
         is_connected: Whether the client is connected.
     """
-    global _is_client_connected
-    _is_client_connected = is_connected
+    set_client_connected(is_connected)
 
 
 async def _log_message_async(level: LogLevel, message: str) -> None:
-    if _is_client_connected:
-        from .websocket.server import get_message_queue
-
+    if websocket_state.is_client_connected:
         payload = LogEntry(
             origin=LogOrigin.FIRMWARE, level=LogLevel(level), message=message
         )
@@ -55,9 +50,9 @@ async def _log_message_async(level: LogLevel, message: str) -> None:
 
 
 def _log_message(level: LogLevel, message: str) -> None:
-    if _main_event_loop and _main_event_loop.is_running():
-        asyncio.run_coroutine_threadsafe(
-            _log_message_async(level, message), _main_event_loop
+    if websocket_state.main_event_loop and websocket_state.main_event_loop.is_running():
+        _ = asyncio.run_coroutine_threadsafe(
+            _log_message_async(level, message), websocket_state.main_event_loop
         )
     else:
         _logger.log(_map_log_level(level), message)

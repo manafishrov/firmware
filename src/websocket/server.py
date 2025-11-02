@@ -18,23 +18,12 @@ import websockets
 
 from ..constants import FIRMWARE_VERSION, IP_ADDRESS, PORT
 from ..log import log_error, log_info, log_warn, set_log_is_client_connected_status
-from ..websocket.handler import handle_message
-from ..websocket.send.config import handle_send_config, handle_send_firmware_version
+from .handler import handle_message
 from .message import WebsocketMessage
+from .queue import get_message_queue
+from .send.config import handle_send_config, handle_send_firmware_version
 from .send.status import handle_status_update
 from .send.telemetry import handle_telemetry
-
-
-message_queue: asyncio.Queue[WebsocketMessage] = asyncio.Queue()
-
-
-def get_message_queue() -> asyncio.Queue[WebsocketMessage]:
-    """Get the message queue.
-
-    Returns:
-        The message queue.
-    """
-    return message_queue
 
 
 class WebsocketServer:
@@ -123,7 +112,7 @@ class WebsocketServer:
     async def _send_from_queue(self, websocket: ServerConnection) -> None:
         try:
             while True:
-                message = await message_queue.get()
+                message = await get_message_queue().get()
                 try:
                     json_msg = message.model_dump_json(by_alias=True)
                     await websocket.send(json_msg)

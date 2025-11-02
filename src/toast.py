@@ -6,9 +6,8 @@ import asyncio
 
 from .models.toast import Toast, ToastCancel, ToastType
 from .websocket.message import CancelRegulatorAutoTuning, CancelThrusterTest, ShowToast
-
-
-_main_event_loop: asyncio.AbstractEventLoop | None = None
+from .websocket.queue import get_message_queue
+from .websocket.state import set_event_loop, websocket_state
 
 
 def initialize_sync_toasting(loop: asyncio.AbstractEventLoop) -> None:
@@ -17,8 +16,7 @@ def initialize_sync_toasting(loop: asyncio.AbstractEventLoop) -> None:
     Args:
         loop: The asyncio event loop.
     """
-    global _main_event_loop
-    _main_event_loop = loop
+    set_event_loop(loop)
 
 
 async def _toast_message_async(
@@ -28,8 +26,6 @@ async def _toast_message_async(
     description: str | None,
     cancel: ToastCancel | None,
 ) -> None:
-    from .websocket.server import get_message_queue
-
     toast_type_enum = toast_type
 
     payload = Toast(
@@ -50,10 +46,10 @@ def _toast_message(
     description: str | None,
     cancel: ToastCancel | None,
 ) -> None:
-    if _main_event_loop and _main_event_loop.is_running():
-        asyncio.run_coroutine_threadsafe(
+    if websocket_state.main_event_loop and websocket_state.main_event_loop.is_running():
+        _ = asyncio.run_coroutine_threadsafe(
             _toast_message_async(toast_id, toast_type, message, description, cancel),
-            _main_event_loop,
+            websocket_state.main_event_loop,
         )
 
 
