@@ -51,7 +51,7 @@ class Thrusters:
     def _scale_direction_vector_with_user_max_power(
         self, direction_vector: NDArray[np.float32]
     ) -> NDArray[np.float32]:
-        scale = self.state.rov_config.power.user_max_power
+        scale = self.state.rov_config.power.user_max_power / 100
         _ = np.multiply(direction_vector, scale, out=direction_vector)
         return direction_vector
 

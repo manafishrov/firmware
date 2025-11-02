@@ -295,7 +295,7 @@ class Regulator:
     def _scale_regulator_actuation(
         self, actuation: NDArray[np.float32]
     ) -> NDArray[np.float32]:
-        power = self.state.rov_config.power.regulator_max_power
+        power = self.state.rov_config.power.regulator_max_power / 100
         _ = np.clip(actuation, -power, power, out=actuation)
         return actuation
 
