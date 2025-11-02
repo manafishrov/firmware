@@ -131,11 +131,20 @@ in
         numpy
         websockets
         pydantic
-        numpydantic
         smbus2
         scipy
         pyserial-asyncio
       ] ++ [
+        (pkgs.python312Packages.buildPythonPackage rec {
+          pname = "numpydantic";
+          version = "1.7.0";
+           src = pkgs.fetchPypi {
+             inherit pname version;
+             hash = "sha256-JoKFvuAm2f3yM+/u4DVgs3X0+PiWj4QfmooOw==";
+           };
+          propagatedBuildInputs = with pkgs.python312Packages; [ pydantic numpy ];
+          doCheck = false;
+        })
         (pkgs.python312Packages.buildPythonPackage {
           pname = "bmi270";
           version = "0.4.3";
@@ -153,7 +162,6 @@ in
             cp -r src/bmi270 $out/${pkgs.python312.sitePackages}/
             runHook postInstall
           '';
-
           doCheck = false;
         })
         (pkgs.python312Packages.buildPythonPackage {
@@ -166,9 +174,9 @@ in
             hash = "sha256-LBwM9sTvr7IaBcY8PcsPZcAbNRWBa4hj7tUC4oOr4eM=";
           };
           doCheck = false;
-        })
-      ]))
-    ];
+         })
+       ]))
+     ];
     sessionVariables = {
       PICO_SDK_PATH = "${pico-sdk-with-submodules}/lib/pico-sdk";
       LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
