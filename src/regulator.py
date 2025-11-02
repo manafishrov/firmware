@@ -45,7 +45,7 @@ class Regulator:
         """Initialize regulator with ROV state."""
         self.state: RovState = state
 
-        self.gyro: NDArray[np.float64] = np.array([0.0, 0.0, 0.0])
+        self.gyro: NDArray[np.float32] = np.array([0.0, 0.0, 0.0])
         self.last_measurement_time: float = 0.0
         self.delta_t: float = 0.0167
         self.integral_value_pitch: float = 0.0
@@ -95,21 +95,21 @@ class Regulator:
         return pitch, roll
 
     def update_desired_from_direction_vector(
-        self, direction_vector: NDArray[np.float64]
+        self, direction_vector: NDArray[np.float32]
     ) -> None:
         """Update desired pitch and roll from direction vector."""
         if self.state.system_status.pitch_stabilization:
             config = self.state.rov_config.regulator
-            pitch_change = cast(np.float64, direction_vector[3])
+            pitch_change = cast(np.float32, direction_vector[3])
             desired_pitch = (
                 self.state.regulator.desired_pitch
                 + pitch_change * config.turn_speed * self.delta_t
             )
-            desired_pitch = cast(np.float64, np.clip(desired_pitch, -80, 80))
+            desired_pitch = cast(np.float32, np.clip(desired_pitch, -80, 80))
             self.state.regulator.desired_pitch = desired_pitch
         if self.state.system_status.roll_stabilization:
             config = self.state.rov_config.regulator
-            roll_change = cast(np.float64, direction_vector[5])
+            roll_change = cast(np.float32, direction_vector[5])
             desired_roll = (
                 self.state.regulator.desired_roll
                 + roll_change * config.turn_speed * self.delta_t
@@ -152,17 +152,17 @@ class Regulator:
         current_roll = self.state.regulator.roll
 
         accel_pitch = cast(
-            np.float64,
+            np.float32,
             np.degrees(
                 cast(
-                    np.float64,
+                    np.float32,
                     np.arctan2(
-                        cast(np.float64, accel[0]),
+                        cast(np.float32, accel[0]),
                         cast(
-                            np.float64,
+                            np.float32,
                             np.sqrt(
-                                cast(np.float64, accel[1]) ** 2
-                                + cast(np.float64, accel[2]) ** 2
+                                cast(np.float32, accel[1]) ** 2
+                                + cast(np.float32, accel[2]) ** 2
                             ),
                         ),
                     ),
@@ -170,11 +170,11 @@ class Regulator:
             ),
         )
         accel_roll = cast(
-            np.float64,
+            np.float32,
             np.degrees(
                 cast(
-                    np.float64,
-                    np.arctan2(cast(np.float64, accel[1]), cast(np.float64, accel[2])),
+                    np.float32,
+                    np.arctan2(cast(np.float32, accel[1]), cast(np.float32, accel[2])),
                 )
             ),
         )
@@ -197,7 +197,7 @@ class Regulator:
 
         self._update_regulator_data(current_pitch, current_roll)
 
-    def _handle_depth_hold(self) -> NDArray[np.float64]:
+    def _handle_depth_hold(self) -> NDArray[np.float32]:
         actuation = np.zeros(3)
         if self.state.system_status.depth_hold:
             if self.state.regulator.desired_depth == 0.0:
@@ -209,7 +209,7 @@ class Regulator:
             self.integral_value_depth += (desired_depth - current_depth) * self.delta_t
             self.integral_value_depth = np.clip(self.integral_value_depth, -3, 3)
 
-            alpha = cast(np.float64, np.exp(-self.delta_t / DEPTH_DERIVATIVE_EMA_TAU))
+            alpha = cast(np.float32, np.exp(-self.delta_t / DEPTH_DERIVATIVE_EMA_TAU))
             self.current_dt_depth = (
                 alpha * self.current_dt_depth
                 + (1 - alpha) * (current_depth - self.previous_depth) / self.delta_t
@@ -241,7 +241,7 @@ class Regulator:
             actuation = (
                 config.pitch.kp * (desired_pitch - current_pitch)
                 + config.pitch.ki * self.integral_value_pitch
-                - config.pitch.kd * -cast(np.float64, self.gyro[1])
+                - config.pitch.kd * -cast(np.float32, self.gyro[1])
             )
             current_roll = self.state.regulator.roll
             if current_roll >= PITCH_MAX or current_roll <= PITCH_MIN:
@@ -260,18 +260,18 @@ class Regulator:
             actuation = (
                 config.roll.kp * (desired_roll - current_roll)
                 + config.roll.ki * self.integral_value_roll
-                - config.roll.kd * cast(np.float64, self.gyro[0])
+                - config.roll.kd * cast(np.float32, self.gyro[0])
             )
         return actuation
 
     def _compute_thrust_allocation(
         self, actuation: float, current_pitch: float, current_roll: float
-    ) -> NDArray[np.float64]:
+    ) -> NDArray[np.float32]:
         b = np.array([0, 0, actuation])
-        cp = cast(np.float64, np.cos(cast(np.float64, np.deg2rad(current_pitch))))
-        sp = cast(np.float64, np.sin(cast(np.float64, np.deg2rad(current_pitch))))
-        cr = cast(np.float64, np.cos(cast(np.float64, np.deg2rad(current_roll))))
-        sr = cast(np.float64, np.sin(cast(np.float64, np.deg2rad(current_roll))))
+        cp = cast(np.float32, np.cos(cast(np.float32, np.deg2rad(current_pitch))))
+        sp = cast(np.float32, np.sin(cast(np.float32, np.deg2rad(current_pitch))))
+        cr = cast(np.float32, np.cos(cast(np.float32, np.deg2rad(current_roll))))
+        sr = cast(np.float32, np.sin(cast(np.float32, np.deg2rad(current_roll))))
 
         a = np.array([[cp, sp * sr, -sp * cr], [0, cr, sr], [sp, cp * (-sr), cp * cr]])
         dir_coeffs = self.state.rov_config.direction_coefficients
@@ -295,13 +295,13 @@ class Regulator:
         return x
 
     def _scale_regulator_actuation(
-        self, actuation: NDArray[np.float64]
-    ) -> NDArray[np.float64]:
+        self, actuation: NDArray[np.float32]
+    ) -> NDArray[np.float32]:
         power = self.state.rov_config.power.regulator_max_power
         _ = np.clip(actuation, -power, power, out=actuation)
         return actuation
 
-    def get_actuation(self) -> NDArray[np.float64]:
+    def get_actuation(self) -> NDArray[np.float32]:
         """Get regulator actuation values."""
         regulator_actuation = np.zeros(6)
 
@@ -318,7 +318,7 @@ class Regulator:
 
         return regulator_actuation
 
-    def handle_auto_tuning(self, current_time: float) -> NDArray[np.float64] | None:
+    def handle_auto_tuning(self, current_time: float) -> NDArray[np.float32] | None:
         """Handle auto-tuning process for PID parameters."""
         if not self.auto_tuning_phase:
             self.auto_tuning_phase = "pitch"
@@ -369,7 +369,7 @@ class Regulator:
             queue.put_nowait(suggestions)
             return None
 
-    def _handle_pitch_tuning(self, current_time: float) -> NDArray[np.float64]:
+    def _handle_pitch_tuning(self, current_time: float) -> NDArray[np.float32]:
         pitch = self.state.regulator.pitch
 
         if self.auto_tuning_step == "find_zero":
@@ -438,7 +438,7 @@ class Regulator:
 
         return np.zeros(6)
 
-    def _handle_roll_tuning(self, current_time: float) -> NDArray[np.float64]:
+    def _handle_roll_tuning(self, current_time: float) -> NDArray[np.float32]:
         roll = self.state.regulator.roll
         pitch = self.state.regulator.pitch
 
@@ -513,7 +513,7 @@ class Regulator:
 
         return np.zeros(6)
 
-    def _handle_depth_tuning(self, current_time: float) -> NDArray[np.float64]:
+    def _handle_depth_tuning(self, current_time: float) -> NDArray[np.float32]:
         depth = self.state.pressure.depth
 
         if self.auto_tuning_step == "find_zero":
@@ -597,8 +597,8 @@ class Regulator:
         values = np.array(values)
 
         def sine_wave(
-            x: NDArray[np.float64], a: float, f: float, phi: float, offset: float
-        ) -> NDArray[np.float64]:
+            x: NDArray[np.float32], a: float, f: float, phi: float, offset: float
+        ) -> NDArray[np.float32]:
             return a * np.sin(2 * np.pi * f * x + phi) + offset
 
         try:
@@ -609,8 +609,8 @@ class Regulator:
                 p0=[(np.max(values) - np.min(values)) / 2, 1 / 10, 0, np.mean(values)],
             )
             a, f, _, _ = params
-            a = cast(np.float64, a)
-            f = cast(np.float64, f)
+            a = cast(np.float32, a)
+            f = cast(np.float32, f)
             tu = 1 / f
             ku = (4 * self.auto_tuning_amplitude) / (np.pi * a)
             kp = 0.6 * ku

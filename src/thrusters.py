@@ -54,15 +54,15 @@ class Thrusters:
         self.regulator: Regulator = regulator
 
     def _scale_direction_vector_with_user_max_power(
-        self, direction_vector: NDArray[np.float64]
-    ) -> NDArray[np.float64]:
+        self, direction_vector: NDArray[np.float32]
+    ) -> NDArray[np.float32]:
         scale = self.state.rov_config.power.user_max_power
         _ = np.multiply(direction_vector, scale, out=direction_vector)
         return direction_vector
 
     def _create_thrust_vector_from_thruster_allocation(
-        self, direction_vector: NDArray[np.float64]
-    ) -> NDArray[np.float64]:
+        self, direction_vector: NDArray[np.float32]
+    ) -> NDArray[np.float32]:
         allocation_matrix = self.state.rov_config.thruster_allocation
         direction_vector_np = direction_vector.reshape(-1)
         cols = direction_vector_np.shape[0]
@@ -71,16 +71,16 @@ class Thrusters:
         return thrust_vector
 
     def _correct_thrust_vector_spin_directions(
-        self, thrust_vector: NDArray[np.float64]
-    ) -> NDArray[np.float64]:
+        self, thrust_vector: NDArray[np.float32]
+    ) -> NDArray[np.float32]:
         spin_directions = self.state.rov_config.thruster_pin_setup.spin_directions
         thrust_vector = thrust_vector * spin_directions
         _ = np.clip(thrust_vector, -1, 1, out=thrust_vector)
         return thrust_vector
 
     def _reorder_thrust_vector(
-        self, thrust_vector: NDArray[np.float64]
-    ) -> NDArray[np.float64]:
+        self, thrust_vector: NDArray[np.float32]
+    ) -> NDArray[np.float32]:
         identifiers = self.state.rov_config.thruster_pin_setup.identifiers
         reordered = np.zeros(len(identifiers))
         for i in range(len(identifiers)):
@@ -88,8 +88,8 @@ class Thrusters:
         return reordered
 
     def _prepare_thrust_vector(
-        self, direction_vector: NDArray[np.float64]
-    ) -> NDArray[np.float64]:
+        self, direction_vector: NDArray[np.float32]
+    ) -> NDArray[np.float32]:
         self.regulator.update_regulator_data_from_imu()
         self.regulator.update_desired_from_direction_vector(direction_vector)
         direction_vector = self._scale_direction_vector_with_user_max_power(
@@ -111,10 +111,10 @@ class Thrusters:
         thrust_vector = self._reorder_thrust_vector(thrust_vector)
         return thrust_vector
 
-    def _compute_thrust_values(self, thrust_vector: NDArray[np.float64]) -> list[int]:
+    def _compute_thrust_values(self, thrust_vector: NDArray[np.float32]) -> list[int]:
         thrust_values: list[int] = []
         for val in thrust_vector:  # pyright: ignore[reportAny]
-            val_typed = cast(np.float64, val)
+            val_typed = cast(np.float32, val)
             if val_typed >= 0:
                 thruster_val = int(
                     THRUSTER_NEUTRAL_PULSE_WIDTH
@@ -133,7 +133,7 @@ class Thrusters:
 
     def _handle_thruster_test(
         self, current_time: float, test_thruster: int
-    ) -> NDArray[np.float64] | None:
+    ) -> NDArray[np.float32] | None:
         elapsed = current_time - self.state.thrusters.test_start_time
         if elapsed >= THRUSTER_TEST_DURATION_SECONDS:
             self.state.thrusters.test_thruster = None
@@ -148,7 +148,7 @@ class Thrusters:
             thrust_vector = np.zeros(NUM_MOTORS)
             logical_index = test_thruster
             hardware_index = cast(
-                np.int_,
+                np.int32,
                 self.state.rov_config.thruster_pin_setup.identifiers[logical_index],
             )
             thrust_vector[hardware_index] = 0.1
@@ -174,7 +174,7 @@ class Thrusters:
 
     def _determine_thrust_vector(
         self, current_time: float, last_send_time: float
-    ) -> tuple[NDArray[np.float64] | None, float]:
+    ) -> tuple[NDArray[np.float32] | None, float]:
         if self.state.regulator.auto_tuning_active:
             tuning_vector = self.regulator.handle_auto_tuning(current_time)
             if tuning_vector is not None:
@@ -201,7 +201,7 @@ class Thrusters:
             < THRUSTER_TIMEOUT_MS / 1000
         ):
             direction_vector = cast(
-                NDArray[np.float64], self.state.thrusters.direction_vector
+                NDArray[np.float32], self.state.thrusters.direction_vector
             )
             return self._prepare_thrust_vector(direction_vector), current_time
 

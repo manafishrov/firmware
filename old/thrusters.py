@@ -66,7 +66,7 @@ class ThrusterController:
 
     def thrust_allocation(self, input_vector):
         thrust_vector = self.thrust_allocation_matrix @ input_vector
-        return thrust_vector.astype(np.float64)
+        return thrust_vector.astype(np.float32)
 
     def correct_spin_direction(self, thrust_vector):
         spin_directions = np.array([-1, 1, -1, 1, -1, 1, -1, 1])
