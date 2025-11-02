@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from time import time
+import time
 from typing import TYPE_CHECKING
 
 
@@ -18,8 +18,13 @@ from .constants import (
     DEPTH_DERIVATIVE_EMA_TAU,
 )
 from .log import log_error, log_info
-from .models.config import RegulatorPID
+from .models.config import (
+    RegulatorPID,
+    RegulatorSuggestions as RegulatorSuggestionsPayload,
+)
 from .toast import toast_loading, toast_success
+from .websocket.message import RegulatorSuggestions
+from .websocket.queue import get_message_queue
 
 
 class Regulator:
@@ -276,9 +281,7 @@ class Regulator:
 
         return regulator_actuation
 
-    def handle_auto_tuning(
-        self, current_time: float
-    ) -> tuple[NDArray[np.float64] | None, bool]:
+    def handle_auto_tuning(self, current_time: float) -> NDArray[np.float64] | None:
         if not self.auto_tuning_phase:
             self.auto_tuning_phase = "pitch"
             self.auto_tuning_step = "find_zero"
@@ -292,16 +295,16 @@ class Regulator:
 
         dt = current_time - self.auto_tuning_last_update
         if dt < 1 / 60:
-            return np.zeros(6), False
+            return np.zeros(6)
 
         self.auto_tuning_last_update = current_time
 
         if self.auto_tuning_phase == "pitch":
-            return self._handle_pitch_tuning(current_time), False
+            return self._handle_pitch_tuning(current_time)
         elif self.auto_tuning_phase == "roll":
-            return self._handle_roll_tuning(current_time), False
+            return self._handle_roll_tuning(current_time)
         elif self.auto_tuning_phase == "depth":
-            return self._handle_depth_tuning(current_time), False
+            return self._handle_depth_tuning(current_time)
         else:
             self.state.regulator.auto_tuning_active = False
             toast_success(
@@ -311,7 +314,22 @@ class Regulator:
                 cancel=None,
             )
             log_info("Regulator auto tuning completed")
-            return None, True
+            suggestions = RegulatorSuggestions(
+                payload=RegulatorSuggestionsPayload(
+                    pitch=self.auto_tuning_params.get(
+                        "pitch", RegulatorPID(kp=0, ki=0, kd=0)
+                    ),
+                    roll=self.auto_tuning_params.get(
+                        "roll", RegulatorPID(kp=0, ki=0, kd=0)
+                    ),
+                    depth=self.auto_tuning_params.get(
+                        "depth", RegulatorPID(kp=0, ki=0, kd=0)
+                    ),
+                )
+            )
+            queue = get_message_queue()
+            queue.put_nowait(suggestions)
+            return None
 
     def _handle_pitch_tuning(self, current_time: float) -> NDArray[np.float64]:
         pitch = self.state.regulator.pitch

@@ -104,8 +104,8 @@ class WebsocketServer:
             set_log_is_client_connected_status(False)
             log_info("Client disconnected.")
 
-    async def start(self) -> None:
-        """Start the WebSocket server."""
+    async def initialize(self) -> None:
+        """Initialize the WebSocket server."""
         self.server = await websockets.serve(self.handler, IP_ADDRESS, PORT)
         log_info(f"Websocket server started on {IP_ADDRESS}:{PORT}")
 

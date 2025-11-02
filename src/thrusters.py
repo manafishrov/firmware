@@ -11,13 +11,11 @@ if TYPE_CHECKING:
     from .regulator import Regulator
     from .rov_state import RovState
     from .serial import SerialManager
-    from .websocket.server import WebsocketServer
 
 import asyncio
-import json
+from asyncio import StreamWriter
 import struct
 import time
-from asyncio import StreamWriter
 
 import numpy as np
 
@@ -32,12 +30,7 @@ from .constants import (
     THRUSTER_TIMEOUT_MS,
 )
 from .log import log_error
-from .models.config import (
-    RegulatorPID,
-    RegulatorSuggestions as RegulatorSuggestionsPayload,
-)
 from .toast import toast_loading, toast_success
-from .websocket.message import RegulatorSuggestions
 
 
 class Thrusters:
@@ -48,7 +41,6 @@ class Thrusters:
         state: RovState,
         serial_manager: SerialManager,
         regulator: Regulator,
-        ws_server: WebsocketServer,
     ):
         """Initialize the thrusters.
 
@@ -56,12 +48,10 @@ class Thrusters:
             state: The ROV state.
             serial_manager: The serial manager.
             regulator: The regulator.
-            ws_server: The WebSocket server.
         """
         self.state: RovState = state
         self.serial_manager: SerialManager = serial_manager
         self.regulator: Regulator = regulator
-        self.ws_server: WebsocketServer = ws_server
 
     def _scale_direction_vector_with_user_max_power(
         self, direction_vector: NDArray[np.float64]
@@ -178,34 +168,11 @@ class Thrusters:
         packet.append(checksum)
         writer.write(packet)
 
-    def _handle_auto_tuning_completion(self) -> None:
-        suggestions = RegulatorSuggestions(
-            payload=RegulatorSuggestionsPayload(
-                pitch=self.regulator.auto_tuning_params.get(
-                    "pitch", RegulatorPID(kp=0, ki=0, kd=0)
-                ),
-                roll=self.regulator.auto_tuning_params.get(
-                    "roll", RegulatorPID(kp=0, ki=0, kd=0)
-                ),
-                depth=self.regulator.auto_tuning_params.get(
-                    "depth", RegulatorPID(kp=0, ki=0, kd=0)
-                ),
-            )
-        )
-        if self.ws_server.client:
-            _ = asyncio.create_task(  # type: ignore[reportUnusedCallResult] # noqa: RUF006
-                self.ws_server.client.send(
-                    json.dumps(suggestions.model_dump(by_alias=True))
-                )
-            )
-
     def _determine_thrust_vector(
         self, current_time: float, last_send_time: float
     ) -> tuple[NDArray[np.float64] | None, float]:
         if self.state.regulator.auto_tuning_active:
-            tuning_vector, completed = self.regulator.handle_auto_tuning(current_time)
-            if completed:
-                self._handle_auto_tuning_completion()
+            tuning_vector = self.regulator.handle_auto_tuning(current_time)
             if tuning_vector is not None:
                 direction_vector = tuning_vector
                 thrust_vector = self._create_thrust_vector_from_thruster_allocation(
@@ -252,6 +219,7 @@ class Thrusters:
         return False
 
     async def send_loop(self) -> None:
+        """Send thruster commands in a continuous loop at 60Hz."""
         writer = self.serial_manager.get_writer()
         thrust_vector = np.zeros(NUM_MOTORS)
         last_send_time = time.time()

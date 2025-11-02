@@ -18,20 +18,18 @@ from .websocket.server import WebsocketServer
 async def main() -> None:
     """Run the main ROV firmware loop."""
     state: RovState = RovState()
-    serial_manager: SerialManager = SerialManager(state)
-    await serial_manager.initialize()
-
-    regulator: Regulator = Regulator(state)
     imu: Imu = Imu(state)
     pressure: PressureSensor = PressureSensor(state)
+    regulator: Regulator = Regulator(state)
+    serial_manager: SerialManager = SerialManager(state)
     esc: EscSensor = EscSensor(state, serial_manager)
+    thrusters: Thrusters = Thrusters(state, serial_manager, regulator)
     ws_server: WebsocketServer = WebsocketServer(state)
-    thrusters: Thrusters = Thrusters(state, serial_manager, regulator, ws_server)
 
+    await serial_manager.initialize()
     await imu.initialize()
     await pressure.initialize()
-
-    await ws_server.start()
+    await ws_server.initialize()
 
     tasks = [
         imu.read_loop(),
