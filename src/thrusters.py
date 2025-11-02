@@ -61,10 +61,7 @@ class Thrusters:
         allocation_matrix = cast(
             NDArray[np.float32], self.state.rov_config.thruster_allocation
         )
-        direction_vector_np = direction_vector.reshape(-1)
-        cols = direction_vector_np.shape[0]
-        allocation_matrix = allocation_matrix[:, :cols]
-        thrust_vector = allocation_matrix @ direction_vector_np
+        thrust_vector = allocation_matrix @ direction_vector
         return thrust_vector
 
     def _correct_thrust_vector_spin_directions(
