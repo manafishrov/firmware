@@ -2,9 +2,12 @@
 
 from enum import Enum
 from pathlib import Path
+from typing import ClassVar
 
 import numpy as np
+from numpy.typing import NDArray as NumpyNDArray
 from numpydantic import NDArray, Shape
+from pydantic import field_validator
 
 from .base import CamelCaseModel
 
@@ -28,6 +31,18 @@ class ThrusterPinSetup(CamelCaseModel):
 
     identifiers: NDArray[Shape["8"], np.int8]  # pyright: ignore[reportGeneralTypeIssues]
     spin_directions: NDArray[Shape["8"], np.int8]  # pyright: ignore[reportGeneralTypeIssues]
+
+    @field_validator("identifiers", mode="before")
+    @classmethod
+    def validate_identifiers(cls, v: list[int]) -> NumpyNDArray[np.int8]:
+        """Validate and convert identifiers to numpy array."""
+        return np.array(v, dtype=np.int8)
+
+    @field_validator("spin_directions", mode="before")
+    @classmethod
+    def validate_spin_directions(cls, v: list[int]) -> NumpyNDArray[np.int8]:
+        """Validate and convert spin directions to numpy array."""
+        return np.array(v, dtype=np.int8)
 
 
 class RegulatorPID(CamelCaseModel):
@@ -112,7 +127,15 @@ class RovConfig(CamelCaseModel):
         battery_max_voltage=12.6,
     )
 
-    _config_path: Path = Path(__file__).parent / "config.json"
+    @field_validator("thruster_allocation", mode="before")
+    @classmethod
+    def validate_thruster_allocation(
+        cls, v: list[list[float]]
+    ) -> NumpyNDArray[np.float32]:
+        """Validate and convert thruster allocation to numpy array."""
+        return np.array(v, dtype=np.float32)
+
+    _config_path: ClassVar[Path] = Path(__file__).parents[2] / "config.json"
 
     @classmethod
     def load(cls) -> "RovConfig":
