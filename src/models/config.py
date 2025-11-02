@@ -2,11 +2,16 @@
 
 from enum import Enum
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 from pydantic import field_validator
 
 from .base import CamelCaseModel
+
+
+if TYPE_CHECKING:
+    from numpy.typing import NDArray
 
 
 class MicrocontrollerFirmwareVariant(str, Enum):
@@ -26,18 +31,18 @@ class FluidType(str, Enum):
 class ThrusterPinSetup(CamelCaseModel):
     """Model for thruster pin setup."""
 
-    identifiers: np.ndarray
-    spin_directions: np.ndarray
+    identifiers: NDArray[np.int_]
+    spin_directions: NDArray[np.float64]
 
     @field_validator("identifiers", mode="before")
     @classmethod
-    def to_int_array(cls, v: list[int]) -> np.ndarray:
+    def to_int_array(cls, v: list[int]) -> NDArray[np.int_]:
         """Convert to int array."""
         return np.array(v, dtype=int)
 
     @field_validator("spin_directions", mode="before")
     @classmethod
-    def to_float_array(cls, v: list[float]) -> np.ndarray:
+    def to_float_array(cls, v: list[float]) -> NDArray[np.float64]:
         """Convert to float array."""
         return np.array(v, dtype=float)
 
@@ -90,7 +95,7 @@ class RovConfig(CamelCaseModel):
         identifiers=np.array([0, 1, 2, 3, 4, 5, 6, 7], dtype=int),
         spin_directions=np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], dtype=float),
     )
-    thruster_allocation: np.ndarray = np.array(
+    thruster_allocation: NDArray[np.float64] = np.array(
         (
             (1, 1, 0, 0, 0, 0, -1, -1),
             (1, -1, 0, 0, 0, 0, -1, 1),
@@ -125,7 +130,7 @@ class RovConfig(CamelCaseModel):
 
     @field_validator("thruster_allocation", mode="before")
     @classmethod
-    def to_float_array(cls, v: list[float]) -> np.ndarray:
+    def to_float_array(cls, v: list[float]) -> NDArray[np.float64]:
         """Convert to float array."""
         return np.array(v, dtype=float)
 

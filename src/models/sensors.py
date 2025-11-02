@@ -1,10 +1,8 @@
 """Sensor data models for the ROV firmware."""
 
 import numpy as np
+from numpy.typing import NDArray
 from pydantic import BaseModel
-
-
-EscTuple = tuple[int, int, int, int, int, int, int, int]
 
 
 class EscData(BaseModel):
@@ -19,8 +17,8 @@ class EscData(BaseModel):
 class ImuData(BaseModel):
     """Model for IMU data."""
 
-    acceleration: np.ndarray = np.array([0.0, 0.0, 0.0])
-    gyroscope: np.ndarray = np.array([0.0, 0.0, 0.0])
+    acceleration: NDArray[np.float64] = np.array([0.0, 0.0, 0.0])
+    gyroscope: NDArray[np.float64] = np.array([0.0, 0.0, 0.0])
     temperature: float = 0.0
 
 

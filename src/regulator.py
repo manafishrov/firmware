@@ -1,7 +1,9 @@
+"""Regulator module for ROV control."""
+
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 
 if TYPE_CHECKING:
@@ -13,9 +15,18 @@ import numpy as np
 from scipy.optimize import curve_fit
 
 from .constants import (
+    AUTO_TUNING_AMPLITUDE_THRESHOLD_DEGREES,
+    AUTO_TUNING_AMPLITUDE_THRESHOLD_DEPTH_METERS,
+    AUTO_TUNING_OSCILLATION_DURATION_SECONDS,
     AUTO_TUNING_TOAST_ID,
+    AUTO_TUNING_ZERO_THRESHOLD_DEGREES,
+    AUTO_TUNING_ZERO_THRESHOLD_DEPTH_METERS,
     COMPLEMENTARY_FILTER_ALPHA,
     DEPTH_DERIVATIVE_EMA_TAU,
+    PITCH_MAX,
+    PITCH_MIN,
+    ROLL_WRAP_MAX,
+    ROLL_WRAP_MIN,
 )
 from .log import log_error, log_info
 from .models.config import (
@@ -28,7 +39,10 @@ from .websocket.queue import get_message_queue
 
 
 class Regulator:
+    """PID regulator for ROV stabilization."""
+
     def __init__(self, state: RovState):
+        """Initialize regulator with ROV state."""
         self.state: RovState = state
 
         self.gyro: NDArray[np.float64] = np.array([0.0, 0.0, 0.0])
@@ -42,8 +56,8 @@ class Regulator:
 
         self.auto_tuning_phase: str = ""
         self.auto_tuning_step: str = ""
-        self.auto_tuning_data: list = []
-        self.auto_tuning_params: dict = {}
+        self.auto_tuning_data: list[tuple[float, float]] = []
+        self.auto_tuning_params: dict[str, RegulatorPID] = {}
         self.auto_tuning_last_update: float = 0.0
         self.auto_tuning_zero_actuation: float = 0.0
         self.auto_tuning_amplitude: float = 0.0
@@ -56,56 +70,58 @@ class Regulator:
         accel_pitch: float,
         accel_roll: float,
     ) -> tuple[float, float]:
-        if current_roll >= 90 or current_roll <= -90:
+        if current_roll >= PITCH_MAX or current_roll <= PITCH_MIN:
             current_pitch = (
                 COMPLEMENTARY_FILTER_ALPHA
-                * (current_pitch + self.gyro[1] * self.delta_t)
+                * (current_pitch + cast(float, self.gyro[1]) * self.delta_t)
                 + (1 - COMPLEMENTARY_FILTER_ALPHA) * accel_pitch
             )
         else:
             current_pitch = (
                 COMPLEMENTARY_FILTER_ALPHA
-                * (current_pitch - self.gyro[1] * self.delta_t)
+                * (current_pitch - cast(float, self.gyro[1]) * self.delta_t)
                 + (1 - COMPLEMENTARY_FILTER_ALPHA) * accel_pitch
             )
         current_roll = (
-            COMPLEMENTARY_FILTER_ALPHA * (current_roll + self.gyro[0] * self.delta_t)
+            COMPLEMENTARY_FILTER_ALPHA
+            * (current_roll + cast(float, self.gyro[0]) * self.delta_t)
             + (1 - COMPLEMENTARY_FILTER_ALPHA) * accel_roll
         )
         return current_pitch, current_roll
 
     def _normalize_angles(self, pitch: float, roll: float) -> tuple[float, float]:
-        roll = ((roll + 180) % 360) - 180
-        pitch = max(min(pitch, 90), -90)
+        roll = ((roll + ROLL_WRAP_MAX) % 360) - ROLL_WRAP_MAX
+        pitch = max(min(pitch, PITCH_MAX), PITCH_MIN)
         return pitch, roll
 
     def update_desired_from_direction_vector(
         self, direction_vector: NDArray[np.float64]
     ) -> None:
+        """Update desired pitch and roll from direction vector."""
         if self.state.system_status.pitch_stabilization:
             config = self.state.rov_config.regulator
-            pitch_change = direction_vector[3]
+            pitch_change = cast(np.float64, direction_vector[3])
             desired_pitch = (
                 self.state.regulator.desired_pitch
                 + pitch_change * config.turn_speed * self.delta_t
             )
-            desired_pitch = np.clip(desired_pitch, -80, 80)
+            desired_pitch = cast(np.float64, np.clip(desired_pitch, -80, 80))
             self.state.regulator.desired_pitch = desired_pitch
         if self.state.system_status.roll_stabilization:
             config = self.state.rov_config.regulator
-            roll_change = direction_vector[5]
+            roll_change = cast(np.float64, direction_vector[5])
             desired_roll = (
                 self.state.regulator.desired_roll
                 + roll_change * config.turn_speed * self.delta_t
             )
-            if desired_roll > 180:
+            if desired_roll > ROLL_WRAP_MAX:
                 desired_roll -= 360
-            if desired_roll < -180:
+            if desired_roll < ROLL_WRAP_MIN:
                 desired_roll += 360
             current_roll = self.state.regulator.roll
-            if desired_roll - current_roll > 180:
+            if desired_roll - current_roll > ROLL_WRAP_MAX:
                 desired_roll -= 360
-            if desired_roll - current_roll < -180:
+            if desired_roll - current_roll < ROLL_WRAP_MIN:
                 desired_roll += 360
             self.state.regulator.desired_roll = desired_roll
 
@@ -118,12 +134,13 @@ class Regulator:
             self.state.regulator.desired_roll = roll
 
     def update_regulator_data_from_imu(self) -> None:
+        """Update regulator data from IMU readings."""
         if not self.state.system_health.imu_ok:
             return
 
         imu_data = self.state.imu
-        accel = np.array(imu_data.acceleration)
-        gyr = np.array(imu_data.gyroscope)
+        accel = imu_data.acceleration
+        gyr = imu_data.gyroscope
         self.gyro = np.degrees(gyr)
 
         now = time.time()
@@ -134,14 +151,37 @@ class Regulator:
         current_pitch = self.state.regulator.pitch
         current_roll = self.state.regulator.roll
 
-        accel_pitch = np.degrees(
-            np.arctan2(accel[0], np.sqrt(accel[1] ** 2 + accel[2] ** 2))
+        accel_pitch = cast(
+            np.float64,
+            np.degrees(
+                cast(
+                    np.float64,
+                    np.arctan2(
+                        cast(np.float64, accel[0]),
+                        cast(
+                            np.float64,
+                            np.sqrt(
+                                cast(np.float64, accel[1]) ** 2
+                                + cast(np.float64, accel[2]) ** 2
+                            ),
+                        ),
+                    ),
+                )
+            ),
         )
-        accel_roll = np.degrees(np.arctan2(accel[1], accel[2]))
+        accel_roll = cast(
+            np.float64,
+            np.degrees(
+                cast(
+                    np.float64,
+                    np.arctan2(cast(np.float64, accel[1]), cast(np.float64, accel[2])),
+                )
+            ),
+        )
 
-        if accel_roll - current_roll > 180:
+        if accel_roll - current_roll > ROLL_WRAP_MAX:
             current_roll += 360
-        if accel_roll - current_roll < -180:
+        if accel_roll - current_roll < ROLL_WRAP_MIN:
             current_roll -= 360
 
         current_pitch, current_roll = self._apply_complementary_filter(
@@ -157,7 +197,7 @@ class Regulator:
 
         self._update_regulator_data(current_pitch, current_roll)
 
-    def _handle_depth_hold(self) -> np.ndarray:
+    def _handle_depth_hold(self) -> NDArray[np.float64]:
         actuation = np.zeros(3)
         if self.state.system_status.depth_hold:
             if self.state.regulator.desired_depth == 0.0:
@@ -169,7 +209,7 @@ class Regulator:
             self.integral_value_depth += (desired_depth - current_depth) * self.delta_t
             self.integral_value_depth = np.clip(self.integral_value_depth, -3, 3)
 
-            alpha = np.exp(-self.delta_t / DEPTH_DERIVATIVE_EMA_TAU)
+            alpha = cast(np.float64, np.exp(-self.delta_t / DEPTH_DERIVATIVE_EMA_TAU))
             self.current_dt_depth = (
                 alpha * self.current_dt_depth
                 + (1 - alpha) * (current_depth - self.previous_depth) / self.delta_t
@@ -201,10 +241,10 @@ class Regulator:
             actuation = (
                 config.pitch.kp * (desired_pitch - current_pitch)
                 + config.pitch.ki * self.integral_value_pitch
-                - config.pitch.kd * -self.gyro[1]
+                - config.pitch.kd * -cast(np.float64, self.gyro[1])
             )
             current_roll = self.state.regulator.roll
-            if current_roll >= 90 or current_roll <= -90:
+            if current_roll >= PITCH_MAX or current_roll <= PITCH_MIN:
                 actuation = -actuation
         return actuation
 
@@ -220,20 +260,20 @@ class Regulator:
             actuation = (
                 config.roll.kp * (desired_roll - current_roll)
                 + config.roll.ki * self.integral_value_roll
-                - config.roll.kd * self.gyro[0]
+                - config.roll.kd * cast(np.float64, self.gyro[0])
             )
         return actuation
 
     def _compute_thrust_allocation(
         self, actuation: float, current_pitch: float, current_roll: float
-    ) -> np.ndarray:
+    ) -> NDArray[np.float64]:
         b = np.array([0, 0, actuation])
-        cp = np.cos(np.deg2rad(current_pitch))
-        sp = np.sin(np.deg2rad(current_pitch))
-        cr = np.cos(np.deg2rad(current_roll))
-        sr = np.sin(np.deg2rad(current_roll))
+        cp = cast(np.float64, np.cos(cast(np.float64, np.deg2rad(current_pitch))))
+        sp = cast(np.float64, np.sin(cast(np.float64, np.deg2rad(current_pitch))))
+        cr = cast(np.float64, np.cos(cast(np.float64, np.deg2rad(current_roll))))
+        sr = cast(np.float64, np.sin(cast(np.float64, np.deg2rad(current_roll))))
 
-        A = np.array([[cp, sp * sr, -sp * cr], [0, cr, sr], [sp, cp * (-sr), cp * cr]])
+        a = np.array([[cp, sp * sr, -sp * cr], [0, cr, sr], [sp, cp * (-sr), cp * cr]])
         dir_coeffs = self.state.rov_config.direction_coefficients
         surge_coeff = dir_coeffs.surge
         sway_coeff = dir_coeffs.sway
@@ -246,26 +286,23 @@ class Regulator:
         surge_coeff = max(surge_coeff, 0.1)
         sway_coeff = max(sway_coeff, 0.1)
         speed_coeffs = np.diag([surge_coeff, sway_coeff, heave_coeff])
-        A = A @ speed_coeffs
+        a = a @ speed_coeffs
 
         try:
-            x = np.linalg.solve(A, b)
+            x = np.linalg.solve(a, b)
         except np.linalg.LinAlgError:
-            x, *_ = np.linalg.lstsq(A, b, rcond=None)
+            x, *_ = np.linalg.lstsq(a, b, rcond=None)
         return x
 
-    def _scale_regulator_actuation(self, actuation: np.ndarray) -> np.ndarray:
+    def _scale_regulator_actuation(
+        self, actuation: NDArray[np.float64]
+    ) -> NDArray[np.float64]:
         power = self.state.rov_config.power.regulator_max_power
-        for i in range(len(actuation)):
-            actuation[i] = np.clip(actuation[i], -power, power)
+        _ = np.clip(actuation, -power, power, out=actuation)
         return actuation
 
-    def _apply_actuation_to_direction_vector(
-        self, direction_vector: NDArray[np.float64], actuation: np.ndarray
-    ) -> None:
-        direction_vector[0:6] += actuation
-
     def get_actuation(self) -> NDArray[np.float64]:
+        """Get regulator actuation values."""
         regulator_actuation = np.zeros(6)
 
         depth_actuation = self._handle_depth_hold()
@@ -282,6 +319,7 @@ class Regulator:
         return regulator_actuation
 
     def handle_auto_tuning(self, current_time: float) -> NDArray[np.float64] | None:
+        """Handle auto-tuning process for PID parameters."""
         if not self.auto_tuning_phase:
             self.auto_tuning_phase = "pitch"
             self.auto_tuning_step = "find_zero"
@@ -341,7 +379,7 @@ class Regulator:
                 description="Finding zero point...",
                 cancel=None,
             )
-            if abs(pitch) < 3:
+            if abs(pitch) < AUTO_TUNING_ZERO_THRESHOLD_DEGREES:
                 self.auto_tuning_step = "find_amplitude"
                 log_info(
                     f"Pitch zero found at actuation {self.auto_tuning_zero_actuation}"
@@ -363,7 +401,7 @@ class Regulator:
                 if pitch > 0
                 else self.auto_tuning_zero_actuation - self.auto_tuning_amplitude
             )
-            if abs(pitch) > 30:
+            if abs(pitch) > AUTO_TUNING_AMPLITUDE_THRESHOLD_DEGREES:
                 self.auto_tuning_step = "oscillate"
                 self.auto_tuning_oscillation_start = current_time
                 log_info(f"Pitch amplitude found: {self.auto_tuning_amplitude}")
@@ -371,7 +409,7 @@ class Regulator:
 
         elif self.auto_tuning_step == "oscillate":
             elapsed = current_time - self.auto_tuning_oscillation_start
-            if elapsed >= 10:
+            if elapsed >= AUTO_TUNING_OSCILLATION_DURATION_SECONDS:
                 self.auto_tuning_step = "fit_curve"
                 self._fit_curve("pitch")
                 return np.zeros(6)
@@ -411,7 +449,7 @@ class Regulator:
                 description="Finding zero point...",
                 cancel=None,
             )
-            if abs(roll) < 3:
+            if abs(roll) < AUTO_TUNING_ZERO_THRESHOLD_DEGREES:
                 self.auto_tuning_step = "find_amplitude"
                 log_info(
                     f"Roll zero found at actuation {self.auto_tuning_zero_actuation}"
@@ -437,7 +475,7 @@ class Regulator:
                 else self.auto_tuning_zero_actuation - self.auto_tuning_amplitude
             )
             pitch_comp = -pitch * self.state.rov_config.regulator.pitch.kp * 0.5
-            if abs(roll) > 30:
+            if abs(roll) > AUTO_TUNING_AMPLITUDE_THRESHOLD_DEGREES:
                 self.auto_tuning_step = "oscillate"
                 self.auto_tuning_oscillation_start = current_time
                 log_info(f"Roll amplitude found: {self.auto_tuning_amplitude}")
@@ -445,7 +483,7 @@ class Regulator:
 
         elif self.auto_tuning_step == "oscillate":
             elapsed = current_time - self.auto_tuning_oscillation_start
-            if elapsed >= 10:
+            if elapsed >= AUTO_TUNING_OSCILLATION_DURATION_SECONDS:
                 self.auto_tuning_step = "fit_curve"
                 self._fit_curve("roll")
                 return np.zeros(6)
@@ -485,7 +523,10 @@ class Regulator:
                 description="Finding zero point...",
                 cancel=None,
             )
-            if abs(depth - self.state.regulator.desired_depth) < 0.1:
+            if (
+                abs(depth - self.state.regulator.desired_depth)
+                < AUTO_TUNING_ZERO_THRESHOLD_DEPTH_METERS
+            ):
                 self.auto_tuning_step = "find_amplitude"
                 log_info(
                     f"Depth zero found at actuation {self.auto_tuning_zero_actuation}"
@@ -509,7 +550,10 @@ class Regulator:
                 if depth > self.state.regulator.desired_depth
                 else self.auto_tuning_zero_actuation - self.auto_tuning_amplitude
             )
-            if abs(depth - self.state.regulator.desired_depth) > 0.5:
+            if (
+                abs(depth - self.state.regulator.desired_depth)
+                > AUTO_TUNING_AMPLITUDE_THRESHOLD_DEPTH_METERS
+            ):
                 self.auto_tuning_step = "oscillate"
                 self.auto_tuning_oscillation_start = current_time
                 log_info(f"Depth amplitude found: {self.auto_tuning_amplitude}")
@@ -517,7 +561,7 @@ class Regulator:
 
         elif self.auto_tuning_step == "oscillate":
             elapsed = current_time - self.auto_tuning_oscillation_start
-            if elapsed >= 10:
+            if elapsed >= AUTO_TUNING_OSCILLATION_DURATION_SECONDS:
                 self.auto_tuning_step = "fit_curve"
                 self._fit_curve("depth")
                 return np.zeros(6)
@@ -547,12 +591,15 @@ class Regulator:
             log_error(f"No data for {axis} curve fitting")
             return
 
-        times, values = zip(*self.auto_tuning_data, strict=False)
+        times = [t[0] for t in self.auto_tuning_data]
+        values = [t[1] for t in self.auto_tuning_data]
         times = np.array(times) - times[0]
         values = np.array(values)
 
-        def sine_wave(x, A, f, phi, offset):
-            return A * np.sin(2 * np.pi * f * x + phi) + offset
+        def sine_wave(
+            x: NDArray[np.float64], a: float, f: float, phi: float, offset: float
+        ) -> NDArray[np.float64]:
+            return a * np.sin(2 * np.pi * f * x + phi) + offset
 
         try:
             params, _ = curve_fit(
@@ -561,14 +608,16 @@ class Regulator:
                 values,
                 p0=[(np.max(values) - np.min(values)) / 2, 1 / 10, 0, np.mean(values)],
             )
-            A, f, _, _ = params
-            T_u = 1 / f
-            K_u = (4 * self.auto_tuning_amplitude) / (np.pi * A)
-            K_p = 0.6 * K_u
-            K_i = 1.2 * K_u / T_u
-            K_d = 0.075 * K_u * T_u
-            self.auto_tuning_params[axis] = RegulatorPID(kp=K_p, ki=K_i, kd=K_d)
-            log_info(f"{axis} PID: Kp={K_p:.3f}, Ki={K_i:.3f}, Kd={K_d:.3f}")
+            a, f, _, _ = params
+            a = cast(np.float64, a)
+            f = cast(np.float64, f)
+            tu = 1 / f
+            ku = (4 * self.auto_tuning_amplitude) / (np.pi * a)
+            kp = 0.6 * ku
+            ki = 1.2 * ku / tu
+            kd = 0.075 * ku * tu
+            self.auto_tuning_params[axis] = RegulatorPID(kp=kp, ki=ki, kd=kd)
+            log_info(f"{axis} PID: Kp={kp:.3f}, Ki={ki:.3f}, Kd={kd:.3f}")
         except Exception as e:
             log_error(f"Curve fitting failed for {axis}: {e}")
             self.auto_tuning_params[axis] = RegulatorPID(kp=0, ki=0, kd=0)

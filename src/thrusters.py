@@ -114,13 +114,16 @@ class Thrusters:
     def _compute_thrust_values(self, thrust_vector: NDArray[np.float64]) -> list[int]:
         thrust_values: list[int] = []
         for val in thrust_vector:  # pyright: ignore[reportAny]
-            if val >= 0:
+            val_typed = cast(np.float64, val)
+            if val_typed >= 0:
                 thruster_val = int(
-                    THRUSTER_NEUTRAL_PULSE_WIDTH + val * THRUSTER_FORWARD_PULSE_RANGE  # pyright: ignore[reportAny]
+                    THRUSTER_NEUTRAL_PULSE_WIDTH
+                    + val_typed * THRUSTER_FORWARD_PULSE_RANGE
                 )
             else:
                 thruster_val = int(
-                    THRUSTER_NEUTRAL_PULSE_WIDTH + val * THRUSTER_REVERSE_PULSE_RANGE  # pyright: ignore[reportAny]
+                    THRUSTER_NEUTRAL_PULSE_WIDTH
+                    + val_typed * THRUSTER_REVERSE_PULSE_RANGE
                 )
             thrust_values.append(thruster_val)
         thrust_values = (thrust_values + [THRUSTER_NEUTRAL_PULSE_WIDTH] * NUM_MOTORS)[
@@ -145,7 +148,8 @@ class Thrusters:
             thrust_vector = np.zeros(NUM_MOTORS)
             logical_index = test_thruster
             hardware_index = cast(
-                int, self.state.rov_config.thruster_pin_setup.identifiers[logical_index]
+                np.int_,
+                self.state.rov_config.thruster_pin_setup.identifiers[logical_index],
             )
             thrust_vector[hardware_index] = 0.1
             remaining = int(THRUSTER_TEST_DURATION_SECONDS - elapsed)
