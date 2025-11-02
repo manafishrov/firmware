@@ -1,6 +1,5 @@
 """WebSocket message models for the ROV firmware."""
 
-from enum import Enum
 from typing import TYPE_CHECKING, Annotated
 
 from pydantic import Field
@@ -17,6 +16,7 @@ if TYPE_CHECKING:
     from ..models.toast import Toast
 
 from ..models.base import CamelCaseModel
+from ..models.cancel import CancelRegulatorAutoTuning, CancelThrusterTest
 from ..models.config import (
     MicrocontrollerFirmwareVariant,
     RovConfig,
@@ -25,30 +25,7 @@ from ..models.config import (
 from ..models.log import LogEntry
 from ..models.rov_status import RovStatus
 from ..models.rov_telemetry import RovTelemetry
-
-
-class MessageType(str, Enum):
-    """Enum for WebSocket message types."""
-
-    DIRECTION_VECTOR = "directionVector"
-    GET_CONFIG = "getConfig"
-    SET_CONFIG = "setConfig"
-    CONFIG = "config"
-    START_THRUSTER_TEST = "startThrusterTest"
-    CANCEL_THRUSTER_TEST = "cancelThrusterTest"
-    START_REGULATOR_AUTO_TUNING = "startRegulatorAutoTuning"
-    CANCEL_REGULATOR_AUTO_TUNING = "cancelRegulatorAutoTuning"
-    REGULATOR_SUGGESTIONS = "regulatorSuggestions"
-    SHOW_TOAST = "showToast"
-    LOG_MESSAGE = "logMessage"
-    STATUS_UPDATE = "statusUpdate"
-    TELEMETRY = "telemetry"
-    FIRMWARE_VERSION = "firmwareVersion"
-    CUSTOM_ACTION = "customAction"
-    TOGGLE_PITCH_STABILIZATION = "togglePitchStabilization"
-    TOGGLE_ROLL_STABILIZATION = "toggleRollStabilization"
-    TOGGLE_DEPTH_HOLD = "toggleDepthHold"
-    FLASH_MICROCONTROLLER_FIRMWARE = "flashMicrocontrollerFirmware"
+from .types import MessageType
 
 
 class DirectionVector(CamelCaseModel):
@@ -85,23 +62,10 @@ class StartThrusterTest(CamelCaseModel):
     payload: ThrusterTest
 
 
-class CancelThrusterTest(CamelCaseModel):
-    """WebSocket message for canceling thruster test."""
-
-    type: MessageType = MessageType.CANCEL_THRUSTER_TEST
-    payload: ThrusterTest
-
-
 class StartRegulatorAutoTuning(CamelCaseModel):
     """WebSocket message for starting regulator auto tuning."""
 
     type: MessageType = MessageType.START_REGULATOR_AUTO_TUNING
-
-
-class CancelRegulatorAutoTuning(CamelCaseModel):
-    """WebSocket message for canceling regulator auto tuning."""
-
-    type: MessageType = MessageType.CANCEL_REGULATOR_AUTO_TUNING
 
 
 class RegulatorSuggestions(CamelCaseModel):
