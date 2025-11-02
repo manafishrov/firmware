@@ -26,8 +26,8 @@ class FluidType(str, Enum):
 class ThrusterPinSetup(CamelCaseModel):
     """Model for thruster pin setup."""
 
-    identifiers: NDArray[Shape["8"], np.int32]  # pyright: ignore[reportGeneralTypeIssues]
-    spin_directions: NDArray[Shape["8"], np.float32]  # pyright: ignore[reportGeneralTypeIssues]
+    identifiers: NDArray[Shape["8"], np.int8]  # pyright: ignore[reportGeneralTypeIssues]
+    spin_directions: NDArray[Shape["8"], np.int8]  # pyright: ignore[reportGeneralTypeIssues]
 
 
 class RegulatorPID(CamelCaseModel):
