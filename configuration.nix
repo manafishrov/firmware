@@ -130,10 +130,11 @@ in
         pip
         numpy
         websockets
-        smbus2
-        pyserial
         pydantic
+        numpydantic
+        smbus2
         scipy
+        pyserial-asyncio
       ] ++ [
         (pkgs.python312Packages.buildPythonPackage {
           pname = "bmi270";

@@ -3,14 +3,15 @@ name = "manafish-firmware"
 version = "1.0.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-  "websockets==15.0.1",
   "numpy==2.3.4",
+  "websockets==15.0.1",
+  "pydantic==2.12.3",
+  "numpydantic==1.7.0",
   "smbus2==0.5.0",
+  "scipy==1.16.3",
+  "pyserial-asyncio>=0.6",
   "bmi270 @ git+https://github.com/CoRoLab-Berlin/bmi270_python.git@8309e687d6b346455833c5d0c2734eeb56e98789",
   "ms5837 @ git+https://github.com/bluerobotics/ms5837-python.git@02996d71d2f08339b3d317b3f4da0a83781c706e",
-  "pyserial-asyncio>=0.6",
-  "pydantic==2.12.3",
-  "scipy==1.16.3",
 ]
 
 [tool.ruff]
