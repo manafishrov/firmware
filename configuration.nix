@@ -140,7 +140,7 @@ in
           version = "1.7.0";
            src = pkgs.fetchPypi {
              inherit pname version;
-             hash = "sha256-JoKFvuAm2f3yM+/u4DVgs3X0+PiWj4QfmooOw==";
+             hash = "sha256-JoKFvuAm2d/fI+/u4T9gw7ddR94v/fLli08MF6aCTjs=";
            };
           propagatedBuildInputs = with pkgs.python312Packages; [ pydantic numpy ];
           doCheck = false;
