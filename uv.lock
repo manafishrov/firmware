@@ -40,7 +40,7 @@ requires-dist = [
     { name = "bmi270", git = "https://github.com/CoRoLab-Berlin/bmi270_python.git?rev=8309e687d6b346455833c5d0c2734eeb56e98789" },
     { name = "ms5837", git = "https://github.com/bluerobotics/ms5837-python.git?rev=02996d71d2f08339b3d317b3f4da0a83781c706e" },
     { name = "numpy", specifier = "==2.3.4" },
-    { name = "numpydantic", specifier = ">=1.7.0" },
+    { name = "numpydantic", specifier = "==1.7.0" },
     { name = "pydantic", specifier = "==2.12.3" },
     { name = "pyserial-asyncio", specifier = ">=0.6" },
     { name = "scipy", specifier = "==1.16.3" },
