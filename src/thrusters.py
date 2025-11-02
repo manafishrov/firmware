@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 
 if TYPE_CHECKING:
@@ -17,6 +17,7 @@ import asyncio
 import json
 import struct
 import time
+from asyncio import StreamWriter
 
 import numpy as np
 
@@ -26,11 +27,15 @@ from .constants import (
     THRUSTER_INPUT_START_BYTE,
     THRUSTER_NEUTRAL_PULSE_WIDTH,
     THRUSTER_REVERSE_PULSE_RANGE,
+    THRUSTER_TEST_DURATION_SECONDS,
     THRUSTER_TEST_TOAST_ID,
     THRUSTER_TIMEOUT_MS,
 )
 from .log import log_error
-from .models.config import RegulatorPID
+from .models.config import (
+    RegulatorPID,
+    RegulatorSuggestions as RegulatorSuggestionsPayload,
+)
 from .toast import toast_loading, toast_success
 from .websocket.message import RegulatorSuggestions
 
@@ -62,7 +67,7 @@ class Thrusters:
         self, direction_vector: NDArray[np.float64]
     ) -> NDArray[np.float64]:
         scale = self.state.rov_config.power.user_max_power
-        np.multiply(direction_vector, scale, out=direction_vector)
+        _ = np.multiply(direction_vector, scale, out=direction_vector)
         return direction_vector
 
     def _create_thrust_vector_from_thruster_allocation(
@@ -80,7 +85,7 @@ class Thrusters:
     ) -> NDArray[np.float64]:
         spin_directions = self.state.rov_config.thruster_pin_setup.spin_directions
         thrust_vector = thrust_vector * spin_directions
-        np.clip(thrust_vector, -1, 1, out=thrust_vector)
+        _ = np.clip(thrust_vector, -1, 1, out=thrust_vector)
         return thrust_vector
 
     def _reorder_thrust_vector(
@@ -117,15 +122,15 @@ class Thrusters:
         return thrust_vector
 
     def _compute_thrust_values(self, thrust_vector: NDArray[np.float64]) -> list[int]:
-        thrust_values = []
-        for val in thrust_vector:
+        thrust_values: list[int] = []
+        for val in thrust_vector:  # pyright: ignore[reportAny]
             if val >= 0:
                 thruster_val = int(
-                    THRUSTER_NEUTRAL_PULSE_WIDTH + val * THRUSTER_FORWARD_PULSE_RANGE
+                    THRUSTER_NEUTRAL_PULSE_WIDTH + val * THRUSTER_FORWARD_PULSE_RANGE  # pyright: ignore[reportAny]
                 )
             else:
                 thruster_val = int(
-                    THRUSTER_NEUTRAL_PULSE_WIDTH + val * THRUSTER_REVERSE_PULSE_RANGE
+                    THRUSTER_NEUTRAL_PULSE_WIDTH + val * THRUSTER_REVERSE_PULSE_RANGE  # pyright: ignore[reportAny]
                 )
             thrust_values.append(thruster_val)
         thrust_values = (thrust_values + [THRUSTER_NEUTRAL_PULSE_WIDTH] * NUM_MOTORS)[
@@ -137,7 +142,7 @@ class Thrusters:
         self, current_time: float, test_thruster: int
     ) -> NDArray[np.float64] | None:
         elapsed = current_time - self.state.thrusters.test_start_time
-        if elapsed >= 10:
+        if elapsed >= THRUSTER_TEST_DURATION_SECONDS:
             self.state.thrusters.test_thruster = None
             toast_success(
                 toast_id=THRUSTER_TEST_TOAST_ID,
@@ -149,11 +154,11 @@ class Thrusters:
         else:
             thrust_vector = np.zeros(NUM_MOTORS)
             logical_index = test_thruster
-            hardware_index = self.state.rov_config.thruster_pin_setup.identifiers[
-                logical_index
-            ]
+            hardware_index = cast(
+                int, self.state.rov_config.thruster_pin_setup.identifiers[logical_index]
+            )
             thrust_vector[hardware_index] = 0.1
-            remaining = int(10 - elapsed)
+            remaining = int(THRUSTER_TEST_DURATION_SECONDS - elapsed)
             if remaining != self.state.thrusters.last_remaining:
                 self.state.thrusters.last_remaining = remaining
                 toast_loading(
@@ -164,31 +169,31 @@ class Thrusters:
                 )
             return thrust_vector
 
-    async def _send_packet(self, writer, thrust_values: list[int]) -> None:
+    def _send_packet(self, writer: StreamWriter, thrust_values: list[int]) -> None:
         data_payload = struct.pack(f"<{NUM_MOTORS}H", *thrust_values)
         packet = bytearray([THRUSTER_INPUT_START_BYTE]) + data_payload
         checksum = 0
         for b in packet:
             checksum ^= b
         packet.append(checksum)
-        await writer.write(packet)
+        writer.write(packet)
 
     def _handle_auto_tuning_completion(self) -> None:
         suggestions = RegulatorSuggestions(
-            payload={
-                "pitch": self.regulator.auto_tuning_params.get(
+            payload=RegulatorSuggestionsPayload(
+                pitch=self.regulator.auto_tuning_params.get(
                     "pitch", RegulatorPID(kp=0, ki=0, kd=0)
                 ),
-                "roll": self.regulator.auto_tuning_params.get(
+                roll=self.regulator.auto_tuning_params.get(
                     "roll", RegulatorPID(kp=0, ki=0, kd=0)
                 ),
-                "depth": self.regulator.auto_tuning_params.get(
+                depth=self.regulator.auto_tuning_params.get(
                     "depth", RegulatorPID(kp=0, ki=0, kd=0)
                 ),
-            }
+            )
         )
         if self.ws_server.client:
-            asyncio.create_task(
+            _ = asyncio.create_task(  # type: ignore[reportUnusedCallResult] # noqa: RUF006
                 self.ws_server.client.send(
                     json.dumps(suggestions.model_dump(by_alias=True))
                 )
@@ -196,7 +201,7 @@ class Thrusters:
 
     def _determine_thrust_vector(
         self, current_time: float, last_send_time: float
-    ) -> tuple[NDArray[np.float64], float]:
+    ) -> tuple[NDArray[np.float64] | None, float]:
         if self.state.regulator.auto_tuning_active:
             tuning_vector, completed = self.regulator.handle_auto_tuning(current_time)
             if completed:
@@ -224,7 +229,9 @@ class Thrusters:
             and current_time - self.state.thrusters.last_direction_time
             < THRUSTER_TIMEOUT_MS / 1000
         ):
-            direction_vector = self.state.thrusters.direction_vector
+            direction_vector = cast(
+                NDArray[np.float64], self.state.thrusters.direction_vector
+            )
             return self._prepare_thrust_vector(direction_vector), current_time
 
         if current_time - last_send_time > THRUSTER_TIMEOUT_MS / 1000:
@@ -232,10 +239,12 @@ class Thrusters:
 
         return None, last_send_time
 
-    async def _send_with_retries(self, writer, thrust_values: list[int]) -> bool:
+    async def _send_with_retries(
+        self, writer: StreamWriter, thrust_values: list[int]
+    ) -> bool:
         for attempt in range(3):
             try:
-                await self._send_packet(writer, thrust_values)
+                self._send_packet(writer, thrust_values)
                 return True
             except Exception as e:
                 log_error(f"Thruster send_packet failed (attempt {attempt + 1}): {e}")
