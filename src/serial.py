@@ -10,11 +10,11 @@ if TYPE_CHECKING:
 
 import asyncio
 from pathlib import Path
-import sys
 
 from serial_asyncio import open_serial_connection
 
-from .log import log_error
+from .log import log_error, log_info
+from .toast import toast_error
 
 
 class SerialManager:
@@ -30,7 +30,7 @@ class SerialManager:
         self.reader: asyncio.StreamReader | None = None
         self.writer: asyncio.StreamWriter | None = None
 
-    async def _find_microcontroller_port(self) -> str:
+    async def _find_microcontroller_port(self) -> str | None:
         microcontroller_ports = list(
             Path("/dev/serial/by-id/").glob("usb-Raspberry_Pi_Pico*")
         )
@@ -40,15 +40,39 @@ class SerialManager:
             return str(microcontroller_ports[0])
         else:
             log_error("Error: Could not find microcontroller serial port.")
-            sys.exit(1)
+            return None
 
     async def initialize(self) -> None:
         """Initialize the serial connection to the microcontroller."""
-        serial_port = await self._find_microcontroller_port()
-        self.reader, self.writer = await open_serial_connection(
-            url=serial_port, baudrate=115200
-        )
-        self.state.system_health.microcontroller_ok = True
+        try:
+            log_info("Attempting to initialize serial connection to microcontroller...")
+            serial_port = await self._find_microcontroller_port()
+            if serial_port is None:
+                self.state.system_health.microcontroller_ok = False
+                log_error("Failed to find microcontroller serial port.")
+                toast_error(
+                    toast_id=None,
+                    message="Microcontroller Connection Failed!",
+                    description="Could not find microcontroller serial port.",
+                    cancel=None,
+                )
+                return
+            self.reader, self.writer = await open_serial_connection(
+                url=serial_port, baudrate=115200
+            )
+            self.state.system_health.microcontroller_ok = True
+            log_info("Serial connection to microcontroller initialized successfully.")
+        except Exception as e:
+            self.state.system_health.microcontroller_ok = False
+            log_error(
+                f"Failed to initialize serial connection to microcontroller. Error: {e}"
+            )
+            toast_error(
+                toast_id=None,
+                message="Microcontroller Init Failed!",
+                description="Failed to connect to microcontroller. Check connections.",
+                cancel=None,
+            )
 
     def get_reader(self) -> asyncio.StreamReader:
         """Get the serial reader."""
