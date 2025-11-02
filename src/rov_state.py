@@ -12,15 +12,6 @@ from .models.thruster import ThrusterData
 class RovState:
     """Central state class for the ROV."""
 
-    rov_config: RovConfig
-    system_health: SystemHealth
-    system_status: SystemStatus
-    imu: ImuData
-    pressure: PressureData
-    esc: EscData
-    regulator: RegulatorData
-    thrusters: ThrusterData
-
     def __init__(self) -> None:
         """Initialize the ROV state."""
         self.rov_config: RovConfig = RovConfig.load()

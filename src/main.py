@@ -40,7 +40,7 @@ async def main() -> None:
         thrusters.send_loop(),
         ws_server.wait_closed(),
     ]
-    await asyncio.gather(*tasks)
+    _ = await asyncio.gather(*tasks)
 
     await serial_manager.shutdown()
 
