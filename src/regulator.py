@@ -3,15 +3,10 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, cast
-
-
-if TYPE_CHECKING:
-    from numpy.typing import NDArray
-
-    from rov_state import RovState
+from typing import cast
 
 import numpy as np
+from numpy.typing import NDArray
 from scipy.optimize import curve_fit
 
 from .constants import (
@@ -33,6 +28,7 @@ from .models.config import (
     RegulatorPID,
     RegulatorSuggestions as RegulatorSuggestionsPayload,
 )
+from .rov_state import RovState
 from .toast import toast_loading, toast_success
 from .websocket.message import RegulatorSuggestions
 from .websocket.queue import get_message_queue

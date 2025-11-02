@@ -2,22 +2,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
-
-from numpy.typing import NDArray
-
-
-if TYPE_CHECKING:
-    from .regulator import Regulator
-    from .rov_state import RovState
-    from .serial import SerialManager
-
 import asyncio
 from asyncio import StreamWriter
 import struct
 import time
+from typing import cast
 
 import numpy as np
+from numpy.typing import NDArray
 
 from .constants import (
     NUM_MOTORS,
@@ -30,6 +22,9 @@ from .constants import (
     THRUSTER_TIMEOUT_MS,
 )
 from .log import log_error
+from .regulator import Regulator
+from .rov_state import RovState
+from .serial import SerialManager
 from .toast import toast_loading, toast_success
 
 

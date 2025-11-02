@@ -2,15 +2,10 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-
-if TYPE_CHECKING:
-    from websockets import ServerConnection
-
-    from rov_state import RovState
+from websockets import ServerConnection
 
 from ...models.rov_status import RovStatus
+from ...rov_state import RovState
 from ..message import StatusUpdate
 
 

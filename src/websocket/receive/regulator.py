@@ -2,18 +2,13 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-
-if TYPE_CHECKING:
-    from rov_state import RovState
-
 import time
 
 from ...constants import AUTO_TUNING_TOAST_ID, MAX_AUTO_TUNING_ROLL_PITCH_DEGREES
 from ...log import log_error, log_info
+from ...models.cancel import CancelRegulatorAutoTuning
+from ...rov_state import RovState
 from ...toast import toast_error, toast_info, toast_loading
-from ...websocket.message import CancelRegulatorAutoTuning
 
 
 async def handle_start_regulator_auto_tuning(

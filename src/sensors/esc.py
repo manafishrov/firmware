@@ -2,15 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
-
-
-if TYPE_CHECKING:
-    from ..rov_state import RovState
-    from ..serial import SerialManager
-
 import asyncio
 import struct
+from typing import cast
 
 from ..constants import (
     ESC_MAX_READ_BUFFER_SIZE,
@@ -22,6 +16,8 @@ from ..constants import (
     ESC_TELEMETRY_START_BYTE,
     NUM_MOTORS,
 )
+from ..rov_state import RovState
+from ..serial import SerialManager
 
 
 class EscSensor:

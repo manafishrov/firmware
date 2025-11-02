@@ -2,16 +2,11 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-
-if TYPE_CHECKING:
-    from websockets import ServerConnection
-
-    from rov_state import RovState
+from websockets import ServerConnection
 
 from ...log import log_info
 from ...models.config import RovConfig
+from ...rov_state import RovState
 from ...toast import toast_success
 from ..message import Config
 

@@ -2,22 +2,17 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
-
-
-if TYPE_CHECKING:
-    from websockets import Server, ServerConnection
-    from websockets.exceptions import ConnectionClosed
-
-    from rov_state import RovState
-
 import asyncio
 import json
+from typing import cast
 
 import websockets
+from websockets import Server, ServerConnection
+from websockets.exceptions import ConnectionClosed
 
 from ..constants import FIRMWARE_VERSION, IP_ADDRESS, PORT
 from ..log import log_error, log_info, log_warn, set_log_is_client_connected_status
+from ..rov_state import RovState
 from .handler import handle_message
 from .message import WebsocketMessage
 from .queue import get_message_queue
