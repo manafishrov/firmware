@@ -195,10 +195,12 @@ in
         activation.copyFirmwareFiles = home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
           if [ ! -f "$HOME/.firmware_initialized" ]; then
             tmpdir=$(mktemp -d)
-            cp -r ${./src}/* $tmpdir/src
-            cp -r ${./tests}/* $tmpdir/tests
+            mkdir $tmpdir/src
+            mkdir $tmpdir/tests
+            cp -r ${./src}/* $tmpdir/src/
+            cp -r ${./tests}/* $tmpdir/tests/
             chmod -R u+w $tmpdir/*
-            cp -rf $tmpdir/* $HOME
+            cp -rf $tmpdir/* $HOME/
             rm -rf $tmpdir
             touch "$HOME/.firmware_initialized"
           fi
