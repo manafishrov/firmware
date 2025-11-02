@@ -138,10 +138,12 @@ in
         (pkgs.python312Packages.buildPythonPackage rec {
           pname = "numpydantic";
           version = "1.7.0";
+          format = "pyproject";
            src = pkgs.fetchPypi {
              inherit pname version;
              hash = "sha256-JoKFvuAm2d/fI+/u4T9gw7ddR94v/fLli08MF6aCTjs=";
            };
+          nativeBuildInputs = with pkgs.python312Packages; [ pdm-backend ];
           propagatedBuildInputs = with pkgs.python312Packages; [ pydantic numpy ];
           doCheck = false;
         })
