@@ -2,8 +2,8 @@
 
 from enum import Enum
 
+from ..websocket.cancel_messages import CancelRegulatorAutoTuning, CancelThrusterTest
 from .base import CamelCaseModel
-from .cancel import CancelRegulatorAutoTuning, CancelThrusterTest
 
 
 class ToastType(str, Enum):

@@ -1,10 +1,10 @@
-"""Cancel message models for the ROV firmware."""
+"""Cancel message models for WebSocket."""
 
 from typing import Literal
 
-from ..websocket.types import MessageType
-from .base import CamelCaseModel
-from .config import ThrusterTest
+from ..models.base import CamelCaseModel
+from ..models.config import ThrusterTest
+from .types import MessageType
 
 
 class CancelThrusterTest(CamelCaseModel):

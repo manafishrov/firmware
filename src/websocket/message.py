@@ -9,7 +9,6 @@ from ..models.actions import (
     DirectionVector as DirectionVectorPayload,
 )
 from ..models.base import CamelCaseModel
-from ..models.cancel import CancelRegulatorAutoTuning, CancelThrusterTest
 from ..models.config import (
     FirmwareVersion as FirmwareVersionPayload,
     MicrocontrollerFirmwareVariant,
@@ -21,6 +20,7 @@ from ..models.log import LogEntry
 from ..models.rov_status import RovStatus
 from ..models.rov_telemetry import RovTelemetry
 from ..models.toast import Toast
+from .cancel_messages import CancelRegulatorAutoTuning, CancelThrusterTest
 from .types import MessageType
 
 
