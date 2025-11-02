@@ -1,30 +1,26 @@
 """WebSocket message models for the ROV firmware."""
 
-from typing import TYPE_CHECKING, Annotated
+from typing import Annotated
 
 from pydantic import Field
 
-from ..models.actions import CustomAction as CustomActionPayload
-
-
-if TYPE_CHECKING:
-    from ..models.actions import DirectionVector as DirectionVectorPayload
-    from ..models.config import (
-        FirmwareVersion as FirmwareVersionPayload,
-        RegulatorSuggestions as RegulatorSuggestionsPayload,
-    )
-    from ..models.toast import Toast
-
+from ..models.actions import (
+    CustomAction as CustomActionPayload,
+    DirectionVector as DirectionVectorPayload,
+)
 from ..models.base import CamelCaseModel
 from ..models.cancel import CancelRegulatorAutoTuning, CancelThrusterTest
 from ..models.config import (
+    FirmwareVersion as FirmwareVersionPayload,
     MicrocontrollerFirmwareVariant,
+    RegulatorSuggestions as RegulatorSuggestionsPayload,
     RovConfig,
     ThrusterTest,
 )
 from ..models.log import LogEntry
 from ..models.rov_status import RovStatus
 from ..models.rov_telemetry import RovTelemetry
+from ..models.toast import Toast
 from .types import MessageType
 
 
