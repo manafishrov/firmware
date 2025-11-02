@@ -76,9 +76,7 @@ class RovConfig(CamelCaseModel):
     fluid_type: FluidType = FluidType.SALTWATER
     thruster_pin_setup: ThrusterPinSetup = ThrusterPinSetup(
         identifiers=np.array([0, 1, 2, 3, 4, 5, 6, 7], dtype=np.int8),
-        spin_directions=np.array(
-            [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], dtype=np.float32
-        ),
+        spin_directions=np.array([1, 1, 1, 1, 1, 1, 1, 1], dtype=np.int8),
     )
     thruster_allocation: NDArray[Shape["8, 8"], np.float32] = np.array(  # pyright: ignore[reportInvalidTypeForm]
         (
@@ -90,7 +88,8 @@ class RovConfig(CamelCaseModel):
             (0, 0, 1, -1, 1, -1, 0, 0),
             (0, 0, 0, 0, 0, 0, 0, 0),
             (0, 0, 0, 0, 0, 0, 0, 0),
-        )
+        ),
+        dtype=np.float32,
     )
     regulator: Regulator = Regulator(
         turn_speed=40,
