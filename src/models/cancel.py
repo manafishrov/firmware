@@ -1,5 +1,7 @@
 """Cancel message models for the ROV firmware."""
 
+from typing import Literal
+
 from ..websocket.types import MessageType
 from .base import CamelCaseModel
 from .config import ThrusterTest
@@ -8,11 +10,13 @@ from .config import ThrusterTest
 class CancelThrusterTest(CamelCaseModel):
     """WebSocket message for canceling thruster test."""
 
-    type: MessageType = MessageType.CANCEL_THRUSTER_TEST
+    type: Literal[MessageType.CANCEL_THRUSTER_TEST] = MessageType.CANCEL_THRUSTER_TEST
     payload: ThrusterTest
 
 
 class CancelRegulatorAutoTuning(CamelCaseModel):
     """WebSocket message for canceling regulator auto tuning."""
 
-    type: MessageType = MessageType.CANCEL_REGULATOR_AUTO_TUNING
+    type: Literal[MessageType.CANCEL_REGULATOR_AUTO_TUNING] = (
+        MessageType.CANCEL_REGULATOR_AUTO_TUNING
+    )

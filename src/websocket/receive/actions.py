@@ -23,7 +23,6 @@ async def handle_direction_vector(
         state: The ROV state.
         payload: The direction vector.
     """
-    log_info(f"Received direction vector: {payload}")
     state.thrusters.direction_vector = payload.root
     state.thrusters.last_direction_time = time.time()
 

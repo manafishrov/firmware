@@ -6,6 +6,7 @@ import asyncio
 import json
 from typing import cast
 
+from pydantic import TypeAdapter
 import websockets
 from websockets import Server, ServerConnection
 from websockets.exceptions import ConnectionClosed
@@ -19,6 +20,9 @@ from .queue import get_message_queue
 from .send.config import handle_send_config, handle_send_firmware_version
 from .send.status import handle_status_update
 from .send.telemetry import handle_telemetry
+
+
+websocket_message_adapter = TypeAdapter(WebsocketMessage)
 
 
 class WebsocketServer:
@@ -78,7 +82,7 @@ class WebsocketServer:
             async for message in websocket:
                 try:
                     data = json.loads(message)  # pyright: ignore[reportAny]
-                    deserialized_msg = WebsocketMessage(**data)  # pyright: ignore[reportCallIssue]
+                    deserialized_msg = websocket_message_adapter.validate_python(data)
                     await handle_message(self.state, websocket, deserialized_msg)  # pyright: ignore[reportUnknownArgumentType]
                 except json.JSONDecodeError:
                     log_warn(
