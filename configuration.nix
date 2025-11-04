@@ -207,9 +207,9 @@ in
           if [ ! -f "$HOME/.firmware_initialized" ]; then
             tmpdir=$(mktemp -d)
             mkdir $tmpdir/src
-            mkdir $tmpdir/tests
+            mkdir $tmpdir/scripts
             cp -r ${./src}/* $tmpdir/src/
-            cp -r ${./tests}/* $tmpdir/tests/
+            cp -r ${./scripts}/* $tmpdir/scripts/
             chmod -R u+w $tmpdir/*
             cp -rf $tmpdir/* $HOME/
             rm -rf $tmpdir
