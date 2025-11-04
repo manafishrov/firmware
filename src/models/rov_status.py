@@ -1,6 +1,7 @@
 """ROV status data models for the ROV firmware."""
 
 from .base import CamelCaseModel
+from .system import SystemHealth
 
 
 class RovStatus(CamelCaseModel):
@@ -13,3 +14,4 @@ class RovStatus(CamelCaseModel):
     depth: float
     water_temperature: float
     electronics_temperature: float
+    health: SystemHealth

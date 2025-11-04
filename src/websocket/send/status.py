@@ -48,6 +48,7 @@ async def handle_status_update(
         depth=state.pressure.depth,
         water_temperature=state.pressure.temperature,
         electronics_temperature=electronics_temperature,
+        health=state.system_health,
     )
     message = StatusUpdate(payload=payload).model_dump_json(by_alias=True)
     await websocket.send(message)
