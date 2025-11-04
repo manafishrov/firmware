@@ -5,18 +5,15 @@ from __future__ import annotations
 import asyncio
 
 from .models.toast import Toast, ToastCancel, ToastType
-from .websocket.message import CancelRegulatorAutoTuning, CancelThrusterTest, ShowToast
+from .websocket.cancel_messages import (
+    CancelRegulatorAutoTuning,
+    CancelThrusterTest,
+)
+from .websocket.message import (
+    ShowToast,
+)
 from .websocket.queue import get_message_queue
-from .websocket.state import set_event_loop, websocket_state
-
-
-def initialize_sync_toasting(loop: asyncio.AbstractEventLoop) -> None:
-    """Initialize synchronous toasting.
-
-    Args:
-        loop: The asyncio event loop.
-    """
-    set_event_loop(loop)
+from .websocket.state import websocket_state
 
 
 async def _toast_message_async(

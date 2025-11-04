@@ -8,7 +8,7 @@ import logging
 from .models.log import LogEntry, LogLevel, LogOrigin
 from .websocket.message import LogMessage
 from .websocket.queue import get_message_queue
-from .websocket.state import set_client_connected, set_event_loop, websocket_state
+from .websocket.state import websocket_state
 
 
 _logger = logging.getLogger(__name__)
@@ -18,24 +18,6 @@ if not _logger.handlers:
     _handler = logging.StreamHandler()
     _handler.setFormatter(logging.Formatter("%(levelname)s: %(message)s"))
     _logger.addHandler(_handler)
-
-
-def initialize_sync_logging(loop: asyncio.AbstractEventLoop) -> None:
-    """Initialize synchronous logging.
-
-    Args:
-        loop: The asyncio event loop.
-    """
-    set_event_loop(loop)
-
-
-def set_log_is_client_connected_status(is_connected: bool) -> None:
-    """Set the log client connected status.
-
-    Args:
-        is_connected: Whether the client is connected.
-    """
-    set_client_connected(is_connected)
 
 
 async def _log_message_async(level: LogLevel, message: str) -> None:
