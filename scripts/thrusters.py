@@ -26,14 +26,8 @@ def find_pico_port() -> str:
         pico_ports = glob.glob("/dev/ttyACM*")
 
     if pico_ports:
-        print(f"Found Pico at port: {pico_ports[0]}")
         return pico_ports[0]
     else:
-        print("Error: Could not find Raspberry Pi Pico serial port.", file=sys.stderr)
-        print(
-            "Please ensure the Pico is connected via USB and running the firmware.",
-            file=sys.stderr,
-        )
         sys.exit(1)
 
 
@@ -93,25 +87,17 @@ def print_telemetry(pkt_bytes: bytes | bytearray) -> None:
     packet_type = pkt_bytes[2]
 
     if packet_type == 0:  # ERPM
-        erpm_value = struct.unpack("<i", pkt_bytes[3:7])[0]
+        struct.unpack("<i", pkt_bytes[3:7])[0]
         if global_id == current_test_motor_id:
-            print(f"[Telemetry] Motor {global_id}: ERPM = {erpm_value}")
-    elif packet_type == 1:  # Voltage
-        voltage_cv = struct.unpack("<i", pkt_bytes[3:7])[0]
-        print(f"[Telemetry] Motor {global_id}: Voltage = {voltage_cv} cV")
-    elif packet_type == 2:  # Temperature
-        temp_c = struct.unpack("<i", pkt_bytes[3:7])[0]
-        print(f"[Telemetry] Motor {global_id}: Temperature = {temp_c} °C")
-    elif packet_type == 3:  # Current
-        current_ca = struct.unpack("<i", pkt_bytes[3:7])[0]
-        print(f"[Telemetry] Motor {global_id}: Current = {current_ca / 100.0:.2f} A")
+            pass
+    elif packet_type in {1, 2} or packet_type == 3:  # Voltage
+        struct.unpack("<i", pkt_bytes[3:7])[0]
 
 
 def telemetry_reader_thread(
     ser_instance: serial.Serial, stop_event: threading.Event, data_queue: queue.Queue
 ) -> None:
     read_buffer = b""
-    print(f"--- Telemetry listener thread started on {ser_instance.port} ---")
     ser_instance.timeout = 0.01
 
     while not stop_event.is_set():
@@ -137,12 +123,11 @@ def telemetry_reader_thread(
                         break
 
             time.sleep(0.001)
-        except Exception as e:
+        except Exception:
             if not stop_event.is_set():
-                print(f"Error in telemetry thread: {e}", file=sys.stderr)
+                pass
             break
 
-    print("--- Telemetry listener thread stopped ---")
 
 
 def process_queued_telemetry(data_queue: queue.Queue) -> None:
@@ -157,8 +142,6 @@ def process_queued_telemetry(data_queue: queue.Queue) -> None:
 def run_test(
     ser_instance: serial.Serial, description: str, values: list[int], duration_s: float
 ) -> None:
-    print(f"\n>>> STATUS: Running test: '{description}' for {duration_s}s.")
-    print(f"    Sending values: {values}")
 
     start_time = time.time()
     next_send_time = start_time
@@ -181,12 +164,8 @@ def ramp_test(
     ramp_duration_s: float,
     hold_duration_s: float,
 ) -> None:
-    print(
-        f"\n>>> STATUS: Running ramp test: '{description}' (Ramp: {ramp_duration_s}s, Hold: {hold_duration_s}s)"
-    )
     total_ramp_steps = int(ramp_duration_s * 1000 / SEND_INTERVAL_MS)
 
-    print("    Ramping Up...")
     for i in range(total_ramp_steps + 1):
         progress = i / total_ramp_steps
         current_val = int(start_val + (end_val - start_val) * progress)
@@ -194,7 +173,6 @@ def ramp_test(
         process_queued_telemetry(telemetry_data_queue)
         time.sleep(SEND_INTERVAL_MS / 1000.0)
 
-    print(f"    Holding at {end_val} for {hold_duration_s}s...")
     run_test(
         ser_instance,
         f"Hold at {end_val}",
@@ -202,7 +180,6 @@ def ramp_test(
         hold_duration_s,
     )
 
-    print("    Ramping Down...")
     for i in range(total_ramp_steps + 1):
         progress = i / total_ramp_steps
         current_val = int(end_val - (end_val - start_val) * progress)
@@ -212,7 +189,6 @@ def ramp_test(
 
 
 def stop_and_pause(ser_instance: serial.Serial, duration_s: float) -> None:
-    print(f"\n>>> STATUS: Setting motors to neutral and pausing for {duration_s}s...")
     send_thrusters(ser_instance, [NEUTRAL] * NUM_MOTORS)
     start_time = time.time()
     while time.time() - start_time < duration_s:
@@ -228,7 +204,6 @@ if __name__ == "__main__":
 
     try:
         ser = serial.Serial(UART_PORT, BAUD)
-        print("--- Starting Thruster Control Sequence with Telemetry Listener ---")
 
         telemetry_thread = threading.Thread(
             target=telemetry_reader_thread,
@@ -238,18 +213,14 @@ if __name__ == "__main__":
         telemetry_thread.start()
         time.sleep(0.1)
 
-        print("\n>>> STATUS: Testing each motor individually with ramped throttles.")
         for i in range(NUM_MOTORS):
             current_test_motor_id = i
-            print(f"\n--- Testing Motor {i} ---")
 
-            print(f"\n    Forward Ramp for Motor {i} (50% throttle)")
             for_motor_values = [NEUTRAL] * NUM_MOTORS
             ramp_duration_s = 5
             hold_duration_s = 2
             total_ramp_steps = int(ramp_duration_s * 1000 / SEND_INTERVAL_MS)
 
-            print("        Ramping Up Forward...")
             for step in range(total_ramp_steps + 1):
                 progress = step / total_ramp_steps
                 val = int(NEUTRAL + (FIFTY_PERCENT_FORWARD - NEUTRAL) * progress)
@@ -258,15 +229,11 @@ if __name__ == "__main__":
                 process_queued_telemetry(telemetry_data_queue)
                 time.sleep(SEND_INTERVAL_MS / 1000.0)
 
-            print(
-                f"        Holding at {FIFTY_PERCENT_FORWARD} for {hold_duration_s}s..."
-            )
             for_motor_values[i] = FIFTY_PERCENT_FORWARD
             run_test(
                 ser, f"Hold Motor {i} at 50% Forward", for_motor_values, hold_duration_s
             )
 
-            print("        Ramping Down Forward...")
             for step in range(total_ramp_steps + 1):
                 progress = step / total_ramp_steps
                 val = int(
@@ -278,11 +245,9 @@ if __name__ == "__main__":
                 time.sleep(SEND_INTERVAL_MS / 1000.0)
             stop_and_pause(ser, 2)
 
-            print(f"\n    Reverse Ramp for Motor {i} (50% throttle)")
             for_motor_values = [NEUTRAL] * NUM_MOTORS
             total_ramp_steps = int(ramp_duration_s * 1000 / SEND_INTERVAL_MS)
 
-            print("        Ramping Up Reverse...")
             for step in range(total_ramp_steps + 1):
                 progress = step / total_ramp_steps
                 val = int(NEUTRAL + (FIFTY_PERCENT_REVERSE - NEUTRAL) * progress)
@@ -291,15 +256,11 @@ if __name__ == "__main__":
                 process_queued_telemetry(telemetry_data_queue)
                 time.sleep(SEND_INTERVAL_MS / 1000.0)
 
-            print(
-                f"        Holding at {FIFTY_PERCENT_REVERSE} for {hold_duration_s}s..."
-            )
             for_motor_values[i] = FIFTY_PERCENT_REVERSE
             run_test(
                 ser, f"Hold Motor {i} at 50% Reverse", for_motor_values, hold_duration_s
             )
 
-            print("        Ramping Down Reverse...")
             for step in range(total_ramp_steps + 1):
                 progress = step / total_ramp_steps
                 val = int(
@@ -312,26 +273,24 @@ if __name__ == "__main__":
             stop_and_pause(ser, 2)
 
         current_test_motor_id = -1
-        print("\n--- All tests complete. Motors are stopped. ---")
 
     except KeyboardInterrupt:
-        print("\nControl script interrupted by user. Shutting down gracefully...")
-    except serial.SerialException as e:
-        print(f"\nSerial port error: {e}", file=sys.stderr)
-    except Exception as e:
-        print(f"\nAn unexpected error occurred: {e}", file=sys.stderr)
+        pass
+    except serial.SerialException:
+        pass
+    except Exception:
+        pass
     finally:
         if telemetry_thread and telemetry_thread.is_alive():
             telemetry_thread_stop_event.set()
             telemetry_thread.join(timeout=2.0)
 
         if ser and ser.is_open:
-            print("Sending final neutral command and closing serial port.")
             try:
                 send_thrusters(ser, [NEUTRAL] * NUM_MOTORS)
                 time.sleep(0.1)
-            except Exception as e:
-                print(f"Error sending final neutral command: {e}", file=sys.stderr)
+            except Exception:
+                pass
             finally:
                 ser.close()
 

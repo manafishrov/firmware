@@ -72,7 +72,7 @@ async def log(level: str, message: str) -> None:
             return_exceptions=True,
         )
     else:
-        print(f"[{level}] {message}")
+        pass
 
 
 async def toast(
@@ -214,7 +214,7 @@ async def handle_client(
                 elif msg_type == "startThrusterTest":
                     thruster_id = payload
 
-                    async def test_thruster_task(thruster_id):
+                    async def test_thruster_task(thruster_id) -> None:
                         try:
                             await log(
                                 "info",
@@ -261,7 +261,7 @@ async def handle_client(
                     if on_going_regulator_autotune:
                         on_going_regulator_autotune.cancel()
 
-                    async def regulator_autotune_task():
+                    async def regulator_autotune_task() -> None:
                         try:
                             await log("info", "Auto-tuning started")
                             for i in range(1, 11):
@@ -370,7 +370,7 @@ async def main() -> None:
 
     def signal_handler() -> None:
         if not clients:
-            print("[info] Shutdown signal received")
+            pass
         else:
             asyncio.create_task(log("info", "Shutdown signal received"))
         shutdown_event.set()
@@ -378,7 +378,7 @@ async def main() -> None:
     try:
         server = await websockets.serve(handle_client, "10.10.10.10", 9000)
         if not clients:
-            print("[info] Test server running on 10.10.10.10:9000")
+            pass
         else:
             await log("info", "Test server running on 10.10.10.10:9000")
         loop = asyncio.get_running_loop()
@@ -388,14 +388,14 @@ async def main() -> None:
         await shutdown_server(server)
     except Exception as e:
         if not clients:
-            print(f"[error] Server error: {e}")
+            pass
         else:
             await log("error", f"Server error: {e}")
     finally:
         if server and not shutdown:
             await shutdown_server(server)
         if not clients:
-            print("[info] Server shutdown complete")
+            pass
         else:
             await log("info", "Server shutdown complete")
 
@@ -409,6 +409,6 @@ if __name__ == "__main__":
         import asyncio
 
         if not clients:
-            print("[info] Exiting...")
+            pass
         else:
             asyncio.run(log("info", "Exiting..."))

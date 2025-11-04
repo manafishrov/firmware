@@ -13,8 +13,6 @@ packages = [
 for pkg in packages:
     try:
         module: object = __import__(pkg)
-        print(f"Package '{pkg}': AVAILABLE")
         version: str = getattr(module, "__version__", "unknown")
-        print(f"Version: {version}")
     except ImportError:
-        print(f"Package '{pkg}': MISSING")
+        pass
