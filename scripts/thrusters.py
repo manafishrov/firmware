@@ -1,297 +1,130 @@
-# This script checks sending thruster values and reading telemetry data to/from the Raspberry Pi Pico and its firmware.
+"""This script tests thruster control and ESC telemetry by spinning all 8 thrusters at 10% forward and logging telemetry data."""
 
-import glob
-import queue
+import asyncio
+import logging
+from pathlib import Path
 import struct
-import sys
-import threading
-import time
+from typing import cast
 
-import serial
+from serial_asyncio import open_serial_connection
 
 
-TELEMETRY_START_BYTE = 0xA5
-TELEMETRY_PACKET_SIZE = 8
-
-INPUT_START_BYTE = 0x5A
-INPUT_PACKET_OVERHEAD = 2
-
-
-current_test_motor_id = -1
-
-
-def find_pico_port() -> str:
-    pico_ports = glob.glob("/dev/serial/by-id/usb-Raspberry_Pi_Pico*")
-    if not pico_ports:
-        pico_ports = glob.glob("/dev/ttyACM*")
-
-    if pico_ports:
-        return pico_ports[0]
-    else:
-        sys.exit(1)
-
-
-UART_PORT = find_pico_port()
-BAUD = 115200
+ESC_MAX_READ_BUFFER_SIZE = 16
+ESC_PACKET_TYPE_CURRENT = 3
+ESC_PACKET_TYPE_ERPM = 0
+ESC_PACKET_TYPE_TEMPERATURE = 2
+ESC_PACKET_TYPE_VOLTAGE = 1
+ESC_TELEMETRY_PACKET_SIZE = 8
+ESC_TELEMETRY_START_BYTE = 0xA5
 NUM_MOTORS = 8
-
-NEUTRAL = 1000
-FORWARD_RANGE = 1000
-REVERSE_RANGE = 1000
-
-TEN_PERCENT_FORWARD = NEUTRAL + int(FORWARD_RANGE * 0.10)
-THIRTY_PERCENT_FORWARD = NEUTRAL + int(FORWARD_RANGE * 0.30)
-FIFTY_PERCENT_FORWARD = NEUTRAL + int(FORWARD_RANGE * 0.50)
-SIXTY_PERCENT_FORWARD = NEUTRAL + int(FORWARD_RANGE * 0.60)
-
-TEN_PERCENT_REVERSE = NEUTRAL - int(REVERSE_RANGE * 0.10)
-THIRTY_PERCENT_REVERSE = NEUTRAL - int(REVERSE_RANGE * 0.30)
-FIFTY_PERCENT_REVERSE = NEUTRAL - int(REVERSE_RANGE * 0.50)
-SIXTY_PERCENT_REVERSE = NEUTRAL - int(REVERSE_RANGE * 0.60)
-
-SEND_INTERVAL_MS = 50
+THRUSTER_FORWARD_PULSE_RANGE = 1000
+THRUSTER_INPUT_START_BYTE = 0x5A
+THRUSTER_NEUTRAL_PULSE_WIDTH = 1000
 
 
-def calculate_checksum(data_bytes: bytes | bytearray) -> int:
-    checksum = 0
-    for byte in data_bytes:
-        checksum ^= byte
-    return checksum
+def _find_port() -> str:
+    """Find the microcontroller serial port."""
+    ports = list(Path("/dev/serial/by-id/").glob("usb-Raspberry_Pi_Pico*"))
+    if not ports:
+        ports = list(Path("/dev/").glob("ttyACM*"))
+    if ports:
+        return str(ports[0])
+    msg = "No microcontroller port found"
+    raise RuntimeError(msg)
 
 
-def send_thrusters(ser_instance: serial.Serial, values: list[int]) -> None:
-    assert len(values) == NUM_MOTORS, f"Expected {NUM_MOTORS} values, got {len(values)}"
-    data_payload = struct.pack(f"<{NUM_MOTORS}H", *values)
-    packet_without_checksum = bytearray([INPUT_START_BYTE]) + data_payload
-    checksum = calculate_checksum(packet_without_checksum)
-    full_packet = packet_without_checksum + bytearray([checksum])
-    ser_instance.write(full_packet)
-
-
-def print_telemetry(pkt_bytes: bytes | bytearray) -> None:
-    global current_test_motor_id
-
-    if len(pkt_bytes) != TELEMETRY_PACKET_SIZE:
-        return
-
-    if pkt_bytes[0] != TELEMETRY_START_BYTE:
-        return
-
-    calculated_checksum = calculate_checksum(pkt_bytes[0 : TELEMETRY_PACKET_SIZE - 1])
-    received_checksum = pkt_bytes[TELEMETRY_PACKET_SIZE - 1]
-
-    if calculated_checksum != received_checksum:
-        return
-
-    global_id = pkt_bytes[1]
-    packet_type = pkt_bytes[2]
-
-    if packet_type == 0:  # ERPM
-        struct.unpack("<i", pkt_bytes[3:7])[0]
-        if global_id == current_test_motor_id:
-            pass
-    elif packet_type in {1, 2} or packet_type == 3:  # Voltage
-        struct.unpack("<i", pkt_bytes[3:7])[0]
-
-
-def telemetry_reader_thread(
-    ser_instance: serial.Serial, stop_event: threading.Event, data_queue: queue.Queue
-) -> None:
-    read_buffer = b""
-    ser_instance.timeout = 0.01
-
-    while not stop_event.is_set():
-        try:
-            new_bytes = ser_instance.read(ser_instance.in_waiting or 1)
-            if new_bytes:
-                read_buffer += new_bytes
-                while True:
-                    start_index = read_buffer.find(bytes([TELEMETRY_START_BYTE]))
-                    if start_index == -1:
-                        if len(read_buffer) > TELEMETRY_PACKET_SIZE * 2:
-                            read_buffer = b""
-                        break
-
-                    if start_index > 0:
-                        read_buffer = read_buffer[start_index:]
-
-                    if len(read_buffer) >= TELEMETRY_PACKET_SIZE:
-                        packet = read_buffer[:TELEMETRY_PACKET_SIZE]
-                        data_queue.put(packet)
-                        read_buffer = read_buffer[TELEMETRY_PACKET_SIZE:]
-                    else:
-                        break
-
-            time.sleep(0.001)
-        except Exception:
-            if not stop_event.is_set():
-                pass
-            break
-
-
-
-def process_queued_telemetry(data_queue: queue.Queue) -> None:
-    while not data_queue.empty():
-        try:
-            pkt = data_queue.get_nowait()
-            print_telemetry(pkt)
-        except queue.Empty:
-            break
-
-
-def run_test(
-    ser_instance: serial.Serial, description: str, values: list[int], duration_s: float
-) -> None:
-
-    start_time = time.time()
-    next_send_time = start_time
-
-    while time.time() - start_time < duration_s:
-        now = time.time()
-        if now >= next_send_time:
-            send_thrusters(ser_instance, values)
-            next_send_time = now + (SEND_INTERVAL_MS / 1000.0)
-
-        process_queued_telemetry(telemetry_data_queue)
-        time.sleep(0.001)
-
-
-def ramp_test(
-    ser_instance: serial.Serial,
-    description: str,
-    start_val: int,
-    end_val: int,
-    ramp_duration_s: float,
-    hold_duration_s: float,
-) -> None:
-    total_ramp_steps = int(ramp_duration_s * 1000 / SEND_INTERVAL_MS)
-
-    for i in range(total_ramp_steps + 1):
-        progress = i / total_ramp_steps
-        current_val = int(start_val + (end_val - start_val) * progress)
-        send_thrusters(ser_instance, [current_val] * NUM_MOTORS)
-        process_queued_telemetry(telemetry_data_queue)
-        time.sleep(SEND_INTERVAL_MS / 1000.0)
-
-    run_test(
-        ser_instance,
-        f"Hold at {end_val}",
-        [end_val] * NUM_MOTORS,
-        hold_duration_s,
+async def _send_thruster_loop(writer: asyncio.StreamWriter) -> None:
+    """Send thruster commands to spin all motors at 10% forward."""
+    thrust_value = THRUSTER_NEUTRAL_PULSE_WIDTH + int(
+        0.1 * THRUSTER_FORWARD_PULSE_RANGE
     )
+    values = [thrust_value] * NUM_MOTORS
+    data_payload = struct.pack(f"<{NUM_MOTORS}H", *values)
+    packet = bytearray([THRUSTER_INPUT_START_BYTE]) + data_payload
+    checksum = 0
+    for b in packet:
+        checksum ^= b
+    packet.append(checksum)
+    while True:
+        writer.write(packet)
+        await asyncio.sleep(1 / 60)
 
-    for i in range(total_ramp_steps + 1):
-        progress = i / total_ramp_steps
-        current_val = int(end_val - (end_val - start_val) * progress)
-        send_thrusters(ser_instance, [current_val] * NUM_MOTORS)
-        process_queued_telemetry(telemetry_data_queue)
-        time.sleep(SEND_INTERVAL_MS / 1000.0)
+
+async def _read_telemetry_loop(
+    reader: asyncio.StreamReader, logger: logging.Logger
+) -> None:
+    """Read and log ESC telemetry data."""
+    read_buffer = bytearray()
+    while True:
+        data = await reader.read(1)
+        if data:
+            read_buffer.extend(data)
+            while len(read_buffer) >= ESC_TELEMETRY_PACKET_SIZE:
+                start_idx = read_buffer.find(
+                    ESC_TELEMETRY_START_BYTE.to_bytes(1, "big")
+                )
+                if start_idx == -1:
+                    if len(read_buffer) > ESC_MAX_READ_BUFFER_SIZE:
+                        read_buffer = bytearray()
+                    break
+                if start_idx > 0:
+                    read_buffer = read_buffer[start_idx:]
+                if len(read_buffer) >= ESC_TELEMETRY_PACKET_SIZE:
+                    packet = read_buffer[:ESC_TELEMETRY_PACKET_SIZE]
+                    if _validate_telemetry_packet(packet):
+                        _log_telemetry(packet, logger)
+                    read_buffer = read_buffer[ESC_TELEMETRY_PACKET_SIZE:]
+                else:
+                    break
 
 
-def stop_and_pause(ser_instance: serial.Serial, duration_s: float) -> None:
-    send_thrusters(ser_instance, [NEUTRAL] * NUM_MOTORS)
-    start_time = time.time()
-    while time.time() - start_time < duration_s:
-        process_queued_telemetry(telemetry_data_queue)
-        time.sleep(0.001)
+def _validate_telemetry_packet(packet: bytearray) -> bool:
+    """Validate the telemetry packet."""
+    if (
+        len(packet) != ESC_TELEMETRY_PACKET_SIZE
+        or packet[0] != ESC_TELEMETRY_START_BYTE
+    ):
+        return False
+    calculated_checksum = 0
+    for b in packet[:7]:
+        calculated_checksum ^= b
+    return calculated_checksum == packet[7]
+
+
+def _log_telemetry(packet: bytearray, logger: logging.Logger) -> None:
+    """Log the telemetry data."""
+    global_id = packet[1]
+    packet_type = packet[2]
+    value = cast(int, struct.unpack("<i", packet[3:7])[0])
+    if packet_type == ESC_PACKET_TYPE_ERPM:
+        type_str = "ERPM"
+    elif packet_type == ESC_PACKET_TYPE_VOLTAGE:
+        type_str = "Voltage"
+    elif packet_type == ESC_PACKET_TYPE_TEMPERATURE:
+        type_str = "Temperature"
+    elif packet_type == ESC_PACKET_TYPE_CURRENT:
+        type_str = "Current"
+    else:
+        type_str = "Unknown"
+    logger.info(f"Motor {global_id}: {type_str} = {value}")
+
+
+async def main() -> None:
+    """Run the thruster test script."""
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    port = _find_port()
+    reader, writer = await open_serial_connection(url=port, baudrate=115200)
+    try:
+        _ = await asyncio.gather(
+            _send_thruster_loop(writer), _read_telemetry_loop(reader, logger)
+        )
+    except KeyboardInterrupt:
+        pass
+    finally:
+        writer.close()
+        await writer.wait_closed()
 
 
 if __name__ == "__main__":
-    ser = None
-    telemetry_thread = None
-    telemetry_thread_stop_event = threading.Event()
-    telemetry_data_queue = queue.Queue()
-
-    try:
-        ser = serial.Serial(UART_PORT, BAUD)
-
-        telemetry_thread = threading.Thread(
-            target=telemetry_reader_thread,
-            args=(ser, telemetry_thread_stop_event, telemetry_data_queue),
-        )
-        telemetry_thread.daemon = True
-        telemetry_thread.start()
-        time.sleep(0.1)
-
-        for i in range(NUM_MOTORS):
-            current_test_motor_id = i
-
-            for_motor_values = [NEUTRAL] * NUM_MOTORS
-            ramp_duration_s = 5
-            hold_duration_s = 2
-            total_ramp_steps = int(ramp_duration_s * 1000 / SEND_INTERVAL_MS)
-
-            for step in range(total_ramp_steps + 1):
-                progress = step / total_ramp_steps
-                val = int(NEUTRAL + (FIFTY_PERCENT_FORWARD - NEUTRAL) * progress)
-                for_motor_values[i] = val
-                send_thrusters(ser, for_motor_values)
-                process_queued_telemetry(telemetry_data_queue)
-                time.sleep(SEND_INTERVAL_MS / 1000.0)
-
-            for_motor_values[i] = FIFTY_PERCENT_FORWARD
-            run_test(
-                ser, f"Hold Motor {i} at 50% Forward", for_motor_values, hold_duration_s
-            )
-
-            for step in range(total_ramp_steps + 1):
-                progress = step / total_ramp_steps
-                val = int(
-                    FIFTY_PERCENT_FORWARD - (FIFTY_PERCENT_FORWARD - NEUTRAL) * progress
-                )
-                for_motor_values[i] = val
-                send_thrusters(ser, for_motor_values)
-                process_queued_telemetry(telemetry_data_queue)
-                time.sleep(SEND_INTERVAL_MS / 1000.0)
-            stop_and_pause(ser, 2)
-
-            for_motor_values = [NEUTRAL] * NUM_MOTORS
-            total_ramp_steps = int(ramp_duration_s * 1000 / SEND_INTERVAL_MS)
-
-            for step in range(total_ramp_steps + 1):
-                progress = step / total_ramp_steps
-                val = int(NEUTRAL + (FIFTY_PERCENT_REVERSE - NEUTRAL) * progress)
-                for_motor_values[i] = val
-                send_thrusters(ser, for_motor_values)
-                process_queued_telemetry(telemetry_data_queue)
-                time.sleep(SEND_INTERVAL_MS / 1000.0)
-
-            for_motor_values[i] = FIFTY_PERCENT_REVERSE
-            run_test(
-                ser, f"Hold Motor {i} at 50% Reverse", for_motor_values, hold_duration_s
-            )
-
-            for step in range(total_ramp_steps + 1):
-                progress = step / total_ramp_steps
-                val = int(
-                    FIFTY_PERCENT_REVERSE - (FIFTY_PERCENT_REVERSE - NEUTRAL) * progress
-                )
-                for_motor_values[i] = val
-                send_thrusters(ser, for_motor_values)
-                process_queued_telemetry(telemetry_data_queue)
-                time.sleep(SEND_INTERVAL_MS / 1000.0)
-            stop_and_pause(ser, 2)
-
-        current_test_motor_id = -1
-
-    except KeyboardInterrupt:
-        pass
-    except serial.SerialException:
-        pass
-    except Exception:
-        pass
-    finally:
-        if telemetry_thread and telemetry_thread.is_alive():
-            telemetry_thread_stop_event.set()
-            telemetry_thread.join(timeout=2.0)
-
-        if ser and ser.is_open:
-            try:
-                send_thrusters(ser, [NEUTRAL] * NUM_MOTORS)
-                time.sleep(0.1)
-            except Exception:
-                pass
-            finally:
-                ser.close()
-
-        sys.exit(0)
+    asyncio.run(main())
