@@ -19,4 +19,4 @@ class SystemStatus(BaseModel):
     pitch_stabilization: bool = False
     roll_stabilization: bool = False
     depth_hold: bool = False
-    battery_percentage_ema: float = 0
+    battery_percentage: float = 0
