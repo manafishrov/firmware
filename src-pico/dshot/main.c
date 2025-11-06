@@ -124,6 +124,13 @@ int main() {
     }
     last_comm_time = get_absolute_time();
 
+    for (int i = 0; i < NUM_MOTORS; ++i) {
+        struct dshot_controller* ctrl = (i < NUM_MOTORS_0) ? &controller0 : &controller1;
+        int channel = (i < NUM_MOTORS_0) ? i : (i - NUM_MOTORS_0);
+        dshot_command(ctrl, channel, DSHOT_CMD_3D_MODE_ON, 10);
+        dshot_command(ctrl, channel, DSHOT_CMD_SAVE_SETTINGS, 10);
+    }
+
     static uint8_t usb_buf[INPUT_PACKET_SIZE];
     static size_t usb_idx = 0;
 
