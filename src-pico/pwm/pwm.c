@@ -18,7 +18,7 @@ void pwm_controller_init(struct pwm_controller *controller, uint *pins, uint num
 
 void pwm_set_throttle(struct pwm_controller *controller, uint channel, uint value) {
     if (channel >= controller->num_channels) return;
-    uint pulse = (value - 1000) * 4095 / (PWM_RANGE - 1000);
+    uint pulse = value * 4096 / 20000;
     if (pulse > 4095) pulse = 4095;
     pwm_set_gpio_level(controller->pin[channel], pulse);
 }

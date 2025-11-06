@@ -7,8 +7,7 @@
 #include "hardware/clocks.h"
 
 #define PWM_MAX_CHANNELS 8
-#define PWM_FREQUENCY 400
-#define PWM_RANGE 2000
+#define PWM_FREQUENCY 50
 
 struct pwm_controller {
     uint slice[PWM_MAX_CHANNELS];
