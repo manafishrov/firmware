@@ -1,5 +1,6 @@
 """This script mocks the websocket server for testing websocket connections."""
 
+import argparse
 import asyncio
 import json
 import logging
@@ -11,7 +12,6 @@ import websockets
 from websockets import ServerConnection
 
 
-IP_ADDRESS = "127.0.0.1"
 PORT = 9000
 FIRMWARE_VERSION = "1.0.0"
 MOCK_CONFIG = {
@@ -221,15 +221,29 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
 
 async def main() -> None:
     """Run the mock websocket server."""
+    parser = argparse.ArgumentParser(description="Mock websocket server")
+    _ = parser.add_argument(
+        "--local",
+        action="store_true",
+        help="Use local IP 127.0.0.1 instead of 10.10.10.10",
+    )
+    args = parser.parse_args()
+    host = "127.0.0.1" if cast(bool, args.local) else "10.10.10.10"
+
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
 
+    server = None
     try:
-        server = await websockets.serve(_handle_client, IP_ADDRESS, PORT)
-        logger.info(f"Mock websocket server running on {IP_ADDRESS}:{PORT}")
+        server = await websockets.serve(_handle_client, host, PORT)
+        logger.info(f"Mock websocket server running on {host}:{PORT}")
         await server.wait_closed()
-    except KeyboardInterrupt:
+    except (KeyboardInterrupt, asyncio.CancelledError):
         logger.info("Server stopped")
+    finally:
+        if server:
+            server.close()
+            await server.wait_closed()
 
 
 if __name__ == "__main__":
