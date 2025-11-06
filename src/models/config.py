@@ -123,8 +123,8 @@ class RovConfig(CamelCaseModel):
     power: Power = Power(
         user_max_power=30,
         regulator_max_power=30,
-        battery_min_voltage=9.6,
-        battery_max_voltage=12.6,
+        battery_min_voltage=14,
+        battery_max_voltage=21.5,
     )
 
     @field_validator("thruster_allocation", mode="before")

@@ -26,7 +26,7 @@ async def handle_telemetry(
     temps.extend(t for t in state.esc.temperature if t > 0)
     electronics_temperature = sum(temps) / len(temps) if temps else 0
 
-    total_current_a = sum(state.esc.current_ca) / 100
+    total_current_a = sum(state.esc.current)
     work_indicator_percentage = min(
         100, max(0, (total_current_a / MAX_CURRENT_A) * 100)
     )

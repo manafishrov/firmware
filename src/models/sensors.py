@@ -9,8 +9,8 @@ class EscData(BaseModel):
     """Model for ESC data."""
 
     erpm: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
-    current_ca: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
-    voltage_cv: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
+    current: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
+    voltage: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
     temperature: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
 
 

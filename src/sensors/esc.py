@@ -81,8 +81,8 @@ class EscSensor:
             if packet_type == ESC_PACKET_TYPE_ERPM:
                 self.state.esc.erpm[global_id] = value
             elif packet_type == ESC_PACKET_TYPE_VOLTAGE:
-                self.state.esc.voltage_cv[global_id] = value
+                self.state.esc.voltage[global_id] = value
             elif packet_type == ESC_PACKET_TYPE_TEMPERATURE:
                 self.state.esc.temperature[global_id] = value
             elif packet_type == ESC_PACKET_TYPE_CURRENT:
-                self.state.esc.current_ca[global_id] = value
+                self.state.esc.current[global_id] = value
