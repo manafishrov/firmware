@@ -1,3 +1,9 @@
+/*
+ * This file is derived from pio-dshot by Simon Wunderlich.
+ * Original repository: https://github.com/simonwunderlich/pio-dshot
+ * Licensed under the MIT License.
+ */
+
 #include <string.h>
 #include <stdio.h>
 #include "pico/stdlib.h"
