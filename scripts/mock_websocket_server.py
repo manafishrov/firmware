@@ -11,44 +11,45 @@ import websockets
 from websockets import ServerConnection
 
 
-IP_ADDRESS = "10.10.10.10"
+IP_ADDRESS = "127.0.0.1"
 PORT = 9000
 FIRMWARE_VERSION = "1.0.0"
 MOCK_CONFIG = {
+    "microcontrollerFirmwareVariant": "dshot",
     "fluidType": "saltwater",
     "thrusterPinSetup": {
-        "identifiers": [5, 4, 3, 1, 2, 7, 6, 8],
-        "spinDirections": [1, -1, 1, -1, 1, -1, 1, -1],
+        "identifiers": [0, 1, 2, 3, 4, 5, 6, 7],
+        "spinDirections": [1, 1, 1, 1, 1, 1, 1, 1],
     },
     "thrusterAllocation": [
-        [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-        [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-        [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
-        [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0],
-        [0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
-        [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
-        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0],
-        [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+        [1.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0],
+        [1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 1.0, 0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, 1.0, 0.0, -1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, -1.0, 0.0, 1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0, -1.0, 0.0, -1.0, 0.0, 0.0],
+        [-1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
+        [-1.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0],
     ],
     "regulator": {
         "turnSpeed": 40,
-        "pitch": {"kp": 1, "ki": 0.0, "kd": 0.0},
-        "roll": {"kp": 5, "ki": 0.0, "kd": 0.0},
-        "depth": {"kp": 8, "ki": 2.8, "kd": 0.0},
+        "pitch": {"kp": 5, "ki": 0.5, "kd": 1},
+        "roll": {"kp": 1.5, "ki": 0.1, "kd": 0.4},
+        "depth": {"kp": 0, "ki": 0.05, "kd": 0.1},
     },
     "directionCoefficients": {
-        "horizontal": 0.0,
-        "strafe": 0.0,
-        "vertical": 0.0,
-        "pitch": 0.0,
-        "yaw": 0.0,
-        "roll": 0.0,
+        "surge": 0.8,
+        "sway": 0.35,
+        "heave": 0.5,
+        "pitch": 0.4,
+        "yaw": 0.3,
+        "roll": 0.8,
     },
     "power": {
-        "userMaxPower": 1.0,
-        "regulatorMaxPower": 1.0,
-        "batteryMinVoltage": 10.0,
-        "batteryMaxVoltage": 16.8,
+        "userMaxPower": 30,
+        "regulatorMaxPower": 30,
+        "batteryMinVoltage": 9.6,
+        "batteryMaxVoltage": 12.6,
     },
 }
 
@@ -94,7 +95,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     "waterTemperature": round(water_temperature, 2),
                     "electronicsTemperature": round(electronics_temperature, 2),
                     "thrusterRpms": thruster_rpms,
-                    "workIndicatorPercentage": round(work_indicator_percentage, 2),
+                    "workIndicatorPercentage": int(work_indicator_percentage),
                 },
             }
             try:
@@ -193,7 +194,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         },
                     }
                     await websocket.send(json.dumps(log_msg))
-                elif msg_type == "toggleDepthStabilization":
+                elif msg_type == "toggleDepthHold":
                     SYSTEM_STATUS["depth_hold"] = not SYSTEM_STATUS["depth_hold"]
                     log_msg = {
                         "type": "logMessage",
