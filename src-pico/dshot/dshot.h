@@ -13,6 +13,7 @@ enum dshot_telemetry_type {
 	DSHOT_TELEMETRY_VOLTAGE,
 	DSHOT_TELEMETRY_CURRENT,
 	DSHOT_TELEMETRY_TEMPERATURE,
+	DSHOT_TELEMETRY_STATUS,
 };
 
 enum dshot_commands {
@@ -88,7 +89,7 @@ struct dshot_controller {
 	void *telemetry_cb_context;
 };
 
-void dshot_command(struct dshot_controller *controller, uint16_t channel, uint16_t command);
+void dshot_command(struct dshot_controller *controller, uint16_t channel, uint16_t command, uint8_t repeat_count);
 
 void dshot_throttle(struct dshot_controller *controller, uint16_t channel, uint16_t throttle);
 

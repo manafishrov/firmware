@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdbool.h>
 #include "pico/stdlib.h"
 #include "hardware/pio.h"
 #include "hardware/clocks.h"
@@ -36,6 +37,7 @@
 #define TELEMETRY_TYPE_VOLTAGE 1
 #define TELEMETRY_TYPE_TEMPERATURE 2
 #define TELEMETRY_TYPE_CURRENT 3
+#define TELEMETRY_TYPE_EDT_STATUS 4
 
 #define INPUT_START_BYTE 0x5A
 #define INPUT_PACKET_SIZE (1 + NUM_MOTORS * 2 + 1)
@@ -44,6 +46,8 @@
 
 static uint16_t thruster_values[NUM_MOTORS] = {0};
 static absolute_time_t last_comm_time;
+static bool edt_enabled[NUM_MOTORS] = {false};
+static absolute_time_t last_telemetry_time[NUM_MOTORS];
 
 typedef struct {
     uint8_t controller_base_global_id;
@@ -88,6 +92,8 @@ void telemetry_callback(void *context, int channel, enum dshot_telemetry_type ty
     telemetry_context_t *ctx = (telemetry_context_t *)context;
     uint8_t global_motor_id = ctx->controller_base_global_id + channel;
 
+    last_telemetry_time[global_motor_id] = get_absolute_time();
+
     if (type == DSHOT_TELEMETRY_ERPM) {
         send_telemetry(global_motor_id, TELEMETRY_TYPE_ERPM, value);
     } else if (type == DSHOT_TELEMETRY_VOLTAGE) {
@@ -96,6 +102,10 @@ void telemetry_callback(void *context, int channel, enum dshot_telemetry_type ty
         send_telemetry(global_motor_id, TELEMETRY_TYPE_TEMPERATURE, value);
     } else if (type == DSHOT_TELEMETRY_CURRENT) {
         send_telemetry(global_motor_id, TELEMETRY_TYPE_CURRENT, value);
+    } else if (type == DSHOT_TELEMETRY_STATUS) {
+        if (!edt_enabled[global_motor_id]) {
+            edt_enabled[global_motor_id] = true;
+        }
     }
 }
 
@@ -110,6 +120,7 @@ int main() {
 
     for (int i = 0; i < NUM_MOTORS; ++i) {
         thruster_values[i] = CMD_THROTTLE_NEUTRAL;
+        last_telemetry_time[i] = get_absolute_time();
     }
     last_comm_time = get_absolute_time();
 
@@ -151,11 +162,34 @@ int main() {
             usb_idx = 0;
         }
 
+        for (int i = 0; i < NUM_MOTORS; ++i) {
+            if (absolute_time_diff_us(last_telemetry_time[i], get_absolute_time()) > 1000000) {
+                edt_enabled[i] = false;
+            }
+        }
+
+        bool all_idle = true;
+        for (int i = 0; i < NUM_MOTORS; ++i) {
+            if (thruster_values[i] != CMD_THROTTLE_NEUTRAL) {
+                all_idle = false;
+                break;
+            }
+        }
+        if (all_idle) {
+            for (int i = 0; i < NUM_MOTORS; ++i) {
+                if (!edt_enabled[i]) {
+                    struct dshot_controller* ctrl = (i < NUM_MOTORS_0) ? &controller0 : &controller1;
+                    int channel = (i < NUM_MOTORS_0) ? i : (i - NUM_MOTORS_0);
+                    dshot_command(ctrl, channel, DSHOT_EXTENDED_TELEMETRY_ENABLE, 6);
+                }
+            }
+        }
+
         for (int i = 0; i < NUM_MOTORS; i++) {
             struct dshot_controller* ctrl = (i < NUM_MOTORS_0) ? &controller0 : &controller1;
             int channel = (i < NUM_MOTORS_0) ? i : (i - NUM_MOTORS_0);
-            uint16_t dshot_command = translate_throttle_to_dshot(thruster_values[i]);
-            dshot_throttle(ctrl, channel, dshot_command);
+            uint16_t dshot_command_val = translate_throttle_to_dshot(thruster_values[i]);
+            dshot_throttle(ctrl, channel, dshot_command_val);
         }
 
         dshot_loop(&controller0);

@@ -115,9 +115,12 @@ static void dshot_interpret_erpm_telemetry(struct dshot_controller *controller, 
 	case 0x8:
 	case 0xA:
 	case 0xC:
-	case 0xE:
 		motor->stats.rx_bad_type++;
 		return;
+	case 0xE:
+		type = DSHOT_TELEMETRY_STATUS;
+		value = m;
+		break;
 	default:
 		type = DSHOT_TELEMETRY_ERPM;
 		value = m << e;
@@ -231,7 +234,7 @@ static uint16_t dshot_compute_frame(uint16_t throttle, int telemetry) {
 	return (value << 4) | (crc & 0x0F);
 }
 
-void dshot_command(struct dshot_controller *controller, uint16_t channel, uint16_t command)
+void dshot_command(struct dshot_controller *controller, uint16_t channel, uint16_t command, uint8_t repeat_count)
 {
 	struct dshot_motor *motor;
 
@@ -241,7 +244,7 @@ void dshot_command(struct dshot_controller *controller, uint16_t channel, uint16
 	motor = &controller->motor[channel];
 
 	motor->frame = dshot_compute_frame(command, 1);
-	motor->command_counter = 100;
+	motor->command_counter = repeat_count;
 
 	controller->command_last_time = get_absolute_time();
 }
