@@ -75,6 +75,9 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             roll = 15 * math.cos(current_time / 3)
             desired_pitch = 25 * math.sin(current_time / 2)
             desired_roll = 20 * math.cos(current_time / 3)
+            depth = 10 + 5 * math.sin(current_time / 4)
+            water_temperature = 20 + 5 * math.cos(current_time / 5)
+            electronics_temperature = 25 + 3 * math.sin(current_time / 6)
             thruster_rpms = [
                 int(1000 + 500 * math.sin(current_time + i)) for i in range(8)
             ]
@@ -87,6 +90,9 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     "roll": round(roll, 2),
                     "desiredPitch": round(desired_pitch, 2),
                     "desiredRoll": round(desired_roll, 2),
+                    "depth": round(depth, 2),
+                    "waterTemperature": round(water_temperature, 2),
+                    "electronicsTemperature": round(electronics_temperature, 2),
                     "thrusterRpms": thruster_rpms,
                     "workIndicatorPercentage": round(work_indicator_percentage, 2),
                 },
@@ -102,9 +108,6 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
         while True:
             current_time = time.time()
             battery_percentage = int((math.sin(current_time / 5) + 1) * 50)
-            depth = 10 + 5 * math.sin(current_time / 4)
-            water_temperature = 20 + 5 * math.cos(current_time / 5)
-            electronics_temperature = 25 + 3 * math.sin(current_time / 6)
 
             status_msg = {
                 "type": "statusUpdate",
@@ -113,9 +116,6 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     "rollStabilization": SYSTEM_STATUS["roll_stabilization"],
                     "depthHold": SYSTEM_STATUS["depth_hold"],
                     "batteryPercentage": battery_percentage,
-                    "depth": round(depth, 2),
-                    "waterTemperature": round(water_temperature, 2),
-                    "electronicsTemperature": round(electronics_temperature, 2),
                     "health": {
                         "microcontrollerOk": True,
                         "imuOk": True,

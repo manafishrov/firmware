@@ -11,7 +11,4 @@ class RovStatus(CamelCaseModel):
     roll_stabilization: bool
     depth_hold: bool
     battery_percentage: int
-    depth: float
-    water_temperature: float
-    electronics_temperature: float
     health: SystemHealth

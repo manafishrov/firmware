@@ -20,6 +20,12 @@ async def handle_telemetry(
         websocket: The WebSocket connection.
         state: The ROV state.
     """
+    temps: list[float] = []
+    if state.imu.temperature > 0:
+        temps.append(state.imu.temperature)
+    temps.extend(t for t in state.esc.temperature if t > 0)
+    electronics_temperature = sum(temps) / len(temps) if temps else 0
+
     total_current_a = sum(state.esc.current_ca) / 100
     work_indicator_percentage = min(
         100, max(0, (total_current_a / MAX_CURRENT_A) * 100)
@@ -29,6 +35,9 @@ async def handle_telemetry(
         roll=state.regulator.roll,
         desired_pitch=state.regulator.desired_pitch,
         desired_roll=state.regulator.desired_roll,
+        depth=state.pressure.depth,
+        water_temperature=state.pressure.temperature,
+        electronics_temperature=electronics_temperature,
         thruster_rpms=[int(erpm / (THRUSTER_POLES // 2)) for erpm in state.esc.erpm],
         work_indicator_percentage=work_indicator_percentage,
     )
