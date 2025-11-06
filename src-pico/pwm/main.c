@@ -5,15 +5,15 @@
 #include "hardware/clocks.h"
 #include "pwm.h"
 
+
 #define NUM_MOTORS 8
 #define PWM_MIN 1000
 #define PWM_NEUTRAL 1500
 #define PWM_MAX 2000
-
-
-
 #define INPUT_START_BYTE 0x5A
 #define INPUT_PACKET_SIZE (1 + NUM_MOTORS * 2 + 1)
+
+
 
 static uint16_t thruster_values[NUM_MOTORS] = {PWM_NEUTRAL};
 static absolute_time_t last_comm_time;
@@ -25,10 +25,6 @@ uint8_t calculate_checksum(const uint8_t* data, size_t len) {
     }
     return checksum;
 }
-
-
-
-
 
 int main() {
     stdio_init_all();
