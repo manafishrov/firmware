@@ -1,10 +1,10 @@
 .PHONY: lint format typecheck
 
 lint:
-	uv run ruff check
+	ruff check
 
 format:
-	uv run ruff format
+	ruff format
 
 typecheck:
-	uv run basedpyright
+	basedpyright

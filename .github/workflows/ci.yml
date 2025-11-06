@@ -24,7 +24,7 @@ jobs:
     - name: Install dependencies
       run: uv sync
     - name: Install ruff and basedpyright
-      run: uv tool install ruff && uv pip install basedpyright
+      run: uv tool install ruff && uv tool install basedpyright
     - name: Run ruff linter
       run: make lint
     - name: Run ruff formatter check

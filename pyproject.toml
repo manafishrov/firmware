@@ -62,3 +62,4 @@ lint.flake8-annotations.ignore-fully-untyped = false
 reportMissingTypeStubs = false
 reportUnknownVariableType = false
 reportUnusedParameter = false
+reportUnnecessaryTypeIgnoreComment = false
