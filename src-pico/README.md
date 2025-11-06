@@ -2,72 +2,82 @@
 
 The Pico in the Manafish ROV is responsible for sending signals to the thrusters. All required dependencies for working with it are included in the main firmware on the Pi, so you can use the Manafish Pi for developing it.
 
+## Prerequisites
+
+- `pico-sdk`
+- `clang-format` and `clang-tidy` for code formatting/linting
+- `picotool` for flashing
+- `arm-none-eabi-gcc`, CMake, Make
+
+## Available Commands
+
+Run `make help` for a full list. Key targets:
+
+- `make build` - Build both DShot and PWM firmware
+- `make build-dshot` / `make build-pwm` - Build specific firmware
+- `make flash-dshot` / `make flash-pwm` - Build and flash
+- `make copy` - Build and copy to main firmware
+- `make clean` - Clean build directory
+- `make format` - Format code
+- `make lint` - Lint code
+
 ## Build
 
-To build the pico firmware, you need to have the `pico-sdk` installed including its submodules with the `PICO_SDK_PATH` environment variable set to the path of the SDK. We also need `arm-none-eabi-gcc` a cross compiler that lets us build for the pico. We also need `Cmake`, the build system generator and `make` to build the firmware.
+To build the Pico firmware, ensure the `pico-sdk` is available. The Makefile handles CMake configuration and building.
 
-You can build either the dshot or pwm firmware by specifying the FIRMWARE_TYPE option when running cmake:
-
-Create the build directory:
+Navigate to the src-pico directory:
 
 ```sh
-mkdir src-pico/build
+cd src-pico
 ```
 
-Navigate to the build directory:
+To build DShot firmware:
 
 ```sh
-cd src-pico/build
+make build-dshot
 ```
 
-To build dshot firmware:
+To build PWM firmware:
 
 ```sh
-cmake -DFIRMWARE_TYPE=dshot ..
+make build-pwm
 ```
 
-To build pwm firmware:
+To build both:
 
 ```sh
-cmake -DFIRMWARE_TYPE=pwm ..
+make build
 ```
 
-Lastly, run `make` to build the firmware:
-
-```sh
-make
-```
-
-After the build completes successfully, you will find the `.uf2` file inside the `build` directory. This is the file you will flash onto the Pico. For subsequent builds, you can skip the `cmake` step and just run `make` to rebuild the firmware in the `build` directory.
+The `.uf2` files will be in `build/dshot/dshot_firmware.uf2` and `build/pwm/pwm_firmware.uf2`. For rebuilds, the Makefile reconfigures only when needed.
 
 ## Flash
 
-We need to have `picotool` installed to flash the firmware onto the Pico.
+Ensure `picotool` is installed. The Makefile handles flashing after building.
 
-After building, the .uf2 file will be located in either `build/dshot/` or `build/pwm/`, depending on which firmware you built.
-
-To flash the DShot firmware:
+To flash DShot firmware:
 
 ```sh
-picotool load -f -x dshot/dshot_firmware.uf2
+make flash-dshot
 ```
 
-To flash the PWM firmware:
+To flash PWM firmware:
 
 ```sh
-picotool load -f -x pwm/pwm_firmware.uf2
+make flash-pwm
 ```
 
-This should work regardless of if the Pico is in BOOTSEL mode or not.
+This works regardless of BOOTSEL mode.
 
-## Add to firmware
+## Add to Firmware
 
-To make the pico firmware part of the main Manafish firmware, you need to copy the built `.uf2` file to the `src` directory. You can do this with the following commands:
+To copy the Pico firmware into the main Manafish firmware:
 
 ```sh
-cp src-pico/build/dshot/dshot_firmware.uf2 src/microcontroller_firmware/dshot.uf2
-cp src-pico/build/pwm/pwm_firmware.uf2 src/microcontroller_firmware/pwm.uf2
+make copy
 ```
+
+This builds both and copies `dshot_firmware.uf2` to `src/microcontroller_firmware/dshot.uf2` and `pwm_firmware.uf2` to `src/microcontroller_firmware/`.
 
 ## View firmware serial output
 
