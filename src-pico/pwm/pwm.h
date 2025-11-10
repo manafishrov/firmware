@@ -8,6 +8,9 @@
 
 #define PWM_MAX_CHANNELS 8
 #define PWM_FREQUENCY 50
+#define PWM_PERIOD_US 20000
+#define PWM_STEPS 4096
+#define PWM_WRAP (PWM_STEPS - 1)
 
 struct pwm_controller {
   uint slice[PWM_MAX_CHANNELS];
