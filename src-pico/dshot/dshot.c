@@ -111,32 +111,43 @@ static void dshot_interpret_erpm_telemetry(struct dshot_controller *controller,
   uint16_t e, m;
   int value;
 
-  e = (edt & 0xe000) >> 13;
-  m = (edt & 0x1fff) >> 4;
+  uint8_t top = (edt & 0xF000) >> 12;
+  bool is_edt = ((edt & 0x2000) == 0);
 
-  switch ((edt & 0xf000) >> 12) {
-  case 0x2:
-    type = DSHOT_TELEMETRY_TEMPERATURE;
-    value = m;
-    break;
-  case 0x4:
-    type = DSHOT_TELEMETRY_VOLTAGE;
-    value = m / 4;
-    break;
-  case 0x6:
-    type = DSHOT_TELEMETRY_CURRENT;
-    value = m;
-    break;
-  case 0x8:
-  case 0xA:
-  case 0xC:
-    motor->stats.rx_bad_type++;
-    return;
-  case 0xE:
-    type = DSHOT_TELEMETRY_STATUS;
-    value = m;
-    break;
-  default:
+  if (is_edt) {
+    m = (edt >> 4) & 0x0FFF;
+    switch (top) {
+    case 0x2:
+      type = DSHOT_TELEMETRY_TEMPERATURE;
+      value = m;
+      break;
+    case 0x4:
+      type = DSHOT_TELEMETRY_VOLTAGE;
+      value = m / 4;
+      break;
+    case 0x6:
+      type = DSHOT_TELEMETRY_CURRENT;
+      value = m;
+      break;
+    case 0x8:
+    case 0xA:
+    case 0xC:
+      motor->stats.rx_bad_type++;
+      return;
+    case 0xE:
+      if ((edt & 0x0FFF) == 0x000) {
+        type = DSHOT_TELEMETRY_STATUS;
+        value = m;
+        break;
+      }
+    default:
+      motor->stats.rx_bad_type++;
+      return;
+    }
+
+  } else {
+    e = (edt & 0xE000) >> 13;
+    m = (edt & 0x1FFF) >> 4;
     type = DSHOT_TELEMETRY_ERPM;
     value = m << e;
     if (value == 0xff80)
