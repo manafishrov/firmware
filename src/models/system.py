@@ -2,8 +2,10 @@
 
 from pydantic import BaseModel
 
+from .base import CamelCaseModel
 
-class SystemHealth(BaseModel):
+
+class SystemHealth(CamelCaseModel):
     """Model for system health."""
 
     imu_ok: bool = False
@@ -17,3 +19,4 @@ class SystemStatus(BaseModel):
     pitch_stabilization: bool = False
     roll_stabilization: bool = False
     depth_hold: bool = False
+    battery_percentage: float = 0

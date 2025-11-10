@@ -2,20 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-
-if TYPE_CHECKING:
-    from rov_state import RovState
-
 import importlib
 import time
 
 from ...log import log_error, log_info, log_warn
 from ...models.actions import CustomAction, DirectionVector
 from ...models.config import ThrusterTest
+from ...rov_state import RovState
 from ...toast import toast_info, toast_loading
-from ...websocket.message import CancelThrusterTest
+from ...websocket.cancel_messages import CancelThrusterTest
 
 
 async def handle_direction_vector(
@@ -28,8 +23,7 @@ async def handle_direction_vector(
         state: The ROV state.
         payload: The direction vector.
     """
-    log_info(f"Received direction vector: {payload}")
-    state.thrusters.direction_vector = payload.root
+    state.thrusters.direction_vector = payload.root  # pyright: ignore[reportUnknownMemberType]
     state.thrusters.last_direction_time = time.time()
 
 

@@ -2,28 +2,28 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
-
-
-if TYPE_CHECKING:
-    from websockets import Server, ServerConnection
-    from websockets.exceptions import ConnectionClosed
-
-    from rov_state import RovState
-
 import asyncio
 import json
+from typing import cast
 
+from pydantic import TypeAdapter
 import websockets
+from websockets import Server, ServerConnection
+from websockets.exceptions import ConnectionClosed
 
 from ..constants import FIRMWARE_VERSION, IP_ADDRESS, PORT
-from ..log import log_error, log_info, log_warn, set_log_is_client_connected_status
+from ..log import log_error, log_info, log_warn
+from ..rov_state import RovState
 from .handler import handle_message
 from .message import WebsocketMessage
 from .queue import get_message_queue
 from .send.config import handle_send_config, handle_send_firmware_version
 from .send.status import handle_status_update
 from .send.telemetry import handle_telemetry
+from .state import websocket_state
+
+
+websocket_message_adapter = TypeAdapter(WebsocketMessage)
 
 
 class WebsocketServer:
@@ -46,7 +46,7 @@ class WebsocketServer:
             websocket: The WebSocket.
         """
         self.client = websocket
-        set_log_is_client_connected_status(True)
+        websocket_state.is_client_connected = True
         log_info(
             f"Client connected: {cast(tuple[str, int] | None, websocket.remote_address)}."
         )
@@ -83,7 +83,7 @@ class WebsocketServer:
             async for message in websocket:
                 try:
                     data = json.loads(message)  # pyright: ignore[reportAny]
-                    deserialized_msg = WebsocketMessage(**data)  # pyright: ignore[reportCallIssue]
+                    deserialized_msg = websocket_message_adapter.validate_python(data)
                     await handle_message(self.state, websocket, deserialized_msg)  # pyright: ignore[reportUnknownArgumentType]
                 except json.JSONDecodeError:
                     log_warn(
@@ -101,12 +101,13 @@ class WebsocketServer:
             _ = telemetry_task.cancel()
             _ = firmware_task.cancel()
             self.client = None
-            set_log_is_client_connected_status(False)
+            websocket_state.is_client_connected = False
             log_info("Client disconnected.")
 
     async def initialize(self) -> None:
         """Initialize the WebSocket server."""
         self.server = await websockets.serve(self.handler, IP_ADDRESS, PORT)
+        websocket_state.main_event_loop = asyncio.get_running_loop()
         log_info(f"Websocket server started on {IP_ADDRESS}:{PORT}")
 
     async def _send_from_queue(self, websocket: ServerConnection) -> None:

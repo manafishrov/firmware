@@ -2,22 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-from ..constants import SYSTEM_FAILURE_THRESHOLD
-
-
-if TYPE_CHECKING:
-    from rov_state import RovState
-
-    from ..models.config import FluidType
-
 import asyncio
 
 from ms5837 import DENSITY_FRESHWATER, DENSITY_SALTWATER, MS5837_30BA
 
+from ..constants import SYSTEM_FAILURE_THRESHOLD
 from ..log import log_error, log_info
+from ..models.config import FluidType
 from ..models.sensors import PressureData
+from ..rov_state import RovState
 from ..toast import toast_error
 
 

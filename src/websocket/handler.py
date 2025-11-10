@@ -2,18 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
-
-
-if TYPE_CHECKING:
-    from rov_state import RovState
+from typing import cast
 
 from websockets import ServerConnection
 
 from ..log import log_warn
 from ..models.actions import CustomAction, DirectionVector
 from ..models.config import MicrocontrollerFirmwareVariant, RovConfig, ThrusterTest
-from .message import MessageType, WebsocketMessage
+from ..rov_state import RovState
+from .message import WebsocketMessage
 from .receive.actions import (
     handle_cancel_thruster_test,
     handle_custom_action,
@@ -31,6 +28,7 @@ from .receive.state import (
     handle_toggle_pitch_stabilization,
     handle_toggle_roll_stabilization,
 )
+from .types import MessageType
 
 
 async def handle_message(  # noqa: C901,PLR0912

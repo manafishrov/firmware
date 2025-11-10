@@ -130,11 +130,23 @@ in
         pip
         numpy
         websockets
-        smbus2
-        pyserial
         pydantic
+        smbus2
         scipy
+        pyserial-asyncio
       ] ++ [
+        (pkgs.python312Packages.buildPythonPackage rec {
+          pname = "numpydantic";
+          version = "1.7.0";
+          format = "pyproject";
+           src = pkgs.fetchPypi {
+             inherit pname version;
+             hash = "sha256-JoKFvuAm2d/fI+/u4T9gw7ddR94v/fLli08MF6aCTjs=";
+           };
+          nativeBuildInputs = with pkgs.python312Packages; [ pdm-backend ];
+          propagatedBuildInputs = with pkgs.python312Packages; [ pydantic numpy ];
+          doCheck = false;
+        })
         (pkgs.python312Packages.buildPythonPackage {
           pname = "bmi270";
           version = "0.4.3";
@@ -152,7 +164,6 @@ in
             cp -r src/bmi270 $out/${pkgs.python312.sitePackages}/
             runHook postInstall
           '';
-
           doCheck = false;
         })
         (pkgs.python312Packages.buildPythonPackage {
@@ -165,9 +176,9 @@ in
             hash = "sha256-LBwM9sTvr7IaBcY8PcsPZcAbNRWBa4hj7tUC4oOr4eM=";
           };
           doCheck = false;
-        })
-      ]))
-    ];
+         })
+       ]))
+     ];
     sessionVariables = {
       PICO_SDK_PATH = "${pico-sdk-with-submodules}/lib/pico-sdk";
       LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
@@ -195,10 +206,12 @@ in
         activation.copyFirmwareFiles = home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
           if [ ! -f "$HOME/.firmware_initialized" ]; then
             tmpdir=$(mktemp -d)
-            cp -r ${./src}/* $tmpdir/src
-            cp -r ${./tests}/* $tmpdir/tests
+            mkdir $tmpdir/src
+            mkdir $tmpdir/scripts
+            cp -r ${./src}/* $tmpdir/src/
+            cp -r ${./scripts}/* $tmpdir/scripts/
             chmod -R u+w $tmpdir/*
-            cp -rf $tmpdir/* $HOME
+            cp -rf $tmpdir/* $HOME/
             rm -rf $tmpdir
             touch "$HOME/.firmware_initialized"
           fi

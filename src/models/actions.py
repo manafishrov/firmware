@@ -1,18 +1,19 @@
 """Data models for actions in the ROV firmware."""
 
 import numpy as np
-from numpy.typing import NDArray
-from pydantic import RootModel, field_validator
+from numpy.typing import NDArray as NumpyNDArray
+from numpydantic import NDArray, Shape
+from pydantic import RootModel, model_validator
 
 
-class DirectionVector(RootModel[NDArray[np.float64]]):
+class DirectionVector(RootModel[NDArray[Shape["8"], np.float32]]):
     """A direction vector for ROV movement."""
 
-    @field_validator("root", mode="before")
+    @model_validator(mode="before")
     @classmethod
-    def to_float_array(cls, v: list[float]) -> NDArray[np.float64]:
-        """Convert to float array."""
-        return np.array(v, dtype=float)
+    def validate_root(cls, v: list[float]) -> NumpyNDArray[np.float32]:
+        """Validate and convert direction vector to numpy array."""
+        return np.array(v, dtype=np.float32)
 
 
 CustomAction = str

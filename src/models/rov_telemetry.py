@@ -11,5 +11,7 @@ class RovTelemetry(CamelCaseModel):
     desired_pitch: float
     desired_roll: float
     depth: float
-    temperature: float
+    water_temperature: float
+    electronics_temperature: float
     thruster_rpms: list[int]
+    work_indicator_percentage: int

@@ -1,0 +1,8 @@
+# misc
+.DS_Store
+
+# clang
+.cache
+
+# build files
+build

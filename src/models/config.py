@@ -2,16 +2,14 @@
 
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import ClassVar
 
 import numpy as np
+from numpy.typing import NDArray as NumpyNDArray
+from numpydantic import NDArray, Shape
 from pydantic import field_validator
 
 from .base import CamelCaseModel
-
-
-if TYPE_CHECKING:
-    from numpy.typing import NDArray
 
 
 class MicrocontrollerFirmwareVariant(str, Enum):
@@ -31,20 +29,20 @@ class FluidType(str, Enum):
 class ThrusterPinSetup(CamelCaseModel):
     """Model for thruster pin setup."""
 
-    identifiers: NDArray[np.int_]
-    spin_directions: NDArray[np.float64]
+    identifiers: NDArray[Shape["8"], np.int8]  # pyright: ignore[reportGeneralTypeIssues]
+    spin_directions: NDArray[Shape["8"], np.int8]  # pyright: ignore[reportGeneralTypeIssues]
 
     @field_validator("identifiers", mode="before")
     @classmethod
-    def to_int_array(cls, v: list[int]) -> NDArray[np.int_]:
-        """Convert to int array."""
-        return np.array(v, dtype=int)
+    def validate_identifiers(cls, v: list[int]) -> NumpyNDArray[np.int8]:
+        """Validate and convert identifiers to numpy array."""
+        return np.array(v, dtype=np.int8)
 
     @field_validator("spin_directions", mode="before")
     @classmethod
-    def to_float_array(cls, v: list[float]) -> NDArray[np.float64]:
-        """Convert to float array."""
-        return np.array(v, dtype=float)
+    def validate_spin_directions(cls, v: list[int]) -> NumpyNDArray[np.int8]:
+        """Validate and convert spin directions to numpy array."""
+        return np.array(v, dtype=np.int8)
 
 
 class RegulatorPID(CamelCaseModel):
@@ -92,20 +90,21 @@ class RovConfig(CamelCaseModel):
     )
     fluid_type: FluidType = FluidType.SALTWATER
     thruster_pin_setup: ThrusterPinSetup = ThrusterPinSetup(
-        identifiers=np.array([0, 1, 2, 3, 4, 5, 6, 7], dtype=int),
-        spin_directions=np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0], dtype=float),
+        identifiers=np.array([0, 1, 2, 3, 4, 5, 6, 7], dtype=np.int8),
+        spin_directions=np.array([1, 1, 1, 1, 1, 1, 1, 1], dtype=np.int8),
     )
-    thruster_allocation: NDArray[np.float64] = np.array(
+    thruster_allocation: NDArray[Shape["8, 8"], np.float32] = np.array(  # pyright: ignore[reportInvalidTypeForm]
         (
-            (1, 1, 0, 0, 0, 0, -1, -1),
-            (1, -1, 0, 0, 0, 0, -1, 1),
-            (0, 0, 1, 1, 1, 1, 0, 0),
-            (0, 0, 1, 1, -1, -1, 0, 0),
-            (-1, 1, 0, 0, 0, 0, 1, -1),
-            (0, 0, 1, -1, 1, -1, 0, 0),
-            (0, 0, 0, 0, 0, 0, 0, 0),
-            (0, 0, 0, 0, 0, 0, 0, 0),
-        )
+            (1, 1, 0, 0, -1, 0, 0, 0),
+            (1, -1, 0, 0, 1, 0, 0, 0),
+            (0, 0, 1, 1, 0, 1, 0, 0),
+            (0, 0, 1, 1, 0, -1, 0, 0),
+            (0, 0, 1, -1, 0, 1, 0, 0),
+            (0, 0, 1, -1, 0, -1, 0, 0),
+            (-1, -1, 0, 0, 1, 0, 0, 0),
+            (-1, 1, 0, 0, -1, 0, 0, 0),
+        ),
+        dtype=np.float32,
     )
     regulator: Regulator = Regulator(
         turn_speed=40,
@@ -124,17 +123,19 @@ class RovConfig(CamelCaseModel):
     power: Power = Power(
         user_max_power=30,
         regulator_max_power=30,
-        battery_min_voltage=9.6,
-        battery_max_voltage=12.6,
+        battery_min_voltage=14,
+        battery_max_voltage=21.5,
     )
 
     @field_validator("thruster_allocation", mode="before")
     @classmethod
-    def to_float_array(cls, v: list[float]) -> NDArray[np.float64]:
-        """Convert to float array."""
-        return np.array(v, dtype=float)
+    def validate_thruster_allocation(
+        cls, v: list[list[float]]
+    ) -> NumpyNDArray[np.float32]:
+        """Validate and convert thruster allocation to numpy array."""
+        return np.array(v, dtype=np.float32)
 
-    _config_path: Path = Path(__file__).parent / "config.json"
+    _config_path: ClassVar[Path] = Path(__file__).parents[2] / "config.json"
 
     @classmethod
     def load(cls) -> "RovConfig":

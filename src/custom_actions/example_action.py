@@ -2,13 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-
-if TYPE_CHECKING:
-    from rov_state import RovState
-
 from ..log import log_info
+from ..rov_state import RovState
 from ..toast import toast_info
 
 

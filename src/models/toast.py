@@ -1,13 +1,9 @@
 """Toast data models for the ROV firmware."""
 
 from enum import Enum
-from typing import TYPE_CHECKING
 
+from ..websocket.cancel_messages import CancelRegulatorAutoTuning, CancelThrusterTest
 from .base import CamelCaseModel
-
-
-if TYPE_CHECKING:
-    from ..websocket.message import CancelRegulatorAutoTuning, CancelThrusterTest
 
 
 class ToastType(str, Enum):

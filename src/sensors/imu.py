@@ -2,12 +2,6 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
-
-
-if TYPE_CHECKING:
-    from rov_state import RovState
-
 import asyncio
 
 from bmi270.BMI270 import (
@@ -21,10 +15,12 @@ from bmi270.BMI270 import (
     I2C_PRIM_ADDR,
     PERFORMANCE_MODE,
 )
+import numpy as np
 
 from ..constants import SYSTEM_FAILURE_THRESHOLD
 from ..log import log_error, log_info
 from ..models.sensors import ImuData
+from ..rov_state import RovState
 from ..toast import toast_error
 
 
@@ -80,8 +76,8 @@ class Imu:
             return None
         try:
             return ImuData(
-                acceleration=self.imu.get_acc_data(),
-                gyroscope=self.imu.get_gyr_data(),
+                acceleration=self.imu.get_acc_data().astype(np.float32),
+                gyroscope=self.imu.get_gyr_data().astype(np.float32),
                 temperature=self.imu.get_temp_data(),
             )
         except Exception as e:

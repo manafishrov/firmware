@@ -2,15 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
-
-
-if TYPE_CHECKING:
-    from ..rov_state import RovState
-    from ..serial import SerialManager
-
 import asyncio
 import struct
+from typing import cast
 
 from ..constants import (
     ESC_MAX_READ_BUFFER_SIZE,
@@ -22,6 +16,8 @@ from ..constants import (
     ESC_TELEMETRY_START_BYTE,
     NUM_MOTORS,
 )
+from ..rov_state import RovState
+from ..serial import SerialManager
 
 
 class EscSensor:
@@ -85,8 +81,8 @@ class EscSensor:
             if packet_type == ESC_PACKET_TYPE_ERPM:
                 self.state.esc.erpm[global_id] = value
             elif packet_type == ESC_PACKET_TYPE_VOLTAGE:
-                self.state.esc.voltage_cv[global_id] = value
+                self.state.esc.voltage[global_id] = value
             elif packet_type == ESC_PACKET_TYPE_TEMPERATURE:
                 self.state.esc.temperature[global_id] = value
             elif packet_type == ESC_PACKET_TYPE_CURRENT:
-                self.state.esc.current_ca[global_id] = value
+                self.state.esc.current[global_id] = value
