@@ -10,7 +10,7 @@
 #define PWM_FREQUENCY 50
 #define PWM_FULL_REVERSE 1000
 #define PWM_NEUTRAL 1500
-#define PWM_FULL_FORWARD 2000 // The different levels for PWM signals in microseconds
+#define PWM_FULL_FORWARD 2000
 
 struct pwm_controller {
   uint slice[PWM_MAX_CHANNELS];
