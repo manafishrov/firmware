@@ -55,8 +55,15 @@ int main() {
             calculate_checksum(usb_buf, INPUT_PACKET_SIZE - 1);
         if (received_checksum == calculated_checksum) {
           for (int i = 0; i < NUM_MOTORS; ++i) {
-            thruster_values[i] =
+            uint16_t cmd =
                 ((uint16_t)usb_buf[2 * i + 2] << 8) | usb_buf[2 * i + 1];
+
+            if (cmd > 2000) {
+              cmd = 2000;
+            }
+            uint16_t us = PWM_MIN + (cmd * (PWM_MAX - PWM_MIN)) / 2000;
+
+            thruster_values[i] = us;
           }
           last_comm_time = get_absolute_time();
         }
