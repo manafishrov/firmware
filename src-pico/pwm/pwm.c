@@ -10,15 +10,15 @@ void pwm_controller_init(struct pwm_controller *controller, uint *pins,
     controller->pin[i] = pins[i];
     gpio_set_function(pins[i], GPIO_FUNC_PWM);
 
-    controller->slice[i] = pwm_gpio_to_slice_num(pins[i]);
+    uint slice = pwm_gpio_to_slice_num(pins[i]);
+    controller->slice[i] = slice;
 
     uint32_t clock = clock_get_hz(clk_sys);
-
     uint32_t divider = clock / (PWM_FREQUENCY * PWM_STEPS);
 
-    pwm_set_clkdiv(controller->slice[i], divider);
-    pwm_set_wrap(controller->slice[i], PWM_WRAP);
-    pwm_set_enabled(controller->slice[i], true);
+    pwm_set_clkdiv(slice, (float)divider);
+    pwm_set_wrap(slice, PWM_WRAP);
+    pwm_set_enabled(slice, true);
   }
 }
 
@@ -28,11 +28,9 @@ void pwm_set_throttle(struct pwm_controller *controller, uint channel,
     return;
   }
 
-  uint pulse = (uint)((uint32_t)value * PWM_STEPS / PWM_PERIOD_US);
-
-  if (pulse > PWM_WRAP) {
-    pulse = PWM_WRAP;
+  if (value > PWM_WRAP) {
+    value = PWM_WRAP;
   }
 
-  pwm_set_gpio_level(controller->pin[channel], pulse);
+  pwm_set_gpio_level(controller->pin[channel], value);
 }
