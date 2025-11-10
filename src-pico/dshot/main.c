@@ -99,7 +99,7 @@ void telemetry_callback(void *context, int channel,
   if (type == DSHOT_TELEMETRY_ERPM) {
     send_telemetry(global_motor_id, TELEMETRY_TYPE_ERPM, value);
   } else if (type == DSHOT_TELEMETRY_VOLTAGE) {
-    send_telemetry(global_motor_id, TELEMETRY_TYPE_VOLTAGE, value * 4);
+    send_telemetry(global_motor_id, TELEMETRY_TYPE_VOLTAGE, value);
   } else if (type == DSHOT_TELEMETRY_TEMPERATURE) {
     send_telemetry(global_motor_id, TELEMETRY_TYPE_TEMPERATURE, value);
   } else if (type == DSHOT_TELEMETRY_CURRENT) {
