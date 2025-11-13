@@ -13,7 +13,10 @@ enum dshot_telemetry_type {
   DSHOT_TELEMETRY_VOLTAGE,
   DSHOT_TELEMETRY_CURRENT,
   DSHOT_TELEMETRY_TEMPERATURE,
-  DSHOT_TELEMETRY_STATUS,
+  DSHOT_TELEMETRY_DEBUG1,
+  DSHOT_TELEMETRY_DEBUG2,
+  DSHOT_TELEMETRY_STRESS,
+  DSHOT_TELEMETRY_EDT_VERSION,
 };
 
 enum dshot_commands {
@@ -70,6 +73,8 @@ struct dshot_motor {
   uint16_t last_throttle_frame;
   uint8_t command_counter;
   struct dshot_statistics stats;
+  bool delaying;
+  absolute_time_t delay_until;
 };
 
 typedef void (*dshot_telemetry_callback_t)(void *context, int channel,

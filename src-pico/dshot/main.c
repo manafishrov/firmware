@@ -37,6 +37,7 @@
 #define TELEMETRY_TYPE_TEMPERATURE 2
 #define TELEMETRY_TYPE_CURRENT 3
 #define TELEMETRY_TYPE_EDT_STATUS 4
+#define TELEMETRY_TYPE_STRESS 5
 
 #define INPUT_START_BYTE 0x5A
 #define INPUT_PACKET_SIZE (1 + NUM_MOTORS * 2 + 1)
@@ -104,10 +105,12 @@ void telemetry_callback(void *context, int channel,
     send_telemetry(global_motor_id, TELEMETRY_TYPE_TEMPERATURE, value);
   } else if (type == DSHOT_TELEMETRY_CURRENT) {
     send_telemetry(global_motor_id, TELEMETRY_TYPE_CURRENT, value);
-  } else if (type == DSHOT_TELEMETRY_STATUS) {
+  } else if (type == DSHOT_TELEMETRY_EDT_VERSION) {
     if (!edt_enabled[global_motor_id]) {
       edt_enabled[global_motor_id] = true;
     }
+  } else if (type == DSHOT_TELEMETRY_STRESS) {
+    send_telemetry(global_motor_id, TELEMETRY_TYPE_STRESS, value);
   }
 }
 

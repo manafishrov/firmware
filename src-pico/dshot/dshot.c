@@ -8,6 +8,7 @@
 #include "dshot.pio.h"
 #include "hardware/pio.h"
 #include "hardware/sync.h"
+#include "hardware/timer.h"
 #include "pico/stdlib.h"
 #include <stdio.h>
 #include <string.h>
@@ -112,31 +113,20 @@ static void dshot_interpret_erpm_telemetry(struct dshot_controller *controller,
   int value;
 
   uint8_t top = (edt & 0xF000) >> 12;
-  bool is_edt = ((edt & 0x2000) == 0);
+  bool is_edt = (top != 0 && (top & 0x8) == 0);
 
   if (is_edt) {
-    m = (edt >> 4) & 0x0FFF;
+    m = (edt >> 4) & 0xFF;
     switch (top) {
-    case 0x2:
-      type = DSHOT_TELEMETRY_TEMPERATURE;
-      value = m;
-      break;
-    case 0x4:
-      type = DSHOT_TELEMETRY_VOLTAGE;
-      value = m / 4;
-      break;
-    case 0x6:
-      type = DSHOT_TELEMETRY_CURRENT;
-      value = m;
-      break;
-    case 0x8:
-    case 0xA:
-    case 0xC:
-      motor->stats.rx_bad_type++;
-      return;
+    case 0x2: type = DSHOT_TELEMETRY_TEMPERATURE; value = m; break;
+    case 0x4: type = DSHOT_TELEMETRY_VOLTAGE; value = m / 4; break;
+    case 0x6: type = DSHOT_TELEMETRY_CURRENT; value = m; break;
+    case 0x8: type = DSHOT_TELEMETRY_DEBUG1; value = m; break;
+    case 0xA: type = DSHOT_TELEMETRY_DEBUG2; value = m; break;
+    case 0xC: type = DSHOT_TELEMETRY_STRESS; value = m; break;
     case 0xE:
       if ((edt & 0x0FFF) == 0x000) {
-        type = DSHOT_TELEMETRY_STATUS;
+        type = DSHOT_TELEMETRY_EDT_VERSION;
         value = m;
         break;
       }
@@ -220,7 +210,13 @@ void dshot_loop_async_start(struct dshot_controller *controller) {
       motor->frame = motor->last_throttle_frame;
   }
 
-  if (pio_sm_is_tx_fifo_empty(controller->pio, controller->sm)) {
+  if (motor->delaying) {
+    if (absolute_time_diff_us(get_absolute_time(), motor->delay_until) >= 0) {
+      motor->delaying = false;
+    }
+  }
+
+  if (!motor->delaying && pio_sm_is_tx_fifo_empty(controller->pio, controller->sm)) {
     uint32_t cycles = (25 * controller->speed * 40) / 1000;
     pio_sm_put(controller->pio, controller->sm, ~motor->frame << 16);
     pio_sm_put(controller->pio, controller->sm, cycles);
@@ -268,6 +264,15 @@ void dshot_command(struct dshot_controller *controller, uint16_t channel,
 
   motor->frame = dshot_compute_frame(command, 1);
   motor->command_counter = repeat_count;
+
+  motor->delaying = false;
+  if (command == DSHOT_CMD_SAVE_SETTINGS) {
+    motor->delaying = true;
+    motor->delay_until = delayed_by_ms(get_absolute_time(), 35);
+  } else if (command == DSHOT_CMD_ESC_INFO) {
+    motor->delaying = true;
+    motor->delay_until = delayed_by_ms(get_absolute_time(), 12);
+  }
 
   controller->command_last_time = get_absolute_time();
 }
