@@ -10,6 +10,7 @@ from ..constants import (
     ESC_MAX_READ_BUFFER_SIZE,
     ESC_PACKET_TYPE_CURRENT,
     ESC_PACKET_TYPE_ERPM,
+    ESC_PACKET_TYPE_STRESS,
     ESC_PACKET_TYPE_TEMPERATURE,
     ESC_PACKET_TYPE_VOLTAGE,
     ESC_TELEMETRY_PACKET_SIZE,
@@ -86,3 +87,5 @@ class EscSensor:
                 self.state.esc.temperature[global_id] = value
             elif packet_type == ESC_PACKET_TYPE_CURRENT:
                 self.state.esc.current[global_id] = value
+            elif packet_type == ESC_PACKET_TYPE_STRESS:
+                self.state.esc.stress[global_id] = value

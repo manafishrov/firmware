@@ -12,6 +12,7 @@ class EscData(BaseModel):
     current: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
     voltage: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
     temperature: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
+    stress: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
 
 
 class ImuData(BaseModel):
