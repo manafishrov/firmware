@@ -10,10 +10,11 @@ from serial_asyncio import open_serial_connection
 
 
 ESC_MAX_READ_BUFFER_SIZE = 16
-ESC_PACKET_TYPE_CURRENT = 3
 ESC_PACKET_TYPE_ERPM = 0
-ESC_PACKET_TYPE_TEMPERATURE = 2
 ESC_PACKET_TYPE_VOLTAGE = 1
+ESC_PACKET_TYPE_TEMPERATURE = 2
+ESC_PACKET_TYPE_CURRENT = 3
+ESC_PACKET_TYPE_STRESS = 4
 ESC_TELEMETRY_PACKET_SIZE = 8
 ESC_TELEMETRY_START_BYTE = 0xA5
 NUM_MOTORS = 8
@@ -104,6 +105,8 @@ def _log_telemetry(packet: bytearray, logger: logging.Logger) -> None:
         type_str = "Temperature"
     elif packet_type == ESC_PACKET_TYPE_CURRENT:
         type_str = "Current"
+    elif packet_type == ESC_PACKET_TYPE_STRESS:
+        type_str = "Stress"
     else:
         type_str = "Unknown"
     logger.info(f"Motor {global_id}: {type_str} = {value}")
