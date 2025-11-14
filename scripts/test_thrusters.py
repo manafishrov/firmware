@@ -22,6 +22,8 @@ THRUSTER_FORWARD_PULSE_RANGE = 1000
 THRUSTER_INPUT_START_BYTE = 0x5A
 THRUSTER_NEUTRAL_PULSE_WIDTH = 1000
 
+erpm_count = [0]
+
 
 def _find_port() -> str:
     """Find the microcontroller serial port."""
@@ -98,6 +100,9 @@ def _log_telemetry(packet: bytearray, logger: logging.Logger) -> None:
     packet_type = packet[2]
     value = cast(int, struct.unpack("<i", packet[3:7])[0])
     if packet_type == ESC_PACKET_TYPE_ERPM:
+        erpm_count[0] += 1
+        if erpm_count[0] % 100 != 0:
+            return
         type_str = "ERPM"
     elif packet_type == ESC_PACKET_TYPE_VOLTAGE:
         type_str = "Voltage"
