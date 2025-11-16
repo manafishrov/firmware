@@ -5,6 +5,8 @@ from __future__ import annotations
 import importlib
 import time
 
+from constants import THRUSTER_TEST_TOAST_ID
+
 from ...log import log_error, log_info, log_warn
 from ...models.actions import CustomAction, DirectionVector
 from ...models.config import ThrusterTest
@@ -42,7 +44,7 @@ async def handle_start_thruster_test(
     state.thrusters.test_start_time = time.time()
     state.thrusters.last_remaining = 10
     toast_loading(
-        toast_id="thruster-test",
+        toast_id=THRUSTER_TEST_TOAST_ID,
         message=f"Testing thruster {payload}",
         description="10 seconds remaining",
         cancel=CancelThrusterTest(payload=payload),
@@ -62,7 +64,7 @@ async def handle_cancel_thruster_test(
     log_info(f"Cancelling thruster test: {payload}")
     state.thrusters.test_thruster = None
     toast_info(
-        toast_id="thruster-test",
+        toast_id=THRUSTER_TEST_TOAST_ID,
         message="Thruster test cancelled",
         description=None,
         cancel=None,

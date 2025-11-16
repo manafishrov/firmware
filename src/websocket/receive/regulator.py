@@ -87,7 +87,7 @@ async def handle_cancel_regulator_auto_tuning(
     log_info("Cancelling regulator auto tuning")
     state.regulator.auto_tuning_active = False
     toast_info(
-        toast_id="regulator-auto-tuning",
+        toast_id=AUTO_TUNING_TOAST_ID,
         message="Auto tuning cancelled",
         description=None,
         cancel=None,
