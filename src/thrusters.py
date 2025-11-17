@@ -145,18 +145,13 @@ class Thrusters:
             return None
         else:
             thrust_vector = np.zeros(NUM_MOTORS, dtype=np.float32)
-            logical_index = test_thruster
-            identifiers = cast(
-                NDArray[np.int8], self.state.rov_config.thruster_pin_setup.identifiers
-            )
-            hardware_index = (identifiers[logical_index],)
-            thrust_vector[hardware_index] = 0.1
+            thrust_vector[test_thruster] = 0.1
             remaining = int(THRUSTER_TEST_DURATION_SECONDS - elapsed)
             if remaining != self.state.thrusters.last_remaining:
                 self.state.thrusters.last_remaining = remaining
                 toast_loading(
                     toast_id=THRUSTER_TEST_TOAST_ID,
-                    message=f"Testing thruster {logical_index}",
+                    message=f"Testing thruster {test_thruster}",
                     description=f"{remaining} seconds remaining",
                     cancel=None,
                 )
