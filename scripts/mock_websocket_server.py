@@ -209,6 +209,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     logger.info(f"Custom action: {payload}")
                 else:
                     logger.warning(f"Unhandled message type: {msg_type}")
+                    logger.info(payload)
             except json.JSONDecodeError:
                 logger.warning("Received non-JSON message")
 
