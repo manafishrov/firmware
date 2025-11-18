@@ -1,6 +1,8 @@
 [project]
 name = "manafish-firmware"
 version = "1.0.0"
+description = "Firmware for the Manafish ROV"
+license = "AGPL-3.0-or-later"
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "numpy==2.3.4",
