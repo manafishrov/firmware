@@ -6,7 +6,6 @@ import importlib
 import time
 
 from ...constants import THRUSTER_TEST_TOAST_ID
-
 from ...log import log_error, log_info, log_warn
 from ...models.actions import CustomAction, DirectionVector
 from ...models.config import ThrusterTest
