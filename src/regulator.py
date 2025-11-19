@@ -405,7 +405,7 @@ class Regulator:
                 self.auto_tuning_step = "oscillate"
                 self.auto_tuning_oscillation_start = current_time
                 log_info(f"Pitch amplitude found: {self.auto_tuning_amplitude}")
-            return np.array([0, 0, 0, actuation, 0, 0], dtype=np.float32)
+            return np.array([0, 0, 0, actuation, 0, 0, 0, 0], dtype=np.float32)
 
         elif self.auto_tuning_step == "oscillate":
             elapsed = current_time - self.auto_tuning_oscillation_start
@@ -535,7 +535,8 @@ class Regulator:
                     0.001 if depth > self.state.regulator.desired_depth else -0.001
                 )
                 return np.array(
-                    [0, 0, self.auto_tuning_zero_actuation, 0, 0, 0], dtype=np.float32
+                    [0, 0, self.auto_tuning_zero_actuation, 0, 0, 0, 0, 0],
+                    dtype=np.float32,
                 )
 
         elif self.auto_tuning_step == "find_amplitude":
@@ -558,7 +559,7 @@ class Regulator:
                 self.auto_tuning_step = "oscillate"
                 self.auto_tuning_oscillation_start = current_time
                 log_info(f"Depth amplitude found: {self.auto_tuning_amplitude}")
-            return np.array([0, 0, actuation, 0, 0, 0], dtype=np.float32)
+            return np.array([0, 0, actuation, 0, 0, 0, 0, 0], dtype=np.float32)
 
         elif self.auto_tuning_step == "oscillate":
             elapsed = current_time - self.auto_tuning_oscillation_start
