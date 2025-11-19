@@ -106,8 +106,8 @@ class Thrusters:
         thrust_vector = self._create_thrust_vector_from_thruster_allocation(
             direction_vector
         )
-        thrust_vector = self._correct_thrust_vector_spin_directions(thrust_vector)
         thrust_vector = self._reorder_thrust_vector(thrust_vector)
+        thrust_vector = self._correct_thrust_vector_spin_directions(thrust_vector)
         return thrust_vector
 
     def _compute_thrust_values(self, thrust_vector: NDArray[np.float32]) -> list[int]:
