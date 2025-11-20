@@ -102,7 +102,17 @@ class Thrusters:
             regulator_actuation = self.regulator.get_actuation()
         else:
             regulator_actuation = np.zeros(8, dtype=np.float32)
+
+        #Setting pitch and roll actuation to 0 to avoid forward connection
+        if self.state.system_status.pitch_stabilization:
+            direction_vector[3] = 0
+
+        if self.state.system_status.roll_stabilization:
+            direction_vector[5] = 0
+
         direction_vector += regulator_actuation
+        _ = np.clip(direction_vector, -1, 1, out=direction_vector)
+
         thrust_vector = self._create_thrust_vector_from_thruster_allocation(
             direction_vector
         )
