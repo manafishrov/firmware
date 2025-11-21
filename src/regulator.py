@@ -232,7 +232,7 @@ class Regulator:
 
             current_pitch = self.state.regulator.pitch
             self.integral_value_pitch += (desired_pitch - current_pitch) * self.delta_t
-            self.integral_value_pitch = np.clip(self.integral_value_pitch, -100, 100)
+            self.integral_value_pitch = np.clip(self.integral_value_pitch, -100, 100) #The number 100 here represents degrees
             actuation = (
                 config.pitch.kp * np.radians(desired_pitch - current_pitch)
                 + config.pitch.ki * np.radians(self.integral_value_pitch)
@@ -241,6 +241,8 @@ class Regulator:
             current_roll = self.state.regulator.roll
             if current_roll >= PITCH_MAX or current_roll <= PITCH_MIN:
                 actuation = -actuation
+        else:
+            self.integral_value_pitch = 0.0 # Reset integral value when pitch stabilization is disabled
         return actuation
 
     def _handle_roll_stabilization(self) -> float:
@@ -258,6 +260,8 @@ class Regulator:
                 + config.roll.ki * np.radians(self.integral_value_roll)
                 - config.roll.kd * np.radians(cast(float, self.gyro[0]))
             )
+        else:
+            self.integral_value_roll = 0.0 # Reset integral value when roll stabilization is disabled
         return actuation
 
     def _change_coordinate_system_movement(
