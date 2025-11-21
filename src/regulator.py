@@ -66,7 +66,7 @@ class Regulator:
         accel_pitch: float,
         accel_roll: float,
     ) -> tuple[float, float]:
-        if current_roll >= PITCH_MAX or current_roll <= PITCH_MIN:
+        if current_roll >= 90 or current_roll <= -90:
             current_pitch = (
                 COMPLEMENTARY_FILTER_ALPHA
                 * (current_pitch + cast(float, self.gyro[1]) * self.delta_t)
