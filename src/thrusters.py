@@ -86,6 +86,7 @@ class Thrusters:
             reordered[i] = thrust_vector[identifiers[i]]
         return reordered
 
+    # THIS FUNCTION IS RESPONSIBLE FOR GOING FROM DIRECTION VECTOR TO THRUST VECTOR
     def _prepare_thrust_vector(
         self, direction_vector: NDArray[np.float32]
     ) -> NDArray[np.float32]:
@@ -113,9 +114,12 @@ class Thrusters:
         direction_vector += regulator_actuation
         _ = np.clip(direction_vector, -1, 1, out=direction_vector)
 
-        thrust_vector = self._create_thrust_vector_from_thruster_allocation(
-            direction_vector
-        )
+        # Now that we have the final direction vector, we can change the coordinate system for orientation actuation (if regulator enabled)
+        if (self.state.system_status.pitch_stabilization or self.state.system_status.roll_stabilization):
+            direction_vector = self.regulator._change_coordinate_system_orientation(direction_vector,self.state.regulator.pitch,self.state.regulator.roll,)
+
+        thrust_vector = self._create_thrust_vector_from_thruster_allocation(direction_vector)
+
         thrust_vector = self._reorder_thrust_vector(thrust_vector)
         thrust_vector = self._correct_thrust_vector_spin_directions(thrust_vector)
         return thrust_vector

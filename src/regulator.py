@@ -293,6 +293,46 @@ class Regulator:
             x, *_ = np.linalg.lstsq(a, b, rcond=None)
         return x
 
+    def _change_coordinate_system_orientation(
+        self,
+        actuation: NDArray[np.float32],
+        current_pitch: float,
+        current_roll: float,
+    ) -> NDArray[np.float32]:
+        # Actuation values in the global coordinate system
+        pitch_g = cast(float, actuation[3])
+        yaw_g = cast(float, actuation[4])
+        roll_g = cast(float, actuation[5])
+
+        # Retrieving direction coefficients from configuration
+        dir_coeffs = self.state.rov_config.direction_coefficients 
+        pitch_coeff = dir_coeffs.pitch
+        yaw_coeff = dir_coeffs.yaw
+        roll_coeff = dir_coeffs.roll
+
+        # Calculating sin and cos of pitch and roll angles to be used in transformation
+        cp = cast(float, np.cos(cast(float, np.deg2rad(current_pitch))))
+        sp = cast(float, np.sin(cast(float, np.deg2rad(current_pitch))))
+        cr = cast(float, np.cos(cast(float, np.deg2rad(current_roll))))
+        sr = cast(float, np.sin(cast(float, np.deg2rad(current_roll))))
+
+
+        # PROBLEM -> The code under here assumes that the yaw is passed in and thus also passes through this filter. 
+        try: 
+            pitch_l = cr * pitch_g + sr * cp * yaw_g * (yaw_coeff / pitch_coeff)   # scale so pitch matches yaw  
+            roll_l  = roll_g - sp * yaw_g * (yaw_coeff / roll_coeff)              # scale so roll matches yaw
+            yaw_l   = cr * cp * yaw_g - sr * pitch_g * (pitch_coeff / yaw_coeff)   # scale so yaw matches pitch
+        except ZeroDivisionError:
+            pitch_l, yaw_l, roll_l = pitch_g, yaw_g, roll_g
+            log_error("Regulator coordinate system change failed because one of the direction coefficients for pitch, yaw or roll is 0")
+
+        # In the return we leave movement actuation unchanged and only modify orientation actuation
+        new_actuation = actuation.copy()
+        new_actuation[3] = pitch_l
+        new_actuation[4] = yaw_l
+        new_actuation[5] = roll_l
+        return new_actuation
+
     def _scale_regulator_actuation(
         self, actuation: NDArray[np.float32]
     ) -> NDArray[np.float32]:
@@ -308,11 +348,12 @@ class Regulator:
         regulator_actuation[0:3] = depth_actuation
 
         pitch_actuation = self._handle_pitch_stabilization()
-        regulator_actuation[3] = pitch_actuation
+        regulator_actuation[3] = pitch_actuation 
 
         roll_actuation = self._handle_roll_stabilization()
         regulator_actuation[5] = roll_actuation
 
+        # Scales regulator actuation according to "Regulator Max Power" configured by user in settings
         regulator_actuation = self._scale_regulator_actuation(regulator_actuation)
 
         return regulator_actuation
