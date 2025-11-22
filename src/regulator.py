@@ -195,13 +195,13 @@ class Regulator:
     def _handle_depth_hold(self) -> NDArray[np.float32]:
         actuation = np.zeros(3, dtype=np.float32)
         if self.state.system_status.depth_hold:
-            if self.state.regulator.desired_depth == 0.0:
+            # If depth = -1, meaning depth hold was just enabled, set desired depth to current depth
+            if self.state.regulator.desired_depth == -1:
                 self.state.regulator.desired_depth = self.state.pressure.depth
-                self.integral_value_depth = 0.0
 
             current_depth = self.state.pressure.depth
             desired_depth = self.state.regulator.desired_depth
-            self.integral_value_depth += (desired_depth - current_depth) * self.delta_t
+            self.integral_value_depth -= (desired_depth - current_depth) * self.delta_t
             self.integral_value_depth = np.clip(self.integral_value_depth, -3, 3)
 
             alpha = cast(float, np.exp(-self.delta_t / DEPTH_DERIVATIVE_EMA_TAU))
@@ -222,6 +222,10 @@ class Regulator:
             actuation = self._change_coordinate_system_movement(
                 depth_actuation, self.state.regulator.pitch, self.state.regulator.roll
             )
+        else:
+            self.integral_value_depth = 0.0  # Reset integral value when depth hold is disabled
+            self.state.regulator.desired_depth = -1  # Reset desired depth
+
         return actuation
 
     def _handle_pitch_stabilization(self) -> float:
