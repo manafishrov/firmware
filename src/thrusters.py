@@ -116,7 +116,7 @@ class Thrusters:
 
         # Now that we have the final direction vector, we can change the coordinate system for orientation actuation (if regulator enabled)
         if (self.state.system_status.pitch_stabilization or self.state.system_status.roll_stabilization):
-            direction_vector = self.regulator._change_coordinate_system_orientation(direction_vector,self.state.regulator.pitch,self.state.regulator.roll,)
+            direction_vector = self.regulator.change_coordinate_system_orientation(direction_vector,self.state.regulator.pitch,self.state.regulator.roll,)
 
         thrust_vector = self._create_thrust_vector_from_thruster_allocation(direction_vector)
 

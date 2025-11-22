@@ -297,7 +297,7 @@ class Regulator:
             x, *_ = np.linalg.lstsq(a, b, rcond=None)
         return x
 
-    def _change_coordinate_system_orientation(
+    def change_coordinate_system_orientation(
         self,
         actuation: NDArray[np.float32],
         current_pitch: float,
