@@ -48,6 +48,8 @@ class Thrusters:
         self.serial_manager: SerialManager = serial_manager
         self.regulator: Regulator = regulator
 
+        self.previous_direction_vector: NDArray[np.float32] = np.zeros(8, dtype=np.float32)
+
     def _scale_direction_vector_with_user_max_power(
         self, direction_vector: NDArray[np.float32]
     ) -> NDArray[np.float32]:
@@ -75,6 +77,17 @@ class Thrusters:
         _ = np.clip(thrust_vector, -1, 1, out=thrust_vector)
         return thrust_vector
 
+    def _smooth_out_direction_vector(
+        self, direction_vector: NDArray[np.float32],
+        previous_direction_vector: NDArray[np.float32],
+    ) -> NDArray[np.float32]:
+        #smoothing_factor = self.state.rov_config.smoothing_factor
+        smoothing_factor = np.float32(0.8)
+        result = (
+            smoothing_factor * previous_direction_vector + (np.float32(1) - smoothing_factor) * direction_vector
+        ).astype(np.float32)
+        return result
+
     def _reorder_thrust_vector(
         self, thrust_vector: NDArray[np.float32]
     ) -> NDArray[np.float32]:
@@ -91,10 +104,15 @@ class Thrusters:
         self, direction_vector: NDArray[np.float32]
     ) -> NDArray[np.float32]:
         self.regulator.update_regulator_data_from_imu()
+
+        # ADD SMOOTHING HERE
+        direction_vector = self._smooth_out_direction_vector(direction_vector, self.previous_direction_vector)
+        self.previous_direction_vector = direction_vector.copy() # Update smoothed vector for next iteration
+
         self.regulator.update_desired_from_direction_vector(direction_vector)
-        direction_vector = self._scale_direction_vector_with_user_max_power(
-            direction_vector
-        )
+
+        direction_vector = self._scale_direction_vector_with_user_max_power(direction_vector)
+
         if (
             self.state.system_status.pitch_stabilization
             or self.state.system_status.roll_stabilization
