@@ -11,26 +11,8 @@ permissions:
   id-token: write
 
 jobs:
-  create-release:
-    runs-on: ubuntu-latest
-    outputs:
-      release_id: ${{ steps.create_release.outputs.id }}
-    steps:
-      - name: Create draft release
-        id: create_release
-        uses: softprops/action-gh-release@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          body: 'Release assets for ${{ github.ref_name }}.'
-          draft: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
-
   build-sd-image:
-    needs: create-release
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04-arm
     strategy:
       fail-fast: false
       matrix:
@@ -58,10 +40,32 @@ jobs:
       - name: Build SD image
         run: nix build .#${{ matrix.pi }}-${{ matrix.camera }}
 
+      - name: Check if release exists
+        id: check_release
+        run: |
+          if gh release view ${{ github.ref_name }} --json id > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create draft release
+        if: steps.check_release.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: 'Release assets for ${{ github.ref_name }}.'
+          draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+
       - name: Upload SD image
         uses: softprops/action-gh-release@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           files: result/sd-image/*.img.zst
-          release_id: ${{ needs.create-release.outputs.release_id }}
