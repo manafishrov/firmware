@@ -16,8 +16,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        pi: [pi3, pi4]
-        camera: [ov5647, imx219, imx477]
+        pi: [pi3]
+        camera: [imx219, imx477]
     steps:
       - name: Checkout code
         uses: actions/checkout@v6

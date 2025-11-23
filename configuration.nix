@@ -8,6 +8,20 @@ in
   # Nix state version
   system.stateVersion = "25.05";
 
+  # Disable GUI options for packages
+  nixpkgs.overlays = [
+    (final: prev: {
+      rpicam-apps = prev.rpicam-apps.override {
+        withQtPreview = false;
+        withEglPreview = false;
+        withOpenCVPostProc = false;
+      };
+      libadwaita = prev.libadwaita.overrideAttrs (old: {
+        doCheck = false;
+      });
+    })
+  ];
+
   # Remove documentation to save space
   documentation = {
     enable = false;
@@ -66,7 +80,7 @@ in
     settings.PasswordAuthentication = true;
   };
 
-  # Enable camera, UART and I2C with a high baud rate
+  # Enable camera and I2C with a high baud rate
   hardware = {
     i2c.enable = true;
     raspberry-pi.config.all = {
@@ -74,12 +88,6 @@ in
         ${cameraModule} = {
           enable = true;
           params = {};
-        };
-      };
-      options = {
-        enable_uart = {
-          enable = true;
-          value = true;
         };
       };
       base-dt-params = {
