@@ -28,7 +28,7 @@ jobs:
           draft: true
           prerelease: ${{ contains(github.ref_name, '-') }}
 
-  build-sd-images:
+  build-sd-image:
     needs: create-release
     runs-on: ubuntu-latest
     strategy:
