@@ -22,6 +22,7 @@ from .constants import (
     PITCH_MIN,
     ROLL_WRAP_MAX,
     ROLL_WRAP_MIN,
+    ROLL_UPSIDE_DOWN_THRESHOLD,
 )
 from .log import log_error, log_info
 from .models.config import (
@@ -66,7 +67,7 @@ class Regulator:
         accel_pitch: float,
         accel_roll: float,
     ) -> tuple[float, float]:
-        if current_roll >= 90 or current_roll <= -90:
+        if current_roll >= ROLL_UPSIDE_DOWN_THRESHOLD or current_roll <= -ROLL_UPSIDE_DOWN_THRESHOLD:
             current_pitch = (
                 COMPLEMENTARY_FILTER_ALPHA
                 * (current_pitch + cast(float, self.gyro[1]) * self.delta_t)
