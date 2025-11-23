@@ -22,6 +22,13 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
 
+      - name: Cache Nix eval
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/nix
+          key: nix-eval-${{ hashFiles('flake.lock', 'flake.nix') }}
+          restore-keys: nix-eval-
+
       - name: Install Nix
         uses: cachix/install-nix-action@v31
         with:
