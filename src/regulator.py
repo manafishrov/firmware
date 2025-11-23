@@ -308,6 +308,7 @@ class Regulator:
         current_pitch: float,
         current_roll: float,
     ) -> NDArray[np.float32]:
+        """Change coordinate system of pitch, yaw and roll to a global coordinate system."""
         # Actuation values in the global coordinate system
         pitch_g = cast(float, actuation[3])
         yaw_g = cast(float, actuation[4])
