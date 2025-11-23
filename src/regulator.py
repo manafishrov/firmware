@@ -219,7 +219,7 @@ class Regulator:
                 - config.depth.kd * self.current_dt_depth
             )
 
-            actuation = self._compute_thrust_allocation(
+            actuation = self._compute_thruster_actuation_with_direction_coefficients(
                 depth_actuation, self.state.regulator.pitch, self.state.regulator.roll
             )
         return actuation
@@ -260,7 +260,7 @@ class Regulator:
             )
         return actuation
 
-    def _compute_thrust_allocation(
+    def _compute_thruster_actuation_with_direction_coefficients(
         self, actuation: float, current_pitch: float, current_roll: float
     ) -> NDArray[np.float32]:
         b = np.array([0, 0, actuation], dtype=np.float32)
