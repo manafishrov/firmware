@@ -234,9 +234,9 @@ class Regulator:
             self.integral_value_pitch += (desired_pitch - current_pitch) * self.delta_t
             self.integral_value_pitch = np.clip(self.integral_value_pitch, -100, 100)
             actuation = (
-                config.pitch.kp * np.radians(desired_pitch - current_pitch)
-                + config.pitch.ki * np.radians(self.integral_value_pitch)
-                - config.pitch.kd * np.radians(-cast(float, self.gyro[1]))
+                config.pitch.kp * cast(float, np.radians(desired_pitch - current_pitch))
+                + config.pitch.ki * cast(float, np.radians(self.integral_value_pitch))
+                - config.pitch.kd * cast(float, np.radians(-cast(float, self.gyro[1])))
             )
             current_roll = self.state.regulator.roll
             if current_roll >= PITCH_MAX or current_roll <= PITCH_MIN:
@@ -254,9 +254,9 @@ class Regulator:
             self.integral_value_roll = np.clip(self.integral_value_roll, -100, 100)
 
             actuation = (
-                config.roll.kp * np.radians(desired_roll - current_roll)
-                + config.roll.ki * np.radians(self.integral_value_roll)
-                - config.roll.kd * np.radians(cast(float, self.gyro[0]))
+                config.roll.kp * cast(float, np.radians(desired_roll - current_roll))
+                + config.roll.ki * cast(float, np.radians(self.integral_value_roll))
+                - config.roll.kd * cast(float, np.radians(cast(float, self.gyro[0])))
             )
         return actuation
 
