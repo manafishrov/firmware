@@ -128,7 +128,6 @@ class RovConfig(CamelCaseModel):
         battery_max_voltage=21.5,
     )
 
-
     @field_validator("thruster_allocation", mode="before")
     @classmethod
     def validate_thruster_allocation(
