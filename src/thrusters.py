@@ -72,7 +72,6 @@ class Thrusters:
             self.state.rov_config.thruster_pin_setup.spin_directions,
         )
         thrust_vector = thrust_vector * spin_directions
-        _ = np.clip(thrust_vector, -1, 1, out=thrust_vector)
         return thrust_vector
 
     def _reorder_thrust_vector(
@@ -94,23 +93,22 @@ class Thrusters:
         direction_vector = self._scale_direction_vector_with_user_max_power(
             direction_vector
         )
+
         if (
             self.state.system_status.pitch_stabilization
             or self.state.system_status.roll_stabilization
             or self.state.system_status.depth_hold
         ):
             regulator_actuation = self.regulator.get_actuation()
-        else:
-            regulator_actuation = np.zeros(8, dtype=np.float32)
 
-        #Setting pitch and roll actuation to 0 to avoid forward connection
-        if self.state.system_status.pitch_stabilization:
-            direction_vector[3] = 0
+            # Setting pitch and roll actuation to 0 to avoid forward connection
+            if self.state.system_status.pitch_stabilization:
+                direction_vector[3] = 0
+            if self.state.system_status.roll_stabilization:
+                direction_vector[5] = 0
 
-        if self.state.system_status.roll_stabilization:
-            direction_vector[5] = 0
+            direction_vector += regulator_actuation
 
-        direction_vector += regulator_actuation
         _ = np.clip(direction_vector, -1, 1, out=direction_vector)
 
         thrust_vector = self._create_thrust_vector_from_thruster_allocation(
