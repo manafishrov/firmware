@@ -219,7 +219,7 @@ class Regulator:
                 - config.depth.kd * self.current_dt_depth
             )
 
-            actuation = self._change_coordinate_system_movement(
+            actuation = self._compute_thrust_allocation(
                 depth_actuation, self.state.regulator.pitch, self.state.regulator.roll
             )
         return actuation
@@ -260,7 +260,7 @@ class Regulator:
             )
         return actuation
 
-    def _change_coordinate_system_movement(
+    def _compute_thrust_allocation(
         self, actuation: float, current_pitch: float, current_roll: float
     ) -> NDArray[np.float32]:
         b = np.array([0, 0, actuation], dtype=np.float32)
