@@ -197,7 +197,7 @@ class Regulator:
         actuation = np.zeros(3, dtype=np.float32)
         if self.state.system_status.depth_hold:
             # If depth = -1, meaning depth hold was just enabled, set desired depth to current depth
-            if self.state.regulator.desired_depth == -1:
+            if self.state.regulator.desired_depth == None:
                 self.state.regulator.desired_depth = self.state.pressure.depth
 
             current_depth = self.state.pressure.depth
@@ -225,7 +225,7 @@ class Regulator:
             )
         else:
             self.integral_value_depth = 0.0  # Reset integral value when depth hold is disabled
-            self.state.regulator.desired_depth = -1  # Reset desired depth
+            self.state.regulator.desired_depth = None  # Reset desired depth
 
         return actuation
 
