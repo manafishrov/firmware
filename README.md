@@ -1,11 +1,10 @@
-# Manafish Firmware
+# Firmware
 
 The Manafish firmware is designed to run on Raspberry Pi devices, specifically the Raspberry Pi 3 and 4. It provides the firmware for controlling and using the Manafish ROV.
-For the Raspberry Pico part of the firmware that controls the thrusters see [here](pico/README.md).
 
 ## Building the SD Image
 
-To build the SD image you need to have `nix` installed and proper emulation support for the aarch64-linux platform. Also add the caches for the `nixos-raspberrypi` flake to the build system so the build finishes in a reasonable time. Run the command for the specific Pi and camera module you want to use:
+To build the SD image you need to have `nix` installed on an aarch64-linux platform or proper emulation support for the aarch64-linux platform. Also add the caches for the `nixos-raspberrypi` flake to the build system so the build finishes in a reasonable time. Run the command for the specific Pi and camera module you want to use:
 
 ```sh
 nix build .#pi3-ov5647
@@ -61,7 +60,7 @@ Click "Start" to begin flashing the SD card.
 
 ## Configure Your Mac/PC's Ethernet Connection
 
-You need to tell your computer how to connect to the Pi without disrupting your regular internet connection.
+After plugging the SD card in the Raspberry Pi and powering it on, you need to tell your computer how to connect to the Pi without disrupting your regular internet connection. This is done by assigning a static IP address to your computer in the same address space as the IP of the firmware (by default this is 10.10.10.10). We recommend setting it to 10.10.10.100 for simplicity.
 
 ### MacOS
 
@@ -82,7 +81,7 @@ You need to tell your computer how to connect to the Pi without disrupting your 
 3. Select "Internet Protocol Version 4 (TCP/IPv4)" and click "Properties"
 4. Select "Use the following IP address" and enter:
    - IP Address: 10.10.10.100
-   - Subnet Mask: 255.255.25.0
+   - Subnet Mask: 255.255.255.0
 5. Click "OK" to save
 
 ### Linux
