@@ -218,6 +218,7 @@ in
             mkdir $tmpdir/scripts
             cp -r ${./src}/* $tmpdir/src/
             cp -r ${./scripts}/* $tmpdir/scripts/
+            cp ${./Makefile} $tmpdir/Makefile
             chmod -R u+w $tmpdir/*
             cp -rf $tmpdir/* $HOME/
             rm -rf $tmpdir
