@@ -1,0 +1,67 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+*
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  create-release:
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create_release.outputs.id }}
+    steps:
+      - name: Create draft release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: 'Release assets for ${{ github.ref_name }}.'
+          draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+
+  build-sd-images:
+    needs: create-release
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pi: [pi3, pi4]
+        camera: [ov5647, imx219, imx477]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-25.05
+
+      - name: Setup cachix for nix-community
+        uses: cachix/cachix-action@v16
+        with:
+          name: nix-community
+
+      - name: Setup cachix for nixos-raspberrypi
+        uses: cachix/cachix-action@v16
+        with:
+          name: nixos-raspberrypi
+
+      - name: Build SD image
+        run: nix build .#${{ matrix.pi }}-${{ matrix.camera }}
+
+      - name: Upload SD image
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: result/sd-image/*.img.zst
+          release_id: ${{ needs.create-release.outputs.release_id }}
