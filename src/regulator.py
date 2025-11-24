@@ -122,13 +122,13 @@ class Regulator:
                 desired_roll += 360
             self.state.regulator.desired_roll = desired_roll
 
-    def _update_regulator_data(self, pitch: float, roll: float) -> None:
+    def _update_regulator_data(self, pitch: float, roll: float) -> None: #HERE
         self.state.regulator.pitch = pitch
         self.state.regulator.roll = roll
         if not self.state.system_status.pitch_stabilization:
-            self.state.regulator.desired_pitch = pitch
+            self.state.regulator.desired_pitch = 0.0
         if not self.state.system_status.roll_stabilization:
-            self.state.regulator.desired_roll = roll
+            self.state.regulator.desired_roll = 0.0
 
     def update_regulator_data_from_imu(self) -> None:
         """Update regulator data from IMU readings."""
