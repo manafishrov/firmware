@@ -20,6 +20,7 @@ from .constants import (
     THRUSTER_TEST_DURATION_SECONDS,
     THRUSTER_TEST_TOAST_ID,
     THRUSTER_TIMEOUT_MS,
+    THRUSTER_DEADBAND,
 )
 from .log import log_error
 from .regulator import Regulator
@@ -80,7 +81,7 @@ class Thrusters:
     self,
     direction_vector: NDArray[np.float32],
     previous_direction_vector: NDArray[np.float32],
-) -> NDArray[np.float32]:
+    ) -> NDArray[np.float32]:
         #smoothing_factor = self.state.rov_config.smoothing_factor
         smoothing_factor = np.float32(0.2)
 
@@ -110,13 +111,23 @@ class Thrusters:
             reordered[i] = thrust_vector[identifiers[i]]
         return reordered
 
+    def _remove_deadband( 
+    self, thrust_vector: NDArray[np.float32]
+    ) -> NDArray[np.float32]:
+        deadband = THRUSTER_DEADBAND
+
+        sign = np.sign(thrust_vector)
+        thrust_vector += sign * deadband - sign * deadband * thrust_vector
+
+        return thrust_vector
+
     # THIS FUNCTION IS RESPONSIBLE FOR GOING FROM DIRECTION VECTOR TO THRUST VECTOR
     def _prepare_thrust_vector(
         self, direction_vector: NDArray[np.float32]
     ) -> NDArray[np.float32]:
         self.regulator.update_regulator_data_from_imu()
 
- # Update smoothed vector for next iteration
+        # Update smoothed vector for next iteration
         direction_vector = self._smooth_out_direction_vector(direction_vector, self.previous_direction_vector)
         self.previous_direction_vector = direction_vector.copy()
 
@@ -140,8 +151,6 @@ class Thrusters:
 
             direction_vector += regulator_actuation
 
-        _ = np.clip(direction_vector, -1, 1, out=direction_vector)
-
         # Now that we have the final direction vector, we can change the coordinate system for orientation actuation (if regulator enabled)
         if (self.state.system_status.pitch_stabilization or self.state.system_status.roll_stabilization):
             direction_vector = self.regulator.change_coordinate_system_orientation(direction_vector,self.state.regulator.pitch,self.state.regulator.roll,)
@@ -150,6 +159,10 @@ class Thrusters:
 
         thrust_vector = self._reorder_thrust_vector(thrust_vector)
         thrust_vector = self._correct_thrust_vector_spin_directions(thrust_vector)
+        thrust_vector = self._remove_deadband(thrust_vector)
+
+        thrust_vector = np.clip(thrust_vector, -1.0, 1.0)
+
         return thrust_vector
 
     def _compute_thrust_values(self, thrust_vector: NDArray[np.float32]) -> list[int]:
