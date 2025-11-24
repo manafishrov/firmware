@@ -350,6 +350,16 @@ class Regulator:
         _ = np.clip(actuation, -power, power, out=actuation)
         return actuation
 
+    def _remove_deadband(
+        self, actuation: NDArray[np.float32]
+    ) -> NDArray[np.float32]:
+        deadband = np.float32(0.02) # <--- TURN INTO PROPER CONSTANT
+
+        sign = np.sign(actuation)
+        actuation += sign * deadband - sign * deadband * actuation
+
+        return actuation
+
     def get_actuation(self) -> NDArray[np.float32]:
         """Get regulator actuation values."""
         regulator_actuation = np.zeros(8, dtype=np.float32)
