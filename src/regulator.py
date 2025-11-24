@@ -225,7 +225,7 @@ class Regulator:
             )
         else:
             self.integral_value_depth = 0.0  # Reset integral value when depth hold is disabled
-            self.state.regulator.desired_depth = -1.0  # Reset desired depth
+            self.state.regulator.desired_depth = -1.0 # Reset desired depth
 
         return actuation
 

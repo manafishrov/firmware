@@ -77,15 +77,27 @@ class Thrusters:
         return thrust_vector
 
     def _smooth_out_direction_vector(
-        self, direction_vector: NDArray[np.float32],
-        previous_direction_vector: NDArray[np.float32],
-    ) -> NDArray[np.float32]:
+    self,
+    direction_vector: NDArray[np.float32],
+    previous_direction_vector: NDArray[np.float32],
+) -> NDArray[np.float32]:
         #smoothing_factor = self.state.rov_config.smoothing_factor
-        smoothing_factor = np.float32(0.8)
-        result = (
-            smoothing_factor * previous_direction_vector + (np.float32(1) - smoothing_factor) * direction_vector
-        ).astype(np.float32)
-        return result
+        smoothing_factor = np.float32(0.2)
+
+        if smoothing_factor <= 1/60.0:
+            return direction_vector
+
+        direction_vector_step = 1/(60*smoothing_factor) # Assuming 60 Hz update rate
+
+        diff = direction_vector - previous_direction_vector
+
+        increment = np.clip(diff, -direction_vector_step, direction_vector_step) # Limit the change to the step size
+
+        result = previous_direction_vector + increment
+
+        # Ensure dtype is float32 for type checkers / mypy
+        return result.astype(np.float32, copy=False)
+
 
     def _reorder_thrust_vector(
         self, thrust_vector: NDArray[np.float32]

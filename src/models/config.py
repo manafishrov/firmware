@@ -89,7 +89,7 @@ class RovConfig(CamelCaseModel):
         MicrocontrollerFirmwareVariant.DSHOT
     )
     fluid_type: FluidType = FluidType.SALTWATER
-    #smoothing_factor: float = 0.7 # 0 for no smoothing, 1 for infinite smoothing (no response)
+    #smoothing_factor: float = 0.7 # Represents the time it takes from 0 thrust to full thrust in seconds. 0 means 0 smoothing
     thruster_pin_setup: ThrusterPinSetup = ThrusterPinSetup(
         identifiers=np.array([0, 1, 2, 3, 4, 5, 6, 7], dtype=np.int8),
         spin_directions=np.array([1, 1, 1, 1, 1, 1, 1, 1], dtype=np.int8),
