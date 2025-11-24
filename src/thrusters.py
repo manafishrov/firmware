@@ -104,9 +104,9 @@ class Thrusters:
     ) -> NDArray[np.float32]:
         self.regulator.update_regulator_data_from_imu()
 
-        # ADD SMOOTHING HERE
+ # Update smoothed vector for next iteration
         direction_vector = self._smooth_out_direction_vector(direction_vector, self.previous_direction_vector)
-        self.previous_direction_vector = direction_vector.copy() # Update smoothed vector for next iteration
+        self.previous_direction_vector = direction_vector.copy()
 
         self.regulator.update_desired_from_direction_vector(direction_vector)
         direction_vector = self._scale_direction_vector_with_user_max_power(
