@@ -20,7 +20,6 @@ from .constants import (
     THRUSTER_TEST_DURATION_SECONDS,
     THRUSTER_TEST_TOAST_ID,
     THRUSTER_TIMEOUT_MS,
-    THRUSTER_DEADBAND,
 )
 from .log import log_error
 from .regulator import Regulator
@@ -111,16 +110,6 @@ class Thrusters:
             reordered[i] = thrust_vector[identifiers[i]]
         return reordered
 
-    def _remove_deadband( 
-    self, thrust_vector: NDArray[np.float32]
-    ) -> NDArray[np.float32]:
-        deadband = THRUSTER_DEADBAND
-
-        sign = np.sign(thrust_vector)
-        thrust_vector += sign * deadband - sign * deadband * thrust_vector
-
-        return thrust_vector
-
     # THIS FUNCTION IS RESPONSIBLE FOR GOING FROM DIRECTION VECTOR TO THRUST VECTOR
     def _prepare_thrust_vector(
         self, direction_vector: NDArray[np.float32]
@@ -159,7 +148,6 @@ class Thrusters:
 
         thrust_vector = self._reorder_thrust_vector(thrust_vector)
         thrust_vector = self._correct_thrust_vector_spin_directions(thrust_vector)
-        thrust_vector = self._remove_deadband(thrust_vector)
 
         thrust_vector = np.clip(thrust_vector, -1.0, 1.0)
 
