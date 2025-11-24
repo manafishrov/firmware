@@ -125,20 +125,15 @@ class Thrusters:
             direction_vector
         )
 
-        if (
-            self.state.system_status.pitch_stabilization
-            or self.state.system_status.roll_stabilization
-            or self.state.system_status.depth_hold
-        ):
-            regulator_actuation = self.regulator.get_actuation()
+        regulator_actuation = self.regulator.get_actuation()
 
-            # Setting pitch and roll actuation to 0 to avoid forward connection
-            if self.state.system_status.pitch_stabilization:
-                direction_vector[3] = 0
-            if self.state.system_status.roll_stabilization:
-                direction_vector[5] = 0
+        # Setting pitch and roll actuation to 0 to avoid forward connection
+        if self.state.system_status.pitch_stabilization:
+            direction_vector[3] = 0
+        if self.state.system_status.roll_stabilization:
+            direction_vector[5] = 0
 
-            direction_vector += regulator_actuation
+        direction_vector += regulator_actuation
 
         # Now that we have the final direction vector, we can change the coordinate system for orientation actuation (if regulator enabled)
         if (self.state.system_status.pitch_stabilization or self.state.system_status.roll_stabilization):
