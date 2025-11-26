@@ -217,7 +217,7 @@ class Regulator:
             depth_actuation = (
                 config.depth.kp * error
                 + config.depth.ki * self.integral_value_depth
-                - config.depth.kd * self.current_dt_depth
+                + config.depth.kd * self.current_dt_depth
             )
 
             actuation = self._change_coordinate_system_movement(
@@ -347,7 +347,7 @@ class Regulator:
         self, actuation: NDArray[np.float32]
     ) -> NDArray[np.float32]:
         power = self.state.rov_config.power.regulator_max_power / 100
-        _ = np.clip(actuation, -power, power, out=actuation)
+        _ = np.clip(actuation, -power, power, out=actuation) # <--- Clipping the actuation instead of the thrust is slightly innacurate because when both pitch and roll i-terms hit the max value they will cancel out, but the effect of that is non noticable under normal conditions
         return actuation
 
     def get_actuation(self) -> NDArray[np.float32]:

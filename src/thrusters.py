@@ -82,7 +82,7 @@ class Thrusters:
     previous_direction_vector: NDArray[np.float32],
     ) -> NDArray[np.float32]:
         #smoothing_factor = self.state.rov_config.smoothing_factor
-        smoothing_factor = np.float32(0.2)
+        smoothing_factor = np.float32(0.4)
 
         if smoothing_factor <= 1/60.0:
             return direction_vector
