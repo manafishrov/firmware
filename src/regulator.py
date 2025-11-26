@@ -201,7 +201,7 @@ class Regulator:
                 self.state.regulator.desired_depth = self.state.pressure.depth
 
             current_depth = self.state.pressure.depth
-            desired_depth = self.state.regulator.desired_depth
+            desired_depth = cast(float, self.state.regulator.desired_depth - np.sin(self.state.regulator.pitch) * 0.14) # Compensate for pitch angle moving the sensor up/down
             self.integral_value_depth -= (desired_depth - current_depth) * self.delta_t
             self.integral_value_depth = np.clip(self.integral_value_depth, -3, 3)
 
