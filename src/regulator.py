@@ -229,15 +229,15 @@ class Regulator:
 
         return actuation
 
-    def _handle_pitch_stabilization(self) -> float:
+    def _handle_pitch_stabilization(self, direction_vector: NDArray[np.float32]) -> float:
         actuation = 0.0
         if self.state.system_status.pitch_stabilization:
             config = self.state.rov_config.regulator
             desired_pitch = self.state.regulator.desired_pitch
 
             current_pitch = self.state.regulator.pitch
-            self.integral_value_pitch += (desired_pitch - current_pitch) * self.delta_t
-            self.integral_value_pitch = np.clip(self.integral_value_pitch, -100, 100) #The number 100 here represents degrees
+            self.integral_value_pitch += ((desired_pitch - current_pitch) * self.delta_t) * np.clip((1 - abs(direction_vector[3])), 0, 1) # Integral changes less when user input
+            self.integral_value_pitch = np.clip(self.integral_value_pitch, -100, 100) #Prevent windup, the number 100 here represents degrees
             actuation = (
                 config.pitch.kp * cast(float, np.radians(desired_pitch - current_pitch))
                 + config.pitch.ki * cast(float, np.radians(self.integral_value_pitch))
@@ -250,14 +250,14 @@ class Regulator:
             self.integral_value_pitch = 0.0 # Reset integral value when pitch stabilization is disabled
         return actuation
 
-    def _handle_roll_stabilization(self) -> float:
+    def _handle_roll_stabilization(self, direction_vector: NDArray[np.float32]) -> float:
         actuation = 0.0
         if self.state.system_status.roll_stabilization:
             config = self.state.rov_config.regulator
             desired_roll = self.state.regulator.desired_roll
 
             current_roll = self.state.regulator.roll
-            self.integral_value_roll += (desired_roll - current_roll) * self.delta_t
+            self.integral_value_roll += ((desired_roll - current_roll) * self.delta_t) * np.clip((1 - abs(direction_vector[5])), 0, 1)  # Integral changes less when user input
             self.integral_value_roll = np.clip(self.integral_value_roll, -100, 100)
 
             actuation = (
@@ -350,17 +350,17 @@ class Regulator:
         _ = np.clip(actuation, -power, power, out=actuation) # <--- Clipping the actuation instead of the thrust is slightly innacurate because when both pitch and roll i-terms hit the max value they will cancel out, but the effect of that is non noticable under normal conditions
         return actuation
 
-    def get_actuation(self) -> NDArray[np.float32]:
+    def get_actuation(self, direction_vector: NDArray[np.float32]) -> NDArray[np.float32]:
         """Get regulator actuation values."""
         regulator_actuation = np.zeros(8, dtype=np.float32)
 
         depth_actuation = self._handle_depth_hold()
         regulator_actuation[0:3] = depth_actuation
 
-        pitch_actuation = self._handle_pitch_stabilization()
-        regulator_actuation[3] = pitch_actuation 
+        pitch_actuation = self._handle_pitch_stabilization(direction_vector)
+        regulator_actuation[3] = pitch_actuation
 
-        roll_actuation = self._handle_roll_stabilization()
+        roll_actuation = self._handle_roll_stabilization(direction_vector)
         regulator_actuation[5] = roll_actuation
 
         # Scales regulator actuation according to "Regulator Max Power" configured by user in settings

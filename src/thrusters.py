@@ -121,25 +121,25 @@ class Thrusters:
         self.previous_direction_vector = direction_vector.copy()
 
         self.regulator.update_desired_from_direction_vector(direction_vector)
-        direction_vector = self._scale_direction_vector_with_user_max_power(
+        scaled_direction_vector = self._scale_direction_vector_with_user_max_power( # Change name because we need the unscaled for regulator
             direction_vector
         )
 
-        regulator_actuation = self.regulator.get_actuation()
+        regulator_actuation = self.regulator.get_actuation(direction_vector)
 
         # Setting pitch and roll actuation to 0 to avoid forward connection
         if self.state.system_status.pitch_stabilization:
-            direction_vector[3] = 0
+            scaled_direction_vector[3] = 0
         if self.state.system_status.roll_stabilization:
-            direction_vector[5] = 0
+            scaled_direction_vector[5] = 0
 
-        direction_vector += regulator_actuation
+        scaled_direction_vector += regulator_actuation
 
         # Now that we have the final direction vector, we can change the coordinate system for orientation actuation (if regulator enabled)
         if (self.state.system_status.pitch_stabilization or self.state.system_status.roll_stabilization):
-            direction_vector = self.regulator.change_coordinate_system_orientation(direction_vector,self.state.regulator.pitch,self.state.regulator.roll,)
+            scaled_direction_vector = self.regulator.change_coordinate_system_orientation(direction_vector,self.state.regulator.pitch,self.state.regulator.roll,)
 
-        thrust_vector = self._create_thrust_vector_from_thruster_allocation(direction_vector)
+        thrust_vector = self._create_thrust_vector_from_thruster_allocation(scaled_direction_vector)
 
         thrust_vector = self._reorder_thrust_vector(thrust_vector)
         thrust_vector = self._correct_thrust_vector_spin_directions(thrust_vector)
