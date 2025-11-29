@@ -17,6 +17,7 @@ from .constants import (
     THRUSTER_INPUT_START_BYTE,
     THRUSTER_NEUTRAL_PULSE_WIDTH,
     THRUSTER_REVERSE_PULSE_RANGE,
+    THRUSTER_SEND_FREQUENCY,
     THRUSTER_TEST_DURATION_SECONDS,
     THRUSTER_TEST_TOAST_ID,
     THRUSTER_TIMEOUT_MS,
@@ -85,22 +86,17 @@ class Thrusters:
     ) -> NDArray[np.float32]:
         smoothing_factor = self.state.rov_config.smoothing_factor
 
-        if smoothing_factor <= 1 / 60.0:
+        if smoothing_factor <= 1 / THRUSTER_SEND_FREQUENCY:
             return direction_vector
 
-        direction_vector_step = 1 / (
-            60 * smoothing_factor
-        )  # Assuming 60 Hz update rate
+        direction_vector_step = 1 / (THRUSTER_SEND_FREQUENCY * smoothing_factor)
 
         diff = direction_vector - previous_direction_vector
 
-        increment = np.clip(
-            diff, -direction_vector_step, direction_vector_step
-        )  # Limit the change to the step size
+        increment = np.clip(diff, -direction_vector_step, direction_vector_step)
 
         result = previous_direction_vector + increment
 
-        # Ensure dtype is float32 for type checkers / mypy
         return result.astype(np.float32, copy=False)
 
     def _reorder_thrust_vector(
@@ -272,7 +268,7 @@ class Thrusters:
         return False
 
     async def send_loop(self) -> None:
-        """Send thruster commands in a continuous loop at 60Hz."""
+        """Send thruster commands in a continuous loop."""
         writer = self.serial_manager.get_writer()
         thrust_vector = np.zeros(NUM_MOTORS, dtype=np.float32)
         last_send_time = time.time()
@@ -295,4 +291,4 @@ class Thrusters:
                 self.state.system_health.microcontroller_ok = False
                 log_error("Thruster send failed 3 times, disabling microcontroller")
 
-            await asyncio.sleep(1 / 60)
+            await asyncio.sleep(1 / THRUSTER_SEND_FREQUENCY)

@@ -17,7 +17,7 @@ from bmi270.BMI270 import (
 )
 import numpy as np
 
-from ..constants import SYSTEM_FAILURE_THRESHOLD
+from ..constants import IMU_READ_FREQUENCY, SYSTEM_FAILURE_THRESHOLD
 from ..log import log_error, log_info
 from ..models.sensors import ImuData
 from ..rov_state import RovState
@@ -105,4 +105,4 @@ class Imu:
                 self.state.system_health.imu_ok = False
                 failure_count = 0
                 log_error("IMU failed 3 times, disabling IMU")
-            await asyncio.sleep(1 / 100)
+            await asyncio.sleep(1 / IMU_READ_FREQUENCY)
