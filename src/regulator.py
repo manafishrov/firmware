@@ -19,8 +19,8 @@ from .constants import (
     COMPLEMENTARY_FILTER_ALPHA,
     DEPTH_DERIVATIVE_EMA_TAU,
     PITCH_MAX,
-    ROLL_WRAP_MAX,
     ROLL_UPSIDE_DOWN_THRESHOLD,
+    ROLL_WRAP_MAX,
 )
 from .log import log_error, log_info
 from .models.config import (
