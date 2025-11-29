@@ -18,6 +18,7 @@ from .constants import (
     AUTO_TUNING_ZERO_THRESHOLD_DEPTH_METERS,
     COMPLEMENTARY_FILTER_ALPHA,
     DEPTH_DERIVATIVE_EMA_TAU,
+    INTEGRAL_WINDUP_CLIP_DEGREES,
     PITCH_MAX,
     ROLL_UPSIDE_DOWN_THRESHOLD,
     ROLL_WRAP_MAX,
@@ -123,13 +124,16 @@ class Regulator:
                 desired_roll += 360
             self.state.regulator.desired_roll = desired_roll
 
-    def _update_regulator_data(self, pitch: float, roll: float) -> None:  # HERE
+    def _update_regulator_data(self, pitch: float, roll: float) -> None:
         self.state.regulator.pitch = pitch
         self.state.regulator.roll = roll
+        # TODO: Either set desired pitch/roll to the same as pitch/roll or set it to 0 only when enabling stabilization
         if not self.state.system_status.pitch_stabilization:
             self.state.regulator.desired_pitch = 0.0
         if not self.state.system_status.roll_stabilization:
             self.state.regulator.desired_roll = 0.0
+        if not self.state.system_status.depth_hold:
+            self.state.regulator.desired_depth = self.state.pressure.depth
 
     def update_regulator_data_from_imu(self) -> None:
         """Update regulator data from IMU readings."""
@@ -197,10 +201,6 @@ class Regulator:
     def _handle_depth_hold(self) -> NDArray[np.float32]:
         actuation = np.zeros(3, dtype=np.float32)
         if self.state.system_status.depth_hold:
-            # If depth = -1, meaning depth hold was just enabled, set desired depth to current depth
-            if self.state.regulator.desired_depth == -1.0:
-                self.state.regulator.desired_depth = self.state.pressure.depth
-
             current_depth = self.state.pressure.depth
             desired_depth = self.state.regulator.desired_depth
             self.integral_value_depth -= (desired_depth - current_depth) * self.delta_t
@@ -228,7 +228,6 @@ class Regulator:
             self.integral_value_depth = (
                 0.0  # Reset integral value when depth hold is disabled
             )
-            self.state.regulator.desired_depth = -1.0  # Reset desired depth
 
         return actuation
 
@@ -241,14 +240,17 @@ class Regulator:
             desired_pitch = self.state.regulator.desired_pitch
 
             current_pitch = self.state.regulator.pitch
+            integral_scale = cast(
+                float, np.clip((1 - abs(cast(float, direction_vector[3]))), 0, 1)
+            )
             self.integral_value_pitch += (
                 (desired_pitch - current_pitch) * self.delta_t
-            ) * np.clip(
-                (1 - abs(direction_vector[3])), 0, 1
-            )  # Integral changes less when user input
+            ) * integral_scale
             self.integral_value_pitch = np.clip(
-                self.integral_value_pitch, -100, 100
-            )  # Prevent windup, the number 100 here represents degrees
+                self.integral_value_pitch,
+                -INTEGRAL_WINDUP_CLIP_DEGREES,
+                INTEGRAL_WINDUP_CLIP_DEGREES,
+            )
             actuation = (
                 config.pitch.kp * cast(float, np.radians(desired_pitch - current_pitch))
                 + config.pitch.ki * cast(float, np.radians(self.integral_value_pitch))
@@ -272,12 +274,17 @@ class Regulator:
             desired_roll = self.state.regulator.desired_roll
 
             current_roll = self.state.regulator.roll
+            integral_scale = cast(
+                float, np.clip((1 - abs(cast(float, direction_vector[5]))), 0, 1)
+            )
             self.integral_value_roll += (
                 (desired_roll - current_roll) * self.delta_t
-            ) * np.clip(
-                (1 - abs(direction_vector[5])), 0, 1
-            )  # Integral changes less when user input
-            self.integral_value_roll = np.clip(self.integral_value_roll, -100, 100)
+            ) * integral_scale
+            self.integral_value_roll = np.clip(
+                self.integral_value_roll,
+                -INTEGRAL_WINDUP_CLIP_DEGREES,
+                INTEGRAL_WINDUP_CLIP_DEGREES,
+            )
 
             actuation = (
                 config.roll.kp * cast(float, np.radians(desired_roll - current_roll))

@@ -114,10 +114,10 @@ class Thrusters:
             reordered[i] = thrust_vector[identifiers[i]]
         return reordered
 
-    # THIS FUNCTION IS RESPONSIBLE FOR GOING FROM DIRECTION VECTOR TO THRUST VECTOR
     def _prepare_thrust_vector(
         self, direction_vector: NDArray[np.float32]
     ) -> NDArray[np.float32]:
+        """Converts the direction_vector into the final thrust_vector sent to the microcontroller."""
         self.regulator.update_regulator_data_from_imu()
 
         # Update smoothed vector for next iteration
