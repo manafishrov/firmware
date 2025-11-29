@@ -1,0 +1,78 @@
+name: Release Build
+
+on:
+  push:
+    tags:
+      - v[0-9]+.[0-9]+.[0-9]+*
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  build-sd-image:
+    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        pi: [pi3]
+        camera: [imx219, imx477]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Cache Nix eval
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/nix
+          key: nix-eval-${{ hashFiles('flake.lock', 'flake.nix') }}
+          restore-keys: nix-eval-
+
+      - name: Install Nix
+        uses: cachix/install-nix-action@v31
+        with:
+          nix_path: nixpkgs=channel:nixos-25.05
+
+      - name: Setup cachix for nix-community
+        uses: cachix/cachix-action@v16
+        with:
+          name: nix-community
+
+      - name: Setup cachix for nixos-raspberrypi
+        uses: cachix/cachix-action@v16
+        with:
+          name: nixos-raspberrypi
+
+      - name: Build SD image
+        run: nix build .#${{ matrix.pi }}-${{ matrix.camera }}
+
+      - name: Check if release exists
+        id: check_release
+        run: |
+          if gh release view ${{ github.ref_name }} --json id > /dev/null 2>&1; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create draft release
+        if: steps.check_release.outputs.exists == 'false'
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body: 'Release assets for ${{ github.ref_name }}.'
+          draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
+
+      - name: Upload SD image
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          files: result/sd-image/*.img.zst
