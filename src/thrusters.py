@@ -147,7 +147,7 @@ class Thrusters:
             or self.state.system_status.roll_stabilization
         ):
             scaled_direction_vector = (
-                self.regulator.change_coordinate_system_orientation(
+                self.regulator._change_coordinate_system_orientation(
                     direction_vector,
                     self.state.regulator.pitch,
                     self.state.regulator.roll,

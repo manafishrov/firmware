@@ -293,20 +293,29 @@ class Regulator:
     def _change_coordinate_system_movement(
         self, actuation: float, current_pitch: float, current_roll: float
     ) -> NDArray[np.float32]:
+        """Transform movement heave actuation from body-fixed to world coordinates."""
+        # Define the actuation vector in body coordinates (z-axis component, heave)
         b = np.array([0, 0, actuation], dtype=np.float32)
+
+        # Calculate trigonometric values for pitch and roll angles
         cp = cast(float, np.cos(cast(float, np.deg2rad(current_pitch))))
         sp = cast(float, np.sin(cast(float, np.deg2rad(current_pitch))))
         cr = cast(float, np.cos(cast(float, np.deg2rad(current_roll))))
         sr = cast(float, np.sin(cast(float, np.deg2rad(current_roll))))
 
+        # Build the rotation matrix from body to world coordinates
         a = np.array(
             [[cp, sp * sr, -sp * cr], [0, cr, sr], [sp, cp * (-sr), cp * cr]],
             dtype=np.float32,
         )
+
+        # Retrieve direction coefficients from configuration
         dir_coeffs = self.state.rov_config.direction_coefficients
         surge_coeff = dir_coeffs.surge
         sway_coeff = dir_coeffs.sway
         heave_coeff = dir_coeffs.heave
+
+        # Normalize coefficients relative to heave and apply minimum thresholds
         if heave_coeff == 0:
             heave_coeff = 1
         surge_coeff /= heave_coeff
@@ -317,19 +326,20 @@ class Regulator:
         speed_coeffs = np.diag([surge_coeff, sway_coeff, heave_coeff])
         a = a @ speed_coeffs
 
+        # Solve the linear system to get world coordinate components
         try:
             x = np.linalg.solve(a, b)
         except np.linalg.LinAlgError:
             x, *_ = np.linalg.lstsq(a, b, rcond=None)
         return x
 
-    def change_coordinate_system_orientation(
+    def _change_coordinate_system_orientation(
         self,
         actuation: NDArray[np.float32],
         current_pitch: float,
         current_roll: float,
     ) -> NDArray[np.float32]:
-        """Change coordinate system of pitch, yaw and roll to a global coordinate system."""
+        """Transform orientation actuations from global to body-fixed coordinates."""
         # Actuation values in the global coordinate system
         pitch_g = cast(float, actuation[3])
         yaw_g = cast(float, actuation[4])
@@ -351,13 +361,13 @@ class Regulator:
         try:
             pitch_l = cr * pitch_g + sr * cp * yaw_g * (
                 yaw_coeff / pitch_coeff
-            )  # scale so pitch matches yaw
+            )  # Scale so pitch matches yaw
             roll_l = roll_g - sp * yaw_g * (
                 yaw_coeff / roll_coeff
-            )  # scale so roll matches yaw
+            )  # Scale so roll matches yaw
             yaw_l = cr * cp * yaw_g - sr * pitch_g * (
                 pitch_coeff / yaw_coeff
-            )  # scale so yaw matches pitch
+            )  # Scale so yaw matches pitch
         except ZeroDivisionError:
             pitch_l, yaw_l, roll_l = pitch_g, yaw_g, roll_g
             log_error(
@@ -375,9 +385,7 @@ class Regulator:
         self, actuation: NDArray[np.float32]
     ) -> NDArray[np.float32]:
         power = self.state.rov_config.power.regulator_max_power / 100
-        _ = np.clip(
-            actuation, -power, power, out=actuation
-        )  # <--- Clipping the actuation instead of the thrust is slightly innacurate because when both pitch and roll i-terms hit the max value they will cancel out, but the effect of that is non noticable under normal conditions
+        _ = np.clip(actuation, -power, power, out=actuation)
         return actuation
 
     def get_actuation(
@@ -395,7 +403,6 @@ class Regulator:
         roll_actuation = self._handle_roll_stabilization(direction_vector)
         regulator_actuation[5] = roll_actuation
 
-        # Scales regulator actuation according to "Regulator Max Power" configured by user in settings
         regulator_actuation = self._scale_regulator_actuation(regulator_actuation)
 
         return regulator_actuation
