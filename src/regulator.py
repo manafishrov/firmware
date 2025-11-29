@@ -44,9 +44,6 @@ class Regulator:
         self.gyro: NDArray[np.float32] = np.array([0.0, 0.0, 0.0], dtype=np.float32)
         self.last_measurement_time: float = 0.0
         self.delta_t: float = 0.0167
-        self.integral_value_pitch: float = 0.0
-        self.integral_value_roll: float = 0.0
-        self.integral_value_depth: float = 0.0
         self.previous_depth: float = 0.0
         self.current_dt_depth: float = 0.0
 
@@ -196,8 +193,12 @@ class Regulator:
         if self.state.system_status.depth_hold:
             current_depth = self.state.pressure.depth
             desired_depth = self.state.regulator.desired_depth
-            self.integral_value_depth -= (desired_depth - current_depth) * self.delta_t
-            self.integral_value_depth = np.clip(self.integral_value_depth, -3, 3)
+            self.state.regulator.integral_depth -= (
+                desired_depth - current_depth
+            ) * self.delta_t
+            self.state.regulator.integral_depth = np.clip(
+                self.state.regulator.integral_depth, -3, 3
+            )
 
             alpha = cast(float, np.exp(-self.delta_t / DEPTH_DERIVATIVE_EMA_TAU))
             self.current_dt_depth = (
@@ -210,18 +211,13 @@ class Regulator:
             error = -(desired_depth - current_depth)
             depth_actuation = (
                 config.depth.kp * error
-                + config.depth.ki * self.integral_value_depth
+                + config.depth.ki * self.state.regulator.integral_depth
                 + config.depth.kd * self.current_dt_depth
             )
 
             actuation = self._change_coordinate_system_movement(
                 depth_actuation, self.state.regulator.pitch, self.state.regulator.roll
             )
-        else:
-            self.integral_value_depth = (
-                0.0  # Reset integral value when depth hold is disabled
-            )
-
         return actuation
 
     def _handle_pitch_stabilization(
@@ -236,26 +232,23 @@ class Regulator:
             integral_scale = cast(
                 float, np.clip((1 - abs(cast(float, direction_vector[3]))), 0, 1)
             )
-            self.integral_value_pitch += (
+            self.state.regulator.integral_pitch += (
                 (desired_pitch - current_pitch) * self.delta_t
             ) * integral_scale
-            self.integral_value_pitch = np.clip(
-                self.integral_value_pitch,
+            self.state.regulator.integral_pitch = np.clip(
+                self.state.regulator.integral_pitch,
                 -INTEGRAL_WINDUP_CLIP_DEGREES,
                 INTEGRAL_WINDUP_CLIP_DEGREES,
             )
             actuation = (
                 config.pitch.kp * cast(float, np.radians(desired_pitch - current_pitch))
-                + config.pitch.ki * cast(float, np.radians(self.integral_value_pitch))
+                + config.pitch.ki
+                * cast(float, np.radians(self.state.regulator.integral_pitch))
                 - config.pitch.kd * cast(float, np.radians(-cast(float, self.gyro[1])))
             )
             current_roll = self.state.regulator.roll
             if current_roll >= PITCH_MAX or current_roll <= -PITCH_MAX:
                 actuation = -actuation
-        else:
-            self.integral_value_pitch = (
-                0.0  # Reset integral value when pitch stabilization is disabled
-            )
         return actuation
 
     def _handle_roll_stabilization(
@@ -270,23 +263,20 @@ class Regulator:
             integral_scale = cast(
                 float, np.clip((1 - abs(cast(float, direction_vector[5]))), 0, 1)
             )
-            self.integral_value_roll += (
+            self.state.regulator.integral_roll += (
                 (desired_roll - current_roll) * self.delta_t
             ) * integral_scale
-            self.integral_value_roll = np.clip(
-                self.integral_value_roll,
+            self.state.regulator.integral_roll = np.clip(
+                self.state.regulator.integral_roll,
                 -INTEGRAL_WINDUP_CLIP_DEGREES,
                 INTEGRAL_WINDUP_CLIP_DEGREES,
             )
 
             actuation = (
                 config.roll.kp * cast(float, np.radians(desired_roll - current_roll))
-                + config.roll.ki * cast(float, np.radians(self.integral_value_roll))
+                + config.roll.ki
+                * cast(float, np.radians(self.state.regulator.integral_roll))
                 - config.roll.kd * cast(float, np.radians(cast(float, self.gyro[0])))
-            )
-        else:
-            self.integral_value_roll = (
-                0.0  # Reset integral value when roll stabilization is disabled
             )
         return actuation
 
