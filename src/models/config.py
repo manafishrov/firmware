@@ -109,9 +109,9 @@ class RovConfig(CamelCaseModel):
     )
     regulator: Regulator = Regulator(
         turn_speed=40,
-        pitch=RegulatorPID(kp=5, ki=0.5, kd=1),
-        roll=RegulatorPID(kp=1.5, ki=0.1, kd=0.4),
-        depth=RegulatorPID(kp=0, ki=0.05, kd=0.1),
+        pitch=RegulatorPID(kp=2, ki=0, kd=0.1),
+        roll=RegulatorPID(kp=1, ki=0, kd=0.1),
+        depth=RegulatorPID(kp=0.5, ki=0, kd=0.1),
     )
     direction_coefficients: DirectionCoefficients = DirectionCoefficients(
         surge=0.8,
