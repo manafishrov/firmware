@@ -48,7 +48,9 @@ class Thrusters:
         self.serial_manager: SerialManager = serial_manager
         self.regulator: Regulator = regulator
 
-        self.previous_direction_vector: NDArray[np.float32] = np.zeros(8, dtype=np.float32)
+        self.previous_direction_vector: NDArray[np.float32] = np.zeros(
+            8, dtype=np.float32
+        )
 
     def _scale_direction_vector_with_user_max_power(
         self, direction_vector: NDArray[np.float32]
@@ -77,27 +79,29 @@ class Thrusters:
         return thrust_vector
 
     def _smooth_out_direction_vector(
-    self,
-    direction_vector: NDArray[np.float32],
-    previous_direction_vector: NDArray[np.float32],
+        self,
+        direction_vector: NDArray[np.float32],
+        previous_direction_vector: NDArray[np.float32],
     ) -> NDArray[np.float32]:
-        #smoothing_factor = self.state.rov_config.smoothing_factor
-        smoothing_factor = np.float32(0.4)
+        smoothing_factor = self.state.rov_config.smoothing_factor
 
-        if smoothing_factor <= 1/60.0:
+        if smoothing_factor <= 1 / 60.0:
             return direction_vector
 
-        direction_vector_step = 1/(60*smoothing_factor) # Assuming 60 Hz update rate
+        direction_vector_step = 1 / (
+            60 * smoothing_factor
+        )  # Assuming 60 Hz update rate
 
         diff = direction_vector - previous_direction_vector
 
-        increment = np.clip(diff, -direction_vector_step, direction_vector_step) # Limit the change to the step size
+        increment = np.clip(
+            diff, -direction_vector_step, direction_vector_step
+        )  # Limit the change to the step size
 
         result = previous_direction_vector + increment
 
         # Ensure dtype is float32 for type checkers / mypy
         return result.astype(np.float32, copy=False)
-
 
     def _reorder_thrust_vector(
         self, thrust_vector: NDArray[np.float32]
@@ -117,11 +121,13 @@ class Thrusters:
         self.regulator.update_regulator_data_from_imu()
 
         # Update smoothed vector for next iteration
-        direction_vector = self._smooth_out_direction_vector(direction_vector, self.previous_direction_vector)
+        direction_vector = self._smooth_out_direction_vector(
+            direction_vector, self.previous_direction_vector
+        )
         self.previous_direction_vector = direction_vector.copy()
 
         self.regulator.update_desired_from_direction_vector(direction_vector)
-        scaled_direction_vector = self._scale_direction_vector_with_user_max_power( # Change name because we need the unscaled for regulator
+        scaled_direction_vector = self._scale_direction_vector_with_user_max_power(  # Change name because we need the unscaled for regulator
             direction_vector
         )
 
@@ -136,10 +142,21 @@ class Thrusters:
         scaled_direction_vector += regulator_actuation
 
         # Now that we have the final direction vector, we can change the coordinate system for orientation actuation (if regulator enabled)
-        if (self.state.system_status.pitch_stabilization or self.state.system_status.roll_stabilization):
-            scaled_direction_vector = self.regulator.change_coordinate_system_orientation(direction_vector,self.state.regulator.pitch,self.state.regulator.roll,)
+        if (
+            self.state.system_status.pitch_stabilization
+            or self.state.system_status.roll_stabilization
+        ):
+            scaled_direction_vector = (
+                self.regulator.change_coordinate_system_orientation(
+                    direction_vector,
+                    self.state.regulator.pitch,
+                    self.state.regulator.roll,
+                )
+            )
 
-        thrust_vector = self._create_thrust_vector_from_thruster_allocation(scaled_direction_vector)
+        thrust_vector = self._create_thrust_vector_from_thruster_allocation(
+            scaled_direction_vector
+        )
 
         thrust_vector = self._reorder_thrust_vector(thrust_vector)
         thrust_vector = self._correct_thrust_vector_spin_directions(thrust_vector)
