@@ -114,12 +114,12 @@ class RovConfig(CamelCaseModel):
         depth=RegulatorPID(kp=0.5, ki=0, kd=0.1),
     )
     direction_coefficients: DirectionCoefficients = DirectionCoefficients(
-        surge=0.8,
-        sway=0.35,
-        heave=0.5,
-        pitch=0.4,
-        yaw=0.3,
-        roll=0.8,
+        surge=1,
+        sway=1,
+        heave=1,
+        pitch=1,
+        yaw=1,
+        roll=1,
     )
     power: Power = Power(
         user_max_power=30,
