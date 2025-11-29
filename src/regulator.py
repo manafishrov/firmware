@@ -121,10 +121,6 @@ class Regulator:
                 desired_roll += 360
             self.state.regulator.desired_roll = desired_roll
 
-    def _update_regulator_data(self, pitch: float, roll: float) -> None:
-        self.state.regulator.pitch = pitch
-        self.state.regulator.roll = roll
-
     def update_regulator_data_from_imu(self) -> None:
         """Update regulator data from IMU readings."""
         if not self.state.system_health.imu_ok:
@@ -186,7 +182,8 @@ class Regulator:
             current_pitch, current_roll
         )
 
-        self._update_regulator_data(current_pitch, current_roll)
+        self.state.regulator.pitch = current_pitch
+        self.state.regulator.roll = current_roll
 
     def _handle_depth_hold(self) -> NDArray[np.float32]:
         actuation = np.zeros(3, dtype=np.float32)

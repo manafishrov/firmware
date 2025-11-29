@@ -14,12 +14,12 @@ async def handle_toggle_pitch_stabilization(
     Args:
         state: The ROV state.
     """
-    if not state.system_status.pitch_stabilization:
-        state.regulator.integral_pitch = 0.0
-        state.regulator.desired_pitch = 0.0
     state.system_status.pitch_stabilization = (
         not state.system_status.pitch_stabilization
     )
+    if not state.system_status.pitch_stabilization:
+        state.regulator.integral_pitch = 0.0
+        state.regulator.desired_pitch = 0.0
     log_info(
         f"Toggled pitch stabilization to {state.system_status.pitch_stabilization}"
     )
@@ -33,10 +33,10 @@ async def handle_toggle_roll_stabilization(
     Args:
         state: The ROV state.
     """
+    state.system_status.roll_stabilization = not state.system_status.roll_stabilization
     if not state.system_status.roll_stabilization:
         state.regulator.integral_roll = 0.0
         state.regulator.desired_roll = 0.0
-    state.system_status.roll_stabilization = not state.system_status.roll_stabilization
     log_info(f"Toggled roll stabilization to {state.system_status.roll_stabilization}")
 
 
@@ -48,8 +48,8 @@ async def handle_toggle_depth_hold(
     Args:
         state: The ROV state.
     """
+    state.system_status.depth_hold = not state.system_status.depth_hold
     if not state.system_status.depth_hold:
         state.regulator.integral_depth = 0.0
         state.regulator.desired_depth = state.pressure.depth
-    state.system_status.depth_hold = not state.system_status.depth_hold
     log_info(f"Toggled depth hold to {state.system_status.depth_hold}")
