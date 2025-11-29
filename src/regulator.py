@@ -127,13 +127,6 @@ class Regulator:
     def _update_regulator_data(self, pitch: float, roll: float) -> None:
         self.state.regulator.pitch = pitch
         self.state.regulator.roll = roll
-        # TODO: Either set desired pitch/roll to the same as pitch/roll or set it to 0 only when enabling stabilization
-        if not self.state.system_status.pitch_stabilization:
-            self.state.regulator.desired_pitch = 0.0
-        if not self.state.system_status.roll_stabilization:
-            self.state.regulator.desired_roll = 0.0
-        if not self.state.system_status.depth_hold:
-            self.state.regulator.desired_depth = self.state.pressure.depth
 
     def update_regulator_data_from_imu(self) -> None:
         """Update regulator data from IMU readings."""
