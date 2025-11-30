@@ -162,6 +162,14 @@ in
           nano
         ];
         file.LICENSE.source = ./LICENSE;
+        file."microcontroller-firmware/dshot.uf2".source = pkgs.fetchurl {
+          url = "https://github.com/manafishrov/microcontroller-firmware/releases/download/v1.0.0-beta.1/dshot.uf2";
+          sha256 = "0lj0hgivshc2nh0m1lxg2ks4821203q2zrw4qd81kvk1vqldzylr";
+        };
+        file."microcontroller-firmware/pwm.uf2".source = pkgs.fetchurl {
+          url = "https://github.com/manafishrov/microcontroller-firmware/releases/download/v1.0.0-beta.1/pwm.uf2";
+          sha256 = "0kmyf5imy6909412nzi87qwxkz5z8z0acxk4vghlw6fb2gwd4wn0";
+        };
         activation.copyFirmwareFiles = home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
           if [ ! -f "$HOME/.firmware_initialized" ]; then
             tmpdir=$(mktemp -d)
