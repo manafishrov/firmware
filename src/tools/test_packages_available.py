@@ -11,7 +11,6 @@ def main() -> None:
     logger = logging.getLogger(__name__)
 
     packages = [
-        "pip",
         "numpy",
         "websockets",
         "pydantic",
