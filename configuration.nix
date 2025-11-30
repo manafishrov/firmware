@@ -140,13 +140,6 @@ in
      ];
     sessionVariables = {
       PICO_SDK_PATH = "${pico-sdk-with-submodules}/lib/pico-sdk";
-      LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
-        pkgs.stdenv.cc.cc.lib
-        pkgs.libz
-        pkgs.zlib
-        pkgs.openssl
-        pkgs.python3
-      ];
     };
   };
 
@@ -197,7 +190,7 @@ in
         Type = "simple";
         User = "pi";
         WorkingDirectory = "/home/pi";
-        ExecStart = "${pkgs.python3}/bin/python3 -m src.main";
+        ExecStart = "";
         Restart = "always";
         RestartSec = "5";
       };
