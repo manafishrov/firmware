@@ -14,15 +14,19 @@ wheels = [
 [[package]]
 name = "bmi270"
 version = "0.4.3"
-source = { git = "https://github.com/CoRoLab-Berlin/bmi270_python.git?rev=8309e687d6b346455833c5d0c2734eeb56e98789#8309e687d6b346455833c5d0c2734eeb56e98789" }
+source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "smbus2" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/82/17/cb2c6ada7152ccb7bda033dd8da4e9741de5730c1b4203808651f791fbd6/bmi270-0.4.3.tar.gz", hash = "sha256:15b968b8acdfd005f21f3de4deab6bab97fd58f08f3f3c7add712f51a299e2ab", size = 18551, upload-time = "2023-04-28T08:49:45.47Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/6e/5c/234d687145bc5d989bfbd8a486cfcfc3cb2a947e7bc85458a720074fec83/bmi270-0.4.3-py3-none-any.whl", hash = "sha256:c8f0fbd5913e77666a05b1d9222fd8463681732c211d990b60f993de57581c08", size = 17137, upload-time = "2023-04-28T08:49:42.23Z" },
 ]
 
 [[package]]
 name = "manafish-firmware"
 version = "1.0.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "bmi270" },
     { name = "ms5837" },
@@ -37,12 +41,12 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bmi270", git = "https://github.com/CoRoLab-Berlin/bmi270_python.git?rev=8309e687d6b346455833c5d0c2734eeb56e98789" },
+    { name = "bmi270", specifier = "==0.4.3" },
     { name = "ms5837", git = "https://github.com/bluerobotics/ms5837-python.git?rev=02996d71d2f08339b3d317b3f4da0a83781c706e" },
     { name = "numpy", specifier = "==2.3.4" },
     { name = "numpydantic", specifier = "==1.7.0" },
     { name = "pydantic", specifier = "==2.12.3" },
-    { name = "pyserial-asyncio", specifier = ">=0.6" },
+    { name = "pyserial-asyncio", specifier = "==0.6.0" },
     { name = "scipy", specifier = "==1.16.3" },
     { name = "smbus2", specifier = "==0.5.0" },
     { name = "websockets", specifier = "==15.0.1" },

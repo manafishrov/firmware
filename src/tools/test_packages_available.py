@@ -30,7 +30,3 @@ def main() -> None:
             logger.info(f"Package '{pkg}' is available (version: {version})")
         except ImportError:
             logger.error(f"Package '{pkg}' is not available")
-
-
-if __name__ == "__main__":
-    main()

@@ -132,7 +132,3 @@ async def main() -> None:
     finally:
         writer.close()
         await writer.wait_closed()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

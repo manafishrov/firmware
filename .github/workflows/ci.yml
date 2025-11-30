@@ -31,10 +31,10 @@ jobs:
       run: uv tool install ruff && uv tool install basedpyright
 
     - name: Run ruff linter
-      run: make lint
+      run: ruff check --no-fix
 
     - name: Run ruff formatter check
-      run: make format
+      run: ruff format
 
     - name: Run basedpyright type check
-      run: make typecheck
+      run: basedpyright

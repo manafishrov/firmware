@@ -245,7 +245,3 @@ async def main() -> None:
         if server:
             server.close()
             await server.wait_closed()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
