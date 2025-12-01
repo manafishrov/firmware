@@ -213,7 +213,7 @@ class Regulator:
             )
 
             movement_actuation = self._transform_heave_actuation_from_world_to_body(
-                heave_actuation, self.state.regulator.pitch, self.state.regulator.roll
+                heave_actuation
             )
         return movement_actuation
 
@@ -278,17 +278,17 @@ class Regulator:
         return roll_actuation
 
     def _transform_heave_actuation_from_world_to_body(
-        self, heave_actuation: float, current_pitch: float, current_roll: float
+        self, heave_actuation: float
     ) -> NDArray[np.float32]:
         """Transform heave actuation from world coordinates to body-fixed coordinates, accounting for pitch, roll, and thruster direction coefficients."""
         # Define the actuation vector in world coordinates (z-axis component, heave)
         b = np.array([0, 0, heave_actuation], dtype=np.float32)
 
         # Calculate trigonometric values for pitch and roll angles
-        cp = cast(float, np.cos(cast(float, np.deg2rad(current_pitch))))
-        sp = cast(float, np.sin(cast(float, np.deg2rad(current_pitch))))
-        cr = cast(float, np.cos(cast(float, np.deg2rad(current_roll))))
-        sr = cast(float, np.sin(cast(float, np.deg2rad(current_roll))))
+        cp = cast(float, np.cos(cast(float, np.deg2rad(self.state.regulator.pitch))))
+        sp = cast(float, np.sin(cast(float, np.deg2rad(self.state.regulator.pitch))))
+        cr = cast(float, np.cos(cast(float, np.deg2rad(self.state.regulator.roll))))
+        sr = cast(float, np.sin(cast(float, np.deg2rad(self.state.regulator.roll))))
 
         # Build the rotation matrix from body to world coordinates
         a = np.array(
@@ -323,8 +323,6 @@ class Regulator:
     def _change_coordinate_system_orientation(
         self,
         direction_vector: NDArray[np.float32],
-        current_pitch: float,
-        current_roll: float,
     ) -> NDArray[np.float32]:
         """Transform orientation actuations from global to body-fixed coordinates."""
         # Actuation values in the global coordinate system
@@ -339,10 +337,10 @@ class Regulator:
         roll_coeff = dir_coeffs.roll
 
         # Calculating sin and cos of pitch and roll angles to be used in transformation
-        cp = cast(float, np.cos(cast(float, np.deg2rad(current_pitch))))
-        sp = cast(float, np.sin(cast(float, np.deg2rad(current_pitch))))
-        cr = cast(float, np.cos(cast(float, np.deg2rad(current_roll))))
-        sr = cast(float, np.sin(cast(float, np.deg2rad(current_roll))))
+        cp = cast(float, np.cos(cast(float, np.deg2rad(self.state.regulator.pitch))))
+        sp = cast(float, np.sin(cast(float, np.deg2rad(self.state.regulator.pitch))))
+        cr = cast(float, np.cos(cast(float, np.deg2rad(self.state.regulator.roll))))
+        sr = cast(float, np.sin(cast(float, np.deg2rad(self.state.regulator.roll))))
 
         # This code assumes that the yaw is passed in and thus also passes through this filter.
         try:
@@ -362,7 +360,7 @@ class Regulator:
             )
 
         # In the return we leave movement actuation unchanged and only modify orientation actuation
-        new_actuation = actuation.copy()
+        new_actuation = direction_vector.copy()
         new_actuation[3] = pitch_l
         new_actuation[4] = yaw_l
         new_actuation[5] = roll_l
@@ -416,8 +414,6 @@ class Regulator:
         ):
             user_scaled_direction_vector = self._change_coordinate_system_orientation(
                 direction_vector,
-                self.state.regulator.pitch,
-                self.state.regulator.roll,
             )
 
     def handle_auto_tuning(self, current_time: float) -> NDArray[np.float32] | None:
