@@ -19,7 +19,6 @@
     "home-manager": {
       "inputs": {
         "nixpkgs": [
-          "nixos-raspberrypi",
           "nixpkgs"
         ]
       },
@@ -103,7 +102,11 @@
     "root": {
       "inputs": {
         "home-manager": "home-manager",
-        "nixos-raspberrypi": "nixos-raspberrypi"
+        "nixos-raspberrypi": "nixos-raspberrypi",
+        "nixpkgs": [
+          "nixos-raspberrypi",
+          "nixpkgs"
+        ]
       }
     }
   },
