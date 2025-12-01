@@ -104,7 +104,7 @@ class Thrusters:
         """Converts the direction_vector into the final thrust_vector sent to the microcontroller."""
         direction_vector = cast(
             NDArray[np.float32], self.state.thrusters.direction_vector
-        )
+        ).copy()
 
         self._smooth_direction_vector(direction_vector, self.previous_direction_vector)
         self.previous_direction_vector = direction_vector.copy()
