@@ -8,7 +8,6 @@ from ms5837 import DENSITY_FRESHWATER, MS5837_30BA
 
 def main() -> None:
     """Run the pressure sensor test script."""
-    logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
     sensor = MS5837_30BA()
     sensor.setFluidDensity(DENSITY_FRESHWATER)  # pyright: ignore[reportUnknownMemberType]

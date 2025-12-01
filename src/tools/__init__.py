@@ -1,6 +1,7 @@
 """ROV Hardware Tools & Diagnostics."""
 
 import asyncio
+import logging
 import sys
 
 from . import (
@@ -10,6 +11,9 @@ from . import (
     test_pressure_sensor,
     test_thrusters,
 )
+
+
+logging.basicConfig(level=logging.INFO)
 
 
 def cli() -> None:

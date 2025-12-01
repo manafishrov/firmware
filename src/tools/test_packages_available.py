@@ -7,7 +7,6 @@ import types
 
 def main() -> None:
     """Check that required packages are available."""
-    logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
 
     packages = [

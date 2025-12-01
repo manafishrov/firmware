@@ -231,7 +231,6 @@ async def main() -> None:
     args = parser.parse_args()
     host = "127.0.0.1" if cast(bool, args.local) else "10.10.10.10"
 
-    logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
 
     server = None
