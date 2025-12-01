@@ -397,22 +397,20 @@ class Regulator:
 
         self._scale_regulator_direction_vector(regulator_direction_vector)
 
-        user_scaled_direction_vector = self._get_user_scaled_direction_vector(
-            direction_vector
-        )
+        direction_vector = self._get_user_scaled_direction_vector(direction_vector)
 
         if self.state.system_status.pitch_stabilization:
-            user_scaled_direction_vector[3] = 0
+            direction_vector[3] = 0
         if self.state.system_status.roll_stabilization:
-            user_scaled_direction_vector[5] = 0
+            direction_vector[5] = 0
 
-        user_scaled_direction_vector += regulator_direction_vector
+        direction_vector += regulator_direction_vector
 
         if (
             self.state.system_status.pitch_stabilization
             or self.state.system_status.roll_stabilization
         ):
-            user_scaled_direction_vector = self._change_coordinate_system_orientation(
+            direction_vector[:] = self._change_coordinate_system_orientation(
                 direction_vector,
             )
 

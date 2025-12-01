@@ -116,9 +116,6 @@ class Thrusters:
 
         self.regulator.apply_regulator_to_direction_vector(direction_vector)
 
-
-
-
         thrust_vector = self._create_thrust_vector_from_thruster_allocation(
             direction_vector
         )
