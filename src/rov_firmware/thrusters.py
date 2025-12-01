@@ -53,7 +53,7 @@ class Thrusters:
             8, dtype=np.float32
         )
 
-    def _create_thrust_vector_from_thruster_allocation(
+    def _create_thrust_vector_from_direction_vector(
         self, direction_vector: NDArray[np.float32]
     ) -> NDArray[np.float32]:
         allocation_matrix = cast(
@@ -64,13 +64,15 @@ class Thrusters:
 
     def _correct_thrust_vector_spin_directions(
         self, thrust_vector: NDArray[np.float32]
-    ) -> NDArray[np.float32]:
+    ) -> None:
         spin_directions = cast(
             NDArray[np.int8],
             self.state.rov_config.thruster_pin_setup.spin_directions,
         )
-        thrust_vector = thrust_vector * spin_directions
-        return thrust_vector
+        thrust_vector *= spin_directions
+
+    def _clip_thrust_vector(self, thrust_vector: NDArray[np.float32]) -> None:
+        thrust_vector[:] = np.clip(thrust_vector, -1.0, 1.0)
 
     def _smooth_direction_vector(
         self,
@@ -92,22 +94,17 @@ class Thrusters:
 
         direction_vector[:] = result.astype(np.float32, copy=False)
 
-    def _reorder_thrust_vector(
-        self, thrust_vector: NDArray[np.float32]
-    ) -> NDArray[np.float32]:
+    def _reorder_thrust_vector(self, thrust_vector: NDArray[np.float32]) -> None:
         identifiers = cast(
             NDArray[np.int8], self.state.rov_config.thruster_pin_setup.identifiers
         )
-        reordered = np.zeros(len(identifiers), dtype=np.float32)
-        for i in range(len(identifiers)):
-            reordered[i] = thrust_vector[identifiers[i]]
-        return reordered
+        thrust_vector[:] = thrust_vector[identifiers]
 
-    def _prepare_thrust_vector(
-        self, direction_vector: NDArray[np.float32]
-    ) -> NDArray[np.float32]:
+    def _create_thrust_vector(self) -> NDArray[np.float32]:
         """Converts the direction_vector into the final thrust_vector sent to the microcontroller."""
-        self.regulator.update_regulator_data_from_imu()
+        direction_vector = cast(
+            NDArray[np.float32], self.state.thrusters.direction_vector
+        )
 
         self._smooth_direction_vector(direction_vector, self.previous_direction_vector)
         self.previous_direction_vector = direction_vector.copy()
@@ -116,14 +113,13 @@ class Thrusters:
 
         self.regulator.apply_regulator_to_direction_vector(direction_vector)
 
-        thrust_vector = self._create_thrust_vector_from_thruster_allocation(
+        thrust_vector = self._create_thrust_vector_from_direction_vector(
             direction_vector
         )
 
-        thrust_vector = self._reorder_thrust_vector(thrust_vector)
-        thrust_vector = self._correct_thrust_vector_spin_directions(thrust_vector)
-
-        thrust_vector = np.clip(thrust_vector, -1.0, 1.0)
+        self._reorder_thrust_vector(thrust_vector)
+        self._correct_thrust_vector_spin_directions(thrust_vector)
+        self._clip_thrust_vector(thrust_vector)
 
         return thrust_vector
 
@@ -190,13 +186,12 @@ class Thrusters:
             tuning_vector = self.regulator.handle_auto_tuning(current_time)
             if tuning_vector is not None:
                 direction_vector = tuning_vector
-                thrust_vector = self._create_thrust_vector_from_thruster_allocation(
+                thrust_vector = self._create_thrust_vector_from_direction_vector(
                     direction_vector
                 )
-                thrust_vector = self._correct_thrust_vector_spin_directions(
-                    thrust_vector
-                )
-                thrust_vector = self._reorder_thrust_vector(thrust_vector)
+                self._correct_thrust_vector_spin_directions(thrust_vector)
+                self._reorder_thrust_vector(thrust_vector)
+                self._clip_thrust_vector(thrust_vector)
                 return thrust_vector, last_send_time
 
         if self.state.thrusters.test_thruster is not None:
@@ -211,10 +206,7 @@ class Thrusters:
             and current_time - self.state.thrusters.last_direction_time
             < THRUSTER_TIMEOUT_MS / 1000
         ):
-            direction_vector = cast(
-                NDArray[np.float32], self.state.thrusters.direction_vector
-            )
-            return self._prepare_thrust_vector(direction_vector), current_time
+            return self._create_thrust_vector(), current_time
 
         if current_time - last_send_time > THRUSTER_TIMEOUT_MS / 1000:
             return np.zeros(NUM_MOTORS, dtype=np.float32), last_send_time
@@ -244,6 +236,7 @@ class Thrusters:
                 continue
 
             current_time = time.time()
+            self.regulator.update_regulator_data_from_imu()
             new_thrust_vector, updated_last_send_time = self._determine_thrust_vector(
                 current_time, last_send_time
             )
