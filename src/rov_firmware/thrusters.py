@@ -53,27 +53,6 @@ class Thrusters:
             8, dtype=np.float32
         )
 
-    def _create_thrust_vector_from_direction_vector(
-        self, direction_vector: NDArray[np.float32]
-    ) -> NDArray[np.float32]:
-        allocation_matrix = cast(
-            NDArray[np.float32], self.state.rov_config.thruster_allocation
-        )
-        thrust_vector = allocation_matrix @ direction_vector
-        return thrust_vector
-
-    def _correct_thrust_vector_spin_directions(
-        self, thrust_vector: NDArray[np.float32]
-    ) -> None:
-        spin_directions = cast(
-            NDArray[np.int8],
-            self.state.rov_config.thruster_pin_setup.spin_directions,
-        )
-        thrust_vector *= spin_directions
-
-    def _clip_thrust_vector(self, thrust_vector: NDArray[np.float32]) -> None:
-        thrust_vector[:] = np.clip(thrust_vector, -1.0, 1.0)
-
     def _smooth_direction_vector(
         self,
         direction_vector: NDArray[np.float32],
@@ -94,11 +73,32 @@ class Thrusters:
 
         direction_vector[:] = result.astype(np.float32, copy=False)
 
+    def _create_thrust_vector_from_direction_vector(
+        self, direction_vector: NDArray[np.float32]
+    ) -> NDArray[np.float32]:
+        allocation_matrix = cast(
+            NDArray[np.float32], self.state.rov_config.thruster_allocation
+        )
+        thrust_vector = allocation_matrix @ direction_vector
+        return thrust_vector
+
+    def _correct_thrust_vector_spin_directions(
+        self, thrust_vector: NDArray[np.float32]
+    ) -> None:
+        spin_directions = cast(
+            NDArray[np.int8],
+            self.state.rov_config.thruster_pin_setup.spin_directions,
+        )
+        thrust_vector *= spin_directions
+
     def _reorder_thrust_vector(self, thrust_vector: NDArray[np.float32]) -> None:
         identifiers = cast(
             NDArray[np.int8], self.state.rov_config.thruster_pin_setup.identifiers
         )
         thrust_vector[:] = thrust_vector[identifiers]
+
+    def _clip_thrust_vector(self, thrust_vector: NDArray[np.float32]) -> None:
+        thrust_vector[:] = np.clip(thrust_vector, -1.0, 1.0)
 
     def _create_thrust_vector(self) -> NDArray[np.float32]:
         """Converts the direction_vector into the final thrust_vector sent to the microcontroller."""
