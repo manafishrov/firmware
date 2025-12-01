@@ -163,18 +163,7 @@ in
           url = "https://github.com/manafishrov/microcontroller-firmware/releases/download/v1.0.0-beta.1/pwm.uf2";
           sha256 = "0kmyf5imy6909412nzi87qwxkz5z8z0acxk4vghlw6fb2gwd4wn0";
         };
-        activation.copyFirmwareFiles = home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
-          if [ ! -f "$HOME/.firmware_initialized" ]; then
-            tmpdir=$(mktemp -d)
-            mkdir $tmpdir/src
-            mkdir $tmpdir/scripts
-            cp -r ${./src}/* $tmpdir/src/
-            cp -r ${./scripts}/* $tmpdir/scripts/
-            chmod -R u+w $tmpdir/*
-            cp -rf $tmpdir/* $HOME/
-            rm -rf $tmpdir
-            touch "$HOME/.firmware_initialized"
-          fi
+        activation.setupFirmware = home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
         '';
       };
     };
