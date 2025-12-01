@@ -132,70 +132,14 @@ in
       cmake
       gnumake
       gcc-arm-embedded
+      clang
+      clang-tools
       picotool
       pico-sdk-with-submodules
-      (python312.withPackages (pypkgs: with pypkgs; [
-        pip
-        numpy
-        websockets
-        pydantic
-        smbus2
-        scipy
-        pyserial-asyncio
-      ] ++ [
-        (pkgs.python312Packages.buildPythonPackage rec {
-          pname = "numpydantic";
-          version = "1.7.0";
-          format = "pyproject";
-           src = pkgs.fetchPypi {
-             inherit pname version;
-             hash = "sha256-JoKFvuAm2d/fI+/u4T9gw7ddR94v/fLli08MF6aCTjs=";
-           };
-          nativeBuildInputs = with pkgs.python312Packages; [ pdm-backend ];
-          propagatedBuildInputs = with pkgs.python312Packages; [ pydantic numpy ];
-          doCheck = false;
-        })
-        (pkgs.python312Packages.buildPythonPackage {
-          pname = "bmi270";
-          version = "0.4.3";
-          format = "other";
-          src = pkgs.fetchFromGitHub {
-            owner = "CoRoLab-Berlin";
-            repo = "bmi270_python";
-            rev = "8309e687d6b346455833c5d0c2734eeb56e98789";
-            hash = "sha256-IxkMWWcrsglFV5HGDMK0GBx5o0svNfRXqhW8/ZWpsUk=";
-          };
-          buildPhase = ":";
-          installPhase = ''
-            runHook preInstall
-            install -d $out/${pkgs.python312.sitePackages}
-            cp -r src/bmi270 $out/${pkgs.python312.sitePackages}/
-            runHook postInstall
-          '';
-          doCheck = false;
-        })
-        (pkgs.python312Packages.buildPythonPackage {
-          pname = "ms5837";
-          version = "0.1.0";
-          src = pkgs.fetchFromGitHub {
-            owner = "bluerobotics";
-            repo = "ms5837-python";
-            rev = "02996d71d2f08339b3d317b3f4da0a83781c706e";
-            hash = "sha256-LBwM9sTvr7IaBcY8PcsPZcAbNRWBa4hj7tUC4oOr4eM=";
-          };
-          doCheck = false;
-         })
-       ]))
+      uv
      ];
     sessionVariables = {
       PICO_SDK_PATH = "${pico-sdk-with-submodules}/lib/pico-sdk";
-      LD_LIBRARY_PATH = pkgs.lib.makeLibraryPath [
-        pkgs.stdenv.cc.cc.lib
-        pkgs.libz
-        pkgs.zlib
-        pkgs.openssl
-        pkgs.python3
-      ];
     };
   };
 
@@ -211,18 +155,21 @@ in
           nano
         ];
         file.LICENSE.source = ./LICENSE;
-        activation.copyFirmwareFiles = home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
-          if [ ! -f "$HOME/.firmware_initialized" ]; then
-            tmpdir=$(mktemp -d)
-            mkdir $tmpdir/src
-            mkdir $tmpdir/scripts
-            cp -r ${./src}/* $tmpdir/src/
-            cp -r ${./scripts}/* $tmpdir/scripts/
-            cp ${./Makefile} $tmpdir/Makefile
-            chmod -R u+w $tmpdir/*
-            cp -rf $tmpdir/* $HOME/
-            rm -rf $tmpdir
-            touch "$HOME/.firmware_initialized"
+        file."microcontroller-firmware/dshot.uf2".source = pkgs.fetchurl {
+          url = "https://github.com/manafishrov/microcontroller-firmware/releases/download/v1.0.0-beta.1/dshot.uf2";
+          sha256 = "0lj0hgivshc2nh0m1lxg2ks4821203q2zrw4qd81kvk1vqldzylr";
+        };
+        file."microcontroller-firmware/pwm.uf2".source = pkgs.fetchurl {
+          url = "https://github.com/manafishrov/microcontroller-firmware/releases/download/v1.0.0-beta.1/pwm.uf2";
+          sha256 = "0kmyf5imy6909412nzi87qwxkz5z8z0acxk4vghlw6fb2gwd4wn0";
+        };
+        activation.setupFirmware = home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
+          if [ ! -f "$HOME/.firmware_setup" ]; then
+            mkdir -p $HOME/firmware
+            cp -r ${./.}/* $HOME/firmware/
+            cd $HOME/firmware
+            uv sync
+            touch "$HOME/.firmware_setup"
           fi
         '';
       };
@@ -232,14 +179,14 @@ in
   # Services
   systemd.services = {
     manafish-firmware = {
-      enable = false;
+      enable = true;
       wantedBy = [ "multi-user.target" ];
       after = [ "network.target" "go2rtc.service" ];
       serviceConfig = {
         Type = "simple";
         User = "pi";
-        WorkingDirectory = "/home/pi";
-        ExecStart = "${pkgs.python3}/bin/python3 -m src.main";
+        WorkingDirectory = "/home/pi/firmware";
+        ExecStart = "${pkgs.uv}/bin/uv run start";
         Restart = "always";
         RestartSec = "5";
       };

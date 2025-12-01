@@ -7,11 +7,9 @@ import types
 
 def main() -> None:
     """Check that required packages are available."""
-    logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
 
     packages = [
-        "pip",
         "numpy",
         "websockets",
         "pydantic",
@@ -30,7 +28,3 @@ def main() -> None:
             logger.info(f"Package '{pkg}' is available (version: {version})")
         except ImportError:
             logger.error(f"Package '{pkg}' is not available")
-
-
-if __name__ == "__main__":
-    main()

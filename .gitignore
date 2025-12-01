@@ -1,12 +1,14 @@
 # misc
 .DS_Store
+.direnv
 
 # python
 __pycache__
+*.egg-info/
 
 # build files
 result
-build
+dist
 
 # config
 config.json

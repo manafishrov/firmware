@@ -18,7 +18,6 @@ from bmi270.BMI270 import (
 
 def main() -> None:
     """Run the IMU test script."""
-    logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
     imu = BMI270(I2C_PRIM_ADDR)
     imu.load_config_file()
@@ -44,7 +43,3 @@ def main() -> None:
             time.sleep(0.1)
     except KeyboardInterrupt:
         pass
-
-
-if __name__ == "__main__":
-    main()

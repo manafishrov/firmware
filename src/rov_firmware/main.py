@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 
-from .log import log_info
 from .regulator import Regulator
 from .rov_state import RovState
 from .sensors.esc import EscSensor
@@ -41,13 +40,3 @@ async def main() -> None:
     _ = await asyncio.gather(*tasks)
 
     await serial_manager.shutdown()
-
-
-if __name__ == "__main__":
-    log_info("Starting ROV Firmware...")
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        pass
-    finally:
-        log_info("Shutting down.")

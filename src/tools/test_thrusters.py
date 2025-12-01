@@ -119,7 +119,6 @@ def _log_telemetry(packet: bytearray, logger: logging.Logger) -> None:
 
 async def main() -> None:
     """Run the thruster test script."""
-    logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
     port = _find_port()
     reader, writer = await open_serial_connection(url=port, baudrate=115200)
@@ -132,7 +131,3 @@ async def main() -> None:
     finally:
         writer.close()
         await writer.wait_closed()
-
-
-if __name__ == "__main__":
-    asyncio.run(main())

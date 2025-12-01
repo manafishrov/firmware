@@ -1,10 +1,16 @@
 # Firmware
 
-The Manafish firmware is designed to run on Raspberry Pi devices, specifically the Raspberry Pi 3 and 4. It provides the firmware for controlling and using the Manafish ROV.
+The Manafish firmware is designed to run on Raspberry Pi devices, specifically
+the Raspberry Pi 3 and 4. It provides the firmware for controlling and using
+the Manafish ROV.
 
 ## Building the SD Image
 
-To build the SD image you need to have `nix` installed on an aarch64-linux platform or proper emulation support for the aarch64-linux platform. Also add the caches for the `nixos-raspberrypi` flake to the build system so the build finishes in a reasonable time. Run the command for the specific Pi and camera module you want to use:
+To build the SD image you need to have `nix` installed on an aarch64-linux
+platform or proper emulation support for the aarch64-linux platform. Also add
+the caches for the `nixos-raspberrypi` flake to the build system so the build
+finishes in a reasonable time. Run the command for the specific Pi and camera
+module you want to use:
 
 ```sh
 nix build .#pi3-ov5647
@@ -21,11 +27,13 @@ When you have built the image you can list it out with the following command:
 ls -lh result/sd-image
 ```
 
-This will include the size of the image in the output. The image is compressed with zstd.
+This will include the size of the image in the output. The image is compressed
+with zstd.
 
 ## Flashing the SD Card
 
-We need to plug in the SD card and find out what the device path is for the SD card.
+We need to plug in the SD card and find out what the device path is for the
+SD card.
 
 On linux:
 
@@ -39,19 +47,24 @@ On darwin:
 diskutil list
 ```
 
-On linux it is usually `/dev/sdX` where `X` is a letter, for example `/dev/sdb`. On darwin it is usually `/dev/diskX` where `X` is a number for example `/dev/disk6`.
+On linux it is usually `/dev/sdX` where `X` is a letter, for example `/dev/sdb`.
+On darwin it is usually `/dev/diskX` where `X` is a number for example
+`/dev/disk6`.
 
-To flash the image to the SD card you can use the following command, make sure to replace `/dev/XXX` with the correct device path for your SD card:
+To flash the image to the SD card you can use the following command, make sure
+to replace `/dev/XXX` with the correct device path for your SD card:
 
 ```sh
 zstd -dc result/sd-image/*.zst | sudo dd of=/dev/XXX bs=4M status=progress oflag=sync
 ```
 
-### Windows
+Flashing the SD card on windows is a little more complicated. It is not possible
+to build the image on Windows and the commands will not work. Instead start by
+downloading the image you want to use form the release page on GitHub. The
+image will be in a `.zst` file format.
 
-Flashing the SD card on windows is a little more complicated. It is not possible to build the image on Windows and the commands will not work. Instead start by downloading the image you want to use form the release page on GitHub. The image will be in a `.zst` file format.
-
-Make sure you have 7-Zip installed, and right-click the `sd-image` zst file and select "Extract Here" to extract the image file.
+Make sure you have 7-Zip installed, and right-click the `sd-image` zst file and
+select "Extract Here" to extract the image file.
 
 Next make sure you have Rufus installed, and open it.
 Select the SD card from the "Device" dropdown.
@@ -60,7 +73,11 @@ Click "Start" to begin flashing the SD card.
 
 ## Configure Your Mac/PC's Ethernet Connection
 
-After plugging the SD card in the Raspberry Pi and powering it on, you need to tell your computer how to connect to the Pi without disrupting your regular internet connection. This is done by assigning a static IP address to your computer in the same address space as the IP of the firmware (by default this is 10.10.10.10). We recommend setting it to 10.10.10.100 for simplicity.
+After plugging the SD card in the Raspberry Pi and powering it on, you need to
+tell your computer how to connect to the Pi without disrupting your regular
+internet connection. This is done by assigning a static IP address to your
+computer in the same address space as the IP of the firmware (by default this
+is 10.10.10.10). We recommend setting it to 10.10.10.100 for simplicity.
 
 ### MacOS
 
@@ -76,7 +93,8 @@ After plugging the SD card in the Raspberry Pi and powering it on, you need to t
 ### Windows
 
 1. Open "View Network Connections"
-   - You can find this by searching for "View Network Connections" in the Start menu
+   - You can find this by searching for "View Network Connections" in the
+     Start menu
 2. Right-click your Ethernet connection and select "Properties"
 3. Select "Internet Protocol Version 4 (TCP/IPv4)" and click "Properties"
 4. Select "Use the following IP address" and enter:
@@ -105,7 +123,10 @@ After plugging the SD card in the Raspberry Pi and powering it on, you need to t
 
 ## Raspberry Pi
 
-To modify the firmware on the Raspberry Pi, you need to connect to it via SSH. The default username is `pi` and the password is `manafish`. The Pi will be available on port 10.10.10.10 when connected via Ethernet after you have configured your computer's Ethernet connection as described above.
+To modify the firmware on the Raspberry Pi, you need to connect to it via SSH.
+The default username is `pi` and the password is `manafish`. The Pi will be
+available on port 10.10.10.10 when connected via Ethernet after you have
+configured your computer's Ethernet connection as described above.
 
 Command to connect via SSH:
 
@@ -113,7 +134,8 @@ Command to connect via SSH:
 ssh pi@10.10.10.10
 ```
 
-If you have reflashed the SD card, you may need to delete the known hosts entry for the Pi before connecting:
+If you have reflashed the SD card, you may need to delete the known hosts entry
+for the Pi before connecting:
 
 ```sh
 ssh-keygen -R 10.10.10.10
@@ -143,7 +165,9 @@ To connect to a WiFi network on the Pi, use the following commands:
 
 ### Firmware Service Management
 
-The Manafish firmware runs as a systemd service. It is set to run automatically on startup, but during development it can be useful to stop/start/restart it. Here are the common commands to manage it:
+The Manafish firmware runs as a systemd service. It is set to run automatically
+on startup, but during development it can be useful to stop/start/restart it.
+Here are the common commands to manage it:
 
 1. Start the firmware service:
 
@@ -183,4 +207,5 @@ The Manafish firmware runs as a systemd service. It is set to run automatically 
 
 ## License
 
-This project is licensed under the GNU Affero General Public License v3.0 or later - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the GNU Affero General Public License v3.0 or
+later - see the [LICENSE](LICENSE) file for details.

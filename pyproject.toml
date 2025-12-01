@@ -11,10 +11,17 @@ dependencies = [
   "numpydantic==1.7.0",
   "smbus2==0.5.0",
   "scipy==1.16.3",
-  "pyserial-asyncio>=0.6",
-  "bmi270 @ git+https://github.com/CoRoLab-Berlin/bmi270_python.git@8309e687d6b346455833c5d0c2734eeb56e98789",
+  "pyserial-asyncio==0.6.0",
+  "bmi270==0.4.3",
   "ms5837 @ git+https://github.com/bluerobotics/ms5837-python.git@02996d71d2f08339b3d317b3f4da0a83781c706e",
 ]
+
+[project.scripts]
+start = "rov_firmware:start"
+tools = "tools:cli"
+
+[tool.uv]
+package = true
 
 [tool.ruff]
 target-version = "py312"

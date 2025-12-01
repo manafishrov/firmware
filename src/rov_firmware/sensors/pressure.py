@@ -6,7 +6,7 @@ import asyncio
 
 from ms5837 import DENSITY_FRESHWATER, DENSITY_SALTWATER, MS5837_30BA
 
-from ..constants import SYSTEM_FAILURE_THRESHOLD
+from ..constants import PRESSURE_SENSOR_READ_FREQUENCY, SYSTEM_FAILURE_THRESHOLD
 from ..log import log_error, log_info
 from ..models.config import FluidType
 from ..models.sensors import PressureData
@@ -103,4 +103,4 @@ class PressureSensor:
                 self.state.system_health.pressure_sensor_ok = False
                 failure_count = 0
                 log_error("Pressure sensor failed 3 times, disabling pressure sensor")
-            await asyncio.sleep(1 / 50)
+            await asyncio.sleep(1 / PRESSURE_SENSOR_READ_FREQUENCY)

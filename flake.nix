@@ -13,14 +13,15 @@
   };
 
   inputs = {
+    nixpkgs.follows = "nixos-raspberrypi/nixpkgs";
     nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi?shallow=1";
     home-manager = {
       url = "github:nix-community/home-manager/release-25.05?shallow=1";
-      inputs.nixpkgs.follows = "nixos-raspberrypi/nixpkgs";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = { self, nixos-raspberrypi, home-manager, ... }:
+  outputs = { self, nixpkgs, nixos-raspberrypi, home-manager, ... }:
   let
     cameras = [
       "ov5647"
@@ -89,6 +90,20 @@
       (system: {
         name = system;
         value = mkPackages system;
+      })
+      supportedSystems
+    );
+
+    devShells = builtins.listToAttrs (map
+      (system: let
+        pkgs = nixpkgs.legacyPackages.${system};
+      in {
+        name = system;
+        value = {
+          default = pkgs.mkShell {
+            buildInputs = [ pkgs.uv ];
+          };
+        };
       })
       supportedSystems
     );
