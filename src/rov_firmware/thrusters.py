@@ -53,12 +53,6 @@ class Thrusters:
             8, dtype=np.float32
         )
 
-    def _get_user_scaled_direction_vector(
-        self, direction_vector: NDArray[np.float32]
-    ) -> NDArray[np.float32]:
-        scale = self.state.rov_config.power.user_max_power / 100
-        return direction_vector * scale
-
     def _create_thrust_vector_from_thruster_allocation(
         self, direction_vector: NDArray[np.float32]
     ) -> NDArray[np.float32]:
@@ -120,36 +114,13 @@ class Thrusters:
 
         self.regulator.update_desired_from_direction_vector(direction_vector)
 
-        user_scaled_direction_vector = self._get_user_scaled_direction_vector(
-            direction_vector
-        )
-        regulator_direction_vector = self.regulator.get_direction_vector(
-            direction_vector
-        )
+        self.regulator.apply_regulator_to_direction_vector(direction_vector)
 
-        # Setting pitch and roll actuation to 0 to avoid forward connection
-        if self.state.system_status.pitch_stabilization:
-            user_scaled_direction_vector[3] = 0
-        if self.state.system_status.roll_stabilization:
-            user_scaled_direction_vector[5] = 0
 
-        user_scaled_direction_vector += regulator_direction_vector
 
-        # Now that we have the final direction vector, we can change the coordinate system for orientation actuation (if regulator enabled)
-        if (
-            self.state.system_status.pitch_stabilization
-            or self.state.system_status.roll_stabilization
-        ):
-            user_scaled_direction_vector = (
-                self.regulator._change_coordinate_system_orientation(
-                    direction_vector,
-                    self.state.regulator.pitch,
-                    self.state.regulator.roll,
-                )
-            )
 
         thrust_vector = self._create_thrust_vector_from_thruster_allocation(
-            user_scaled_direction_vector
+            direction_vector
         )
 
         thrust_vector = self._reorder_thrust_vector(thrust_vector)

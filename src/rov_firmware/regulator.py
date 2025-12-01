@@ -186,7 +186,7 @@ class Regulator:
         self.state.regulator.roll = current_roll
 
     def _handle_depth_hold(self) -> NDArray[np.float32]:
-        actuation = np.zeros(3, dtype=np.float32)
+        movement_actuation = np.zeros(3, dtype=np.float32)
         if self.state.system_status.depth_hold:
             current_depth = self.state.pressure.depth
             desired_depth = self.state.regulator.desired_depth
@@ -206,21 +206,21 @@ class Regulator:
 
             config = self.state.rov_config.regulator
             error = -(desired_depth - current_depth)
-            depth_actuation = (
+            heave_actuation = (
                 config.depth.kp * error
                 + config.depth.ki * self.state.regulator.integral_depth
                 + config.depth.kd * self.current_dt_depth
             )
 
-            actuation = self._change_coordinate_system_movement(
-                depth_actuation, self.state.regulator.pitch, self.state.regulator.roll
+            movement_actuation = self._transform_heave_actuation_from_world_to_body(
+                heave_actuation, self.state.regulator.pitch, self.state.regulator.roll
             )
-        return actuation
+        return movement_actuation
 
     def _handle_pitch_stabilization(
         self, direction_vector: NDArray[np.float32]
     ) -> float:
-        actuation = 0.0
+        pitch_actuation = 0.0
         if self.state.system_status.pitch_stabilization:
             config = self.state.rov_config.regulator
             desired_pitch = self.state.regulator.desired_pitch
@@ -237,7 +237,7 @@ class Regulator:
                 -INTEGRAL_WINDUP_CLIP_DEGREES,
                 INTEGRAL_WINDUP_CLIP_DEGREES,
             )
-            actuation = (
+            pitch_actuation = (
                 config.pitch.kp * cast(float, np.radians(desired_pitch - current_pitch))
                 + config.pitch.ki
                 * cast(float, np.radians(self.state.regulator.integral_pitch))
@@ -245,13 +245,13 @@ class Regulator:
             )
             current_roll = self.state.regulator.roll
             if current_roll >= PITCH_MAX or current_roll <= -PITCH_MAX:
-                actuation = -actuation
-        return actuation
+                pitch_actuation = -pitch_actuation
+        return pitch_actuation
 
     def _handle_roll_stabilization(
         self, direction_vector: NDArray[np.float32]
     ) -> float:
-        actuation = 0.0
+        roll_actuation = 0.0
         if self.state.system_status.roll_stabilization:
             config = self.state.rov_config.regulator
             desired_roll = self.state.regulator.desired_roll
@@ -269,20 +269,20 @@ class Regulator:
                 INTEGRAL_WINDUP_CLIP_DEGREES,
             )
 
-            actuation = (
+            roll_actuation = (
                 config.roll.kp * cast(float, np.radians(desired_roll - current_roll))
                 + config.roll.ki
                 * cast(float, np.radians(self.state.regulator.integral_roll))
                 - config.roll.kd * cast(float, np.radians(cast(float, self.gyro[0])))
             )
-        return actuation
+        return roll_actuation
 
-    def _change_coordinate_system_movement(
-        self, actuation: float, current_pitch: float, current_roll: float
+    def _transform_heave_actuation_from_world_to_body(
+        self, heave_actuation: float, current_pitch: float, current_roll: float
     ) -> NDArray[np.float32]:
-        """Transform movement heave actuation from body-fixed to world coordinates."""
-        # Define the actuation vector in body coordinates (z-axis component, heave)
-        b = np.array([0, 0, actuation], dtype=np.float32)
+        """Transform heave actuation from world coordinates to body-fixed coordinates, accounting for pitch, roll, and thruster direction coefficients."""
+        # Define the actuation vector in world coordinates (z-axis component, heave)
+        b = np.array([0, 0, heave_actuation], dtype=np.float32)
 
         # Calculate trigonometric values for pitch and roll angles
         cp = cast(float, np.cos(cast(float, np.deg2rad(current_pitch))))
@@ -322,15 +322,15 @@ class Regulator:
 
     def _change_coordinate_system_orientation(
         self,
-        actuation: NDArray[np.float32],
+        direction_vector: NDArray[np.float32],
         current_pitch: float,
         current_roll: float,
     ) -> NDArray[np.float32]:
         """Transform orientation actuations from global to body-fixed coordinates."""
         # Actuation values in the global coordinate system
-        pitch_g = cast(float, actuation[3])
-        yaw_g = cast(float, actuation[4])
-        roll_g = cast(float, actuation[5])
+        pitch_g = cast(float, direction_vector[3])
+        yaw_g = cast(float, direction_vector[4])
+        roll_g = cast(float, direction_vector[5])
 
         # Retrieving direction coefficients from configuration
         dir_coeffs = self.state.rov_config.direction_coefficients
@@ -344,7 +344,7 @@ class Regulator:
         cr = cast(float, np.cos(cast(float, np.deg2rad(current_roll))))
         sr = cast(float, np.sin(cast(float, np.deg2rad(current_roll))))
 
-        # PROBLEM -> The code under here assumes that the yaw is passed in and thus also passes through this filter.
+        # This code assumes that the yaw is passed in and thus also passes through this filter.
         try:
             pitch_l = cr * pitch_g + sr * cp * yaw_g * (
                 yaw_coeff / pitch_coeff
@@ -368,6 +368,12 @@ class Regulator:
         new_actuation[5] = roll_l
         return new_actuation
 
+    def _get_user_scaled_direction_vector(
+        self, direction_vector: NDArray[np.float32]
+    ) -> NDArray[np.float32]:
+        scale = self.state.rov_config.power.user_max_power / 100
+        return direction_vector * scale
+
     def _scale_regulator_direction_vector(
         self, regulator_direction_vector: NDArray[np.float32]
     ) -> None:
@@ -376,14 +382,14 @@ class Regulator:
             regulator_direction_vector, -power, power, out=regulator_direction_vector
         )
 
-    def get_direction_vector(
+    def apply_regulator_to_direction_vector(
         self, direction_vector: NDArray[np.float32]
-    ) -> NDArray[np.float32]:
+    ) -> None:
         """Get regulator actuation values."""
         regulator_direction_vector = np.zeros(8, dtype=np.float32)
 
-        depth_actuation = self._handle_depth_hold()
-        regulator_direction_vector[0:3] = depth_actuation
+        movement_actuation = self._handle_depth_hold()
+        regulator_direction_vector[0:3] = movement_actuation
 
         pitch_actuation = self._handle_pitch_stabilization(direction_vector)
         regulator_direction_vector[3] = pitch_actuation
@@ -393,7 +399,26 @@ class Regulator:
 
         self._scale_regulator_direction_vector(regulator_direction_vector)
 
-        return regulator_direction_vector
+        user_scaled_direction_vector = self._get_user_scaled_direction_vector(
+            direction_vector
+        )
+
+        if self.state.system_status.pitch_stabilization:
+            user_scaled_direction_vector[3] = 0
+        if self.state.system_status.roll_stabilization:
+            user_scaled_direction_vector[5] = 0
+
+        user_scaled_direction_vector += regulator_direction_vector
+
+        if (
+            self.state.system_status.pitch_stabilization
+            or self.state.system_status.roll_stabilization
+        ):
+            user_scaled_direction_vector = self._change_coordinate_system_orientation(
+                direction_vector,
+                self.state.regulator.pitch,
+                self.state.regulator.roll,
+            )
 
     def handle_auto_tuning(self, current_time: float) -> NDArray[np.float32] | None:
         """Handle auto-tuning process for PID parameters."""
