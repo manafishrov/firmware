@@ -53,12 +53,11 @@ class Thrusters:
             8, dtype=np.float32
         )
 
-    def _scale_direction_vector_with_user_max_power(
+    def _get_user_scaled_direction_vector(
         self, direction_vector: NDArray[np.float32]
     ) -> NDArray[np.float32]:
         scale = self.state.rov_config.power.user_max_power / 100
-        _ = np.multiply(direction_vector, scale, out=direction_vector)
-        return direction_vector
+        return direction_vector * scale
 
     def _create_thrust_vector_from_thruster_allocation(
         self, direction_vector: NDArray[np.float32]
@@ -79,15 +78,15 @@ class Thrusters:
         thrust_vector = thrust_vector * spin_directions
         return thrust_vector
 
-    def _smooth_out_direction_vector(
+    def _smooth_direction_vector(
         self,
         direction_vector: NDArray[np.float32],
         previous_direction_vector: NDArray[np.float32],
-    ) -> NDArray[np.float32]:
+    ) -> None:
         smoothing_factor = self.state.rov_config.smoothing_factor
 
         if smoothing_factor <= 1 / THRUSTER_SEND_FREQUENCY:
-            return direction_vector
+            return
 
         direction_vector_step = 1 / (THRUSTER_SEND_FREQUENCY * smoothing_factor)
 
@@ -97,7 +96,7 @@ class Thrusters:
 
         result = previous_direction_vector + increment
 
-        return result.astype(np.float32, copy=False)
+        direction_vector[:] = result.astype(np.float32, copy=False)
 
     def _reorder_thrust_vector(
         self, thrust_vector: NDArray[np.float32]
@@ -116,33 +115,32 @@ class Thrusters:
         """Converts the direction_vector into the final thrust_vector sent to the microcontroller."""
         self.regulator.update_regulator_data_from_imu()
 
-        # Update smoothed vector for next iteration
-        direction_vector = self._smooth_out_direction_vector(
-            direction_vector, self.previous_direction_vector
-        )
+        self._smooth_direction_vector(direction_vector, self.previous_direction_vector)
         self.previous_direction_vector = direction_vector.copy()
 
         self.regulator.update_desired_from_direction_vector(direction_vector)
-        scaled_direction_vector = self._scale_direction_vector_with_user_max_power(  # Change name because we need the unscaled for regulator
+
+        user_scaled_direction_vector = self._get_user_scaled_direction_vector(
+            direction_vector
+        )
+        regulator_direction_vector = self.regulator.get_direction_vector(
             direction_vector
         )
 
-        regulator_actuation = self.regulator.get_actuation(direction_vector)
-
         # Setting pitch and roll actuation to 0 to avoid forward connection
         if self.state.system_status.pitch_stabilization:
-            scaled_direction_vector[3] = 0
+            user_scaled_direction_vector[3] = 0
         if self.state.system_status.roll_stabilization:
-            scaled_direction_vector[5] = 0
+            user_scaled_direction_vector[5] = 0
 
-        scaled_direction_vector += regulator_actuation
+        user_scaled_direction_vector += regulator_direction_vector
 
         # Now that we have the final direction vector, we can change the coordinate system for orientation actuation (if regulator enabled)
         if (
             self.state.system_status.pitch_stabilization
             or self.state.system_status.roll_stabilization
         ):
-            scaled_direction_vector = (
+            user_scaled_direction_vector = (
                 self.regulator._change_coordinate_system_orientation(
                     direction_vector,
                     self.state.regulator.pitch,
@@ -151,7 +149,7 @@ class Thrusters:
             )
 
         thrust_vector = self._create_thrust_vector_from_thruster_allocation(
-            scaled_direction_vector
+            user_scaled_direction_vector
         )
 
         thrust_vector = self._reorder_thrust_vector(thrust_vector)

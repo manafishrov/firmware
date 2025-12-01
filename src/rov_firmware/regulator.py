@@ -368,31 +368,32 @@ class Regulator:
         new_actuation[5] = roll_l
         return new_actuation
 
-    def _scale_regulator_actuation(
-        self, actuation: NDArray[np.float32]
-    ) -> NDArray[np.float32]:
+    def _scale_regulator_direction_vector(
+        self, regulator_direction_vector: NDArray[np.float32]
+    ) -> None:
         power = self.state.rov_config.power.regulator_max_power / 100
-        _ = np.clip(actuation, -power, power, out=actuation)
-        return actuation
+        _ = np.clip(
+            regulator_direction_vector, -power, power, out=regulator_direction_vector
+        )
 
-    def get_actuation(
+    def get_direction_vector(
         self, direction_vector: NDArray[np.float32]
     ) -> NDArray[np.float32]:
         """Get regulator actuation values."""
-        regulator_actuation = np.zeros(8, dtype=np.float32)
+        regulator_direction_vector = np.zeros(8, dtype=np.float32)
 
         depth_actuation = self._handle_depth_hold()
-        regulator_actuation[0:3] = depth_actuation
+        regulator_direction_vector[0:3] = depth_actuation
 
         pitch_actuation = self._handle_pitch_stabilization(direction_vector)
-        regulator_actuation[3] = pitch_actuation
+        regulator_direction_vector[3] = pitch_actuation
 
         roll_actuation = self._handle_roll_stabilization(direction_vector)
-        regulator_actuation[5] = roll_actuation
+        regulator_direction_vector[5] = roll_actuation
 
-        regulator_actuation = self._scale_regulator_actuation(regulator_actuation)
+        self._scale_regulator_direction_vector(regulator_direction_vector)
 
-        return regulator_actuation
+        return regulator_direction_vector
 
     def handle_auto_tuning(self, current_time: float) -> NDArray[np.float32] | None:
         """Handle auto-tuning process for PID parameters."""
