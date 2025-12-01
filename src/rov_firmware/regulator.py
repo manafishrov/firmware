@@ -320,10 +320,10 @@ class Regulator:
             x, *_ = np.linalg.lstsq(a, b, rcond=None)
         return x
 
-    def _change_coordinate_system_orientation(
+    def _transform_orientation_to_body_coordinates(
         self,
         direction_vector: NDArray[np.float32],
-    ) -> NDArray[np.float32]:
+    ) -> None:
         """Transform orientation actuations from global to body-fixed coordinates."""
         # Actuation values in the global coordinate system
         pitch_g = cast(float, direction_vector[3])
@@ -359,18 +359,15 @@ class Regulator:
                 "Regulator coordinate system change failed because one of the direction coefficients for pitch, yaw or roll is 0"
             )
 
-        # In the return we leave movement actuation unchanged and only modify orientation actuation
-        new_actuation = direction_vector.copy()
-        new_actuation[3] = pitch_l
-        new_actuation[4] = yaw_l
-        new_actuation[5] = roll_l
-        return new_actuation
+        direction_vector[3] = pitch_l
+        direction_vector[4] = yaw_l
+        direction_vector[5] = roll_l
 
-    def _get_user_scaled_direction_vector(
+    def _scale_direction_vector_with_user_max_power(
         self, direction_vector: NDArray[np.float32]
-    ) -> NDArray[np.float32]:
+    ) -> None:
         scale = self.state.rov_config.power.user_max_power / 100
-        return direction_vector * scale
+        direction_vector *= scale
 
     def _scale_regulator_direction_vector(
         self, regulator_direction_vector: NDArray[np.float32]
@@ -397,7 +394,7 @@ class Regulator:
 
         self._scale_regulator_direction_vector(regulator_direction_vector)
 
-        direction_vector = self._get_user_scaled_direction_vector(direction_vector)
+        self._scale_direction_vector_with_user_max_power(direction_vector)
 
         if self.state.system_status.pitch_stabilization:
             direction_vector[3] = 0
@@ -410,9 +407,7 @@ class Regulator:
             self.state.system_status.pitch_stabilization
             or self.state.system_status.roll_stabilization
         ):
-            direction_vector[:] = self._change_coordinate_system_orientation(
-                direction_vector,
-            )
+            self._transform_orientation_to_body_coordinates(direction_vector)
 
     def handle_auto_tuning(self, current_time: float) -> NDArray[np.float32] | None:
         """Handle auto-tuning process for PID parameters."""
