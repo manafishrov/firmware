@@ -217,9 +217,7 @@ class Regulator:
             )
         return movement_actuation
 
-    def _handle_pitch_stabilization(
-        self, direction_vector: NDArray[np.float32]
-    ) -> float:
+    def _handle_pitch_stabilization(self, pitch_actuation_input: float) -> float:
         pitch_actuation = 0.0
         if self.state.system_status.pitch_stabilization:
             config = self.state.rov_config.regulator
@@ -227,7 +225,7 @@ class Regulator:
 
             current_pitch = self.state.regulator.pitch
             integral_scale = cast(
-                float, np.clip((1 - abs(cast(float, direction_vector[3]))), 0, 1)
+                float, np.clip((1 - abs(pitch_actuation_input)), 0, 1)
             )
             self.state.regulator.integral_pitch += (
                 (desired_pitch - current_pitch) * self.delta_t
@@ -248,18 +246,14 @@ class Regulator:
                 pitch_actuation = -pitch_actuation
         return pitch_actuation
 
-    def _handle_roll_stabilization(
-        self, direction_vector: NDArray[np.float32]
-    ) -> float:
+    def _handle_roll_stabilization(self, roll_actuation_input: float) -> float:
         roll_actuation = 0.0
         if self.state.system_status.roll_stabilization:
             config = self.state.rov_config.regulator
             desired_roll = self.state.regulator.desired_roll
 
             current_roll = self.state.regulator.roll
-            integral_scale = cast(
-                float, np.clip((1 - abs(cast(float, direction_vector[5]))), 0, 1)
-            )
+            integral_scale = cast(float, np.clip((1 - abs(roll_actuation_input)), 0, 1))
             self.state.regulator.integral_roll += (
                 (desired_roll - current_roll) * self.delta_t
             ) * integral_scale
@@ -386,10 +380,14 @@ class Regulator:
         movement_actuation = self._handle_depth_hold()
         regulator_direction_vector[0:3] = movement_actuation
 
-        pitch_actuation = self._handle_pitch_stabilization(direction_vector)
+        pitch_actuation = self._handle_pitch_stabilization(
+            cast(float, direction_vector[3])
+        )
         regulator_direction_vector[3] = pitch_actuation
 
-        roll_actuation = self._handle_roll_stabilization(direction_vector)
+        roll_actuation = self._handle_roll_stabilization(
+            cast(float, direction_vector[5])
+        )
         regulator_direction_vector[5] = roll_actuation
 
         self._scale_regulator_direction_vector(regulator_direction_vector)
