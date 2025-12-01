@@ -164,6 +164,13 @@ in
           sha256 = "0kmyf5imy6909412nzi87qwxkz5z8z0acxk4vghlw6fb2gwd4wn0";
         };
         activation.setupFirmware = home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
+          if [ ! -f "$HOME/.firmware_setup" ]; then
+            mkdir -p $HOME/firmware
+            cp -r ${./.}/* $HOME/firmware/
+            cd $HOME/firmware
+            uv sync
+            touch "$HOME/.firmware_setup"
+          fi
         '';
       };
     };
@@ -172,14 +179,14 @@ in
   # Services
   systemd.services = {
     manafish-firmware = {
-      enable = false;
+      enable = true;
       wantedBy = [ "multi-user.target" ];
       after = [ "network.target" "go2rtc.service" ];
       serviceConfig = {
         Type = "simple";
         User = "pi";
-        WorkingDirectory = "/home/pi";
-        ExecStart = "";
+        WorkingDirectory = "/home/pi/firmware";
+        ExecStart = "${pkgs.uv}/bin/uv run start";
         Restart = "always";
         RestartSec = "5";
       };
