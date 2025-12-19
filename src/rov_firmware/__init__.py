@@ -19,3 +19,7 @@ def start() -> None:
         pass
     finally:
         log_info("Shutting down.")
+
+if __name__ == "__main__":
+    start()
+    

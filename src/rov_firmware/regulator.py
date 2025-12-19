@@ -509,8 +509,6 @@ class Regulator:
     # -------------------------------------------------------------------------
     def apply_regulator_to_direction_vector(self, direction_vector: NDArray[np.float32]) -> None:
         """Apply regulator actuation to direction vector in-place."""
-        print("Applying regulator to direction vector")
-        log_error("IS THIS EVEN CALLED???")
 
         regulator_direction_vector = np.zeros(8, dtype=np.float32)
 
