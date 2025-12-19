@@ -54,7 +54,7 @@ TEST_DEPTH_HOLD_SETPOINT_RATE_MPS: float = 0.6          # heave stick -> depth t
 TEST_DEPTH_HOLD_ENABLE_RAMP_SECONDS: float = 0.5        # smooth ramp on enable
 
 # Yaw stabilization (can be enabled without adding system_status.yaw_stabilization)
-TEST_ENABLE_YAW_STABILIZATION: bool = True
+TEST_ENABLE_YAW_STABILIZATION: bool = False
 
 # Yaw PID gains (kept inside this file; independent from config)
 TEST_YAW_KP: float = 2.0
@@ -196,8 +196,8 @@ class Regulator:
 
     def _yaw_stab_enabled(self) -> bool:
         # Prefer real flag if you add it later; otherwise use test toggle.
-        #return bool(getattr(self.state.system_status, "yaw_stabilization", TEST_ENABLE_YAW_STABILIZATION))
-        return True # REMOVE LATER
+        return bool(getattr(self.state.system_status, "yaw_stabilization", TEST_ENABLE_YAW_STABILIZATION))
+
 
     def _normalize_angles(self, pitch: float, roll: float, yaw: float) -> tuple[float, float, float]:
         roll = _wrap_angle_deg(roll)
@@ -373,7 +373,7 @@ class Regulator:
         return float(
             float(config.pitch.kp) * float(np.radians(err_deg))
             + float(config.pitch.ki) * float(np.radians(float(self.state.regulator.integral_pitch)))
-            - float(config.pitch.kd) * float(np.radians(gyro_pitch_deg_s))
+            + float(config.pitch.kd) * float(np.radians(gyro_pitch_deg_s))
         )
 
     def _handle_roll_stabilization(self, roll_actuation_input: float) -> float:
@@ -509,15 +509,12 @@ class Regulator:
     # -------------------------------------------------------------------------
     def apply_regulator_to_direction_vector(self, direction_vector: NDArray[np.float32]) -> None:
         """Apply regulator actuation to direction vector in-place."""
-
         regulator_direction_vector = np.zeros(8, dtype=np.float32)
 
         depth_hold = bool(self.state.system_status.depth_hold)
         pitch_stab = bool(self.state.system_status.pitch_stabilization)
         roll_stab = bool(self.state.system_status.roll_stabilization)
-        #yaw_stab = bool(self._yaw_stab_enabled())
-        yaw_stab = True # REMOVE LATER
-        
+        yaw_stab = bool(self._yaw_stab_enabled())
 
         if depth_hold and not self._prev_depth_hold:
             self._depth_hold_enable_edge()
