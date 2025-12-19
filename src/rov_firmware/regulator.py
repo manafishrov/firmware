@@ -405,7 +405,7 @@ class Regulator:
         return float(
             TEST_YAW_KP * float(np.radians(err_deg))
             + TEST_YAW_KI * float(np.radians(self._integral_yaw_deg))
-            - TEST_YAW_KD * float(np.radians(gyro_yaw_deg_s))
+            + TEST_YAW_KD * float(np.radians(gyro_yaw_deg_s))
         )
 
     # -------------------------------------------------------------------------
