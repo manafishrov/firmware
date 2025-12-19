@@ -297,9 +297,6 @@ class Regulator:
         self.state.regulator.desired_depth = float(desired_depth)
 
     def _handle_depth_hold(self, heave_input: float) -> float:
-        if not self.state.system_status.depth_hold:
-            return 0.0
-
         current_depth = float(self.state.pressure.depth)
         desired_depth = float(self.state.regulator.desired_depth)
 
@@ -353,9 +350,6 @@ class Regulator:
         self._integral_yaw_deg = 0.0
 
     def _handle_pitch_stabilization(self, pitch_actuation_input: float) -> float:
-        if not self.state.system_status.pitch_stabilization:
-            return 0.0
-
         config = self.state.rov_config.regulator
         desired_pitch = float(self.state.regulator.desired_pitch)
         current_pitch = float(self.state.regulator.pitch)
@@ -375,9 +369,6 @@ class Regulator:
         )
 
     def _handle_roll_stabilization(self, roll_actuation_input: float) -> float:
-        if not self.state.system_status.roll_stabilization:
-            return 0.0
-
         config = self.state.rov_config.regulator
         desired_roll = float(self.state.regulator.desired_roll)
         current_roll = float(self.state.regulator.roll)
@@ -397,9 +388,6 @@ class Regulator:
         )
 
     def _handle_yaw_stabilization(self, yaw_actuation_input: float) -> float:
-        if not self.state.system_status.pitch_stabilization: # CHANGE HERE, ENABLED BY PITCH FOR NOW BECAUSE YAW NOT IMPLEMENTED ON FRONTEND
-            return 0.0
-
         err_deg = _angle_error_deg(self._desired_yaw_deg, self._yaw_deg)
 
         integral_scale = float(np.clip((1.0 - abs(float(yaw_actuation_input))), 0.0, 1.0))
@@ -435,9 +423,6 @@ class Regulator:
         return u.astype(np.float32)
 
     def _transform_surge_sway_for_depth_hold(self, direction_vector: NDArray[np.float32]) -> None:
-        if not self.state.system_status.depth_hold:
-            return
-
         dir_coeffs = self.state.rov_config.direction_coefficients
         surge_coeff = float(getattr(dir_coeffs, "surge", 1.0)) or 1.0
         sway_coeff = float(getattr(dir_coeffs, "sway", 1.0)) or 1.0
@@ -535,29 +520,26 @@ class Regulator:
         # Applying regulators
         if self.state.system_status.depth_hold:
             depth_regulator_actuation = self._handle_depth_hold(heave_input)
-            regulator_direction_vector[0:3] = self._turn_heave_world_motion_to_body_motion(depth_regulator_actuation) #Change here to solve depth hold issue ?
-        regulator_direction_vector[3] = np.float32(self._handle_pitch_stabilization(float(direction_vector[3])))
-        regulator_direction_vector[5] = np.float32(self._handle_roll_stabilization(float(direction_vector[5])))
-        regulator_direction_vector[4] = np.float32(self._handle_yaw_stabilization(float(direction_vector[4])))
-
-        self._scale_regulator_direction_vector(regulator_direction_vector)
-
-        if self.state.system_status.depth_hold:
+            regulator_direction_vector[0:3] = self._turn_heave_world_motion_to_body_motion(depth_regulator_actuation) 
             self._transform_surge_sway_for_depth_hold(direction_vector) #This is responsible for surge/sway when depth hold is on, has yet to be debugged
-
-        self._scale_direction_vector_with_user_max_power(direction_vector)
-
         if self.state.system_status.pitch_stabilization:
             direction_vector[3] = 0.0
+            regulator_direction_vector[3] = np.float32(self._handle_pitch_stabilization(float(direction_vector[3])))
         if self.state.system_status.roll_stabilization:
             direction_vector[5] = 0.0
+            regulator_direction_vector[5] = np.float32(self._handle_roll_stabilization(float(direction_vector[5])))
         if self.state.system_status.pitch_stabilization or self.state.system_status.roll_stabilization: # CHANGE HERE, ENABLED BY PITCH FOR NOW BECAUSE YAW NOT IMPLEMENTED ON FRONTEND
             direction_vector[4] = 0.0
-
-        direction_vector += regulator_direction_vector
-
+            regulator_direction_vector[4] = np.float32(self._handle_yaw_stabilization(float(direction_vector[4])))
         if self.state.system_status.pitch_stabilization or self.state.system_status.roll_stabilization: # ADD YAW HERE..
             self._transform_world_orientation_to_body(direction_vector)
+
+        # Scaling according to values specified in settings by user
+        self._scale_regulator_direction_vector(regulator_direction_vector)
+        self._scale_direction_vector_with_user_max_power(direction_vector)
+
+        # Adding regulator output to direction vector
+        direction_vector += regulator_direction_vector
 
 
     def handle_auto_tuning(self, current_time: float) -> NDArray[np.float32] | None:
