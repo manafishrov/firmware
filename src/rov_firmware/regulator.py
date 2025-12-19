@@ -54,9 +54,9 @@ TEST_DEPTH_HOLD_SETPOINT_RATE_MPS: float = 0.6          # heave stick -> depth t
 TEST_DEPTH_HOLD_ENABLE_RAMP_SECONDS: float = 0.5        # smooth ramp on enable
 
 # Yaw PID gains (kept inside this file; independent from config)
-TEST_YAW_KP: float = 2.0
+TEST_YAW_KP: float = 0.5
 TEST_YAW_KI: float = 0.0
-TEST_YAW_KD: float = 0.2
+TEST_YAW_KD: float = 0.1
 
 
 def _wrap_angle_deg(angle: float) -> float:
@@ -273,6 +273,9 @@ class Regulator:
         roll, pitch, yaw = rot.as_euler("xyz", degrees=True)
         pitch, roll, yaw = self._normalize_angles(float(pitch), float(roll), float(yaw))
 
+        pitch = -pitch  # NED to ENU
+        yaw = -yaw      # NED to ENU
+
         self.state.regulator.pitch = pitch
         self.state.regulator.roll = roll
 
@@ -337,8 +340,8 @@ class Regulator:
     # Attitude stabilization internals
     # -------------------------------------------------------------------------
     def _attitude_enable_edge(self) -> None:
-        self.state.regulator.desired_pitch = float(self.state.regulator.pitch)
-        self.state.regulator.desired_roll = float(self.state.regulator.roll)
+        self.state.regulator.desired_pitch = 0
+        self.state.regulator.desired_roll = 0
         self._desired_yaw_deg = float(self._yaw_deg)
 
         self.state.regulator.integral_pitch = 0.0
