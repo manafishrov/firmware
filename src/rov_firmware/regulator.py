@@ -417,23 +417,16 @@ class Regulator:
     def _solve_body_vector_from_world(
         self,
         world_vec: NDArray[np.float64],
-        coeffs: NDArray[np.float64],
     ) -> NDArray[np.float32]:
         rot = self._get_rotation_body_to_world()
         rmat = rot.as_matrix().astype(np.float64)
 
-        c = coeffs.copy()
-        for i in range(3):
-            if not np.isfinite(c[i]) or c[i] == 0.0:
-                c[i] = 1.0
-
-        a = rmat @ np.diag(c)
         b = world_vec
 
         try:
-            u = np.linalg.solve(a, b)
+            u = np.linalg.solve(rmat, b)
         except np.linalg.LinAlgError:
-            u, *_ = np.linalg.lstsq(a, b, rcond=None) # For redundancy, this can solve singular matrices
+            u, *_ = np.linalg.lstsq(rmat, b, rcond=None) # For redundancy, this can solve singular matrices
 
         return u.astype(np.float32)
 
@@ -473,17 +466,21 @@ class Regulator:
         yaw_w   = float(direction_vector[4])  # world-frame yaw command
         roll_w  = float(direction_vector[5])  # world-frame roll command
 
-        coeffs = np.array([roll_coeff, pitch_coeff, yaw_coeff], dtype=np.float64)
-
         # Build three *separate* world omega vectors, they are seperated because some signs need to be flipped after transform
-        omega_world_pitch = np.array([0.0,                 pitch_coeff * pitch_w, 0.0               ], dtype=np.float64)
-        omega_world_yaw   = np.array([0.0,                 0.0,                yaw_coeff   * yaw_w ], dtype=np.float64)
+        omega_world_pitch = np.array([0.0,                 pitch_w, 0.0               ], dtype=np.float64)
+        omega_world_yaw   = np.array([0.0,                 0.0,                yaw_w ], dtype=np.float64)
 
         u_roll  = np.array([0.0, 0.0, roll_w], dtype=np.float64)  # Roll stays unchanged
-        u_pitch = self._solve_body_vector_from_world(omega_world_pitch, coeffs)
-        u_yaw   = self._solve_body_vector_from_world(omega_world_yaw,   coeffs)
+        u_pitch = self._solve_body_vector_from_world(omega_world_pitch)
+        u_yaw   = self._solve_body_vector_from_world(omega_world_yaw)
+
+        # Scaling with direction coefficients
+        u_pitch *= np.array([1.0, pitch_coeff/yaw_coeff, 1.0], dtype=np.float64)
+        u_yaw  *= np.array([1.0, 1.0, yaw_coeff/roll_coeff], dtype=np.float64)
 
         u_yaw[0] = -u_yaw[0]
+
+
         
         u = u_roll + u_pitch + u_yaw
 
