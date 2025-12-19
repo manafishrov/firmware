@@ -476,11 +476,10 @@ class Regulator:
         coeffs = np.array([roll_coeff, pitch_coeff, yaw_coeff], dtype=np.float64)
 
         # Build three *separate* world omega vectors, they are seperated because some signs need to be flipped after transform
-        omega_world_roll  = np.array([roll_coeff  * roll_w,  0.0,                0.0               ], dtype=np.float64)
         omega_world_pitch = np.array([0.0,                 pitch_coeff * pitch_w, 0.0               ], dtype=np.float64)
         omega_world_yaw   = np.array([0.0,                 0.0,                yaw_coeff   * yaw_w ], dtype=np.float64)
 
-        u_roll  = self._solve_body_vector_from_world(omega_world_roll,  coeffs)
+        u_roll  = np.array([0.0, 0.0, roll_w], dtype=np.float64)  # Roll stays unchanged
         u_pitch = self._solve_body_vector_from_world(omega_world_pitch, coeffs)
         u_yaw   = self._solve_body_vector_from_world(omega_world_yaw,   coeffs)
 
