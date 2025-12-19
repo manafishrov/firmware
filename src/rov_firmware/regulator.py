@@ -53,9 +53,6 @@ TEST_DEPTH_INTEGRAL_WINDUP_CLIP: float = 3.0
 TEST_DEPTH_HOLD_SETPOINT_RATE_MPS: float = 0.6          # heave stick -> depth target rate
 TEST_DEPTH_HOLD_ENABLE_RAMP_SECONDS: float = 0.5        # smooth ramp on enable
 
-# Yaw stabilization (can be enabled without adding system_status.yaw_stabilization)
-TEST_ENABLE_YAW_STABILIZATION: bool = False
-
 # Yaw PID gains (kept inside this file; independent from config)
 TEST_YAW_KP: float = 2.0
 TEST_YAW_KI: float = 0.0
@@ -180,7 +177,6 @@ class Regulator:
         self._prev_depth_hold: bool = False
         self._prev_pitch_stab: bool = False
         self._prev_roll_stab: bool = False
-        self._prev_yaw_stab: bool = False
 
         self._depth_hold_enabled_time: float = 0.0
 
@@ -193,11 +189,6 @@ class Regulator:
         self.auto_tuning_zero_actuation: float = 0.0
         self.auto_tuning_amplitude: float = 0.0
         self.auto_tuning_oscillation_start: float = 0.0
-
-    def _yaw_stab_enabled(self) -> bool:
-        # Prefer real flag if you add it later; otherwise use test toggle.
-        return bool(getattr(self.state.system_status, "yaw_stabilization", TEST_ENABLE_YAW_STABILIZATION))
-
 
     def _normalize_angles(self, pitch: float, roll: float, yaw: float) -> tuple[float, float, float]:
         roll = _wrap_angle_deg(roll)
@@ -235,7 +226,7 @@ class Regulator:
                 desired_roll += 360.0
             self.state.regulator.desired_roll = float(desired_roll)
 
-        if self._yaw_stab_enabled():
+        if self.state.system_status.pitch_stabilization: # CHANGE HERE, ENABLED BY PITCH FOR NOW BECAUSE YAW NOT IMPLEMENTED ON FRONTEND
             yaw_change = float(direction_vector[4])
             self._desired_yaw_deg = _wrap_angle_deg(self._desired_yaw_deg + yaw_change * float(config.turn_speed) * self.delta_t)
 
@@ -399,7 +390,7 @@ class Regulator:
         )
 
     def _handle_yaw_stabilization(self, yaw_actuation_input: float) -> float:
-        if not self._yaw_stab_enabled():
+        if not self.state.system_status.pitch_stabilization: # CHANGE HERE, ENABLED BY PITCH FOR NOW BECAUSE YAW NOT IMPLEMENTED ON FRONTEND
             return 0.0
 
         err_deg = _angle_error_deg(self._desired_yaw_deg, self._yaw_deg)
@@ -514,17 +505,16 @@ class Regulator:
         depth_hold = bool(self.state.system_status.depth_hold)
         pitch_stab = bool(self.state.system_status.pitch_stabilization)
         roll_stab = bool(self.state.system_status.roll_stabilization)
-        yaw_stab = bool(self._yaw_stab_enabled())
+
 
         if depth_hold and not self._prev_depth_hold:
             self._depth_hold_enable_edge()
-        if (pitch_stab or roll_stab or yaw_stab) and not (self._prev_pitch_stab or self._prev_roll_stab or self._prev_yaw_stab):
+        if (pitch_stab or roll_stab) and not (self._prev_pitch_stab or self._prev_roll_stab):
             self._attitude_enable_edge()
 
         self._prev_depth_hold = depth_hold
         self._prev_pitch_stab = pitch_stab
         self._prev_roll_stab = roll_stab
-        self._prev_yaw_stab = yaw_stab
 
         heave_input = float(direction_vector[2])
         self._handle_depth_hold_setpoint(heave_input)
@@ -558,12 +548,12 @@ class Regulator:
             direction_vector[3] = 0.0
         if roll_stab:
             direction_vector[5] = 0.0
-        if yaw_stab:
+        if pitch_stab or roll_stab: # CHANGE HERE, ENABLED BY PITCH FOR NOW BECAUSE YAW NOT IMPLEMENTED ON FRONTEND
             direction_vector[4] = 0.0
 
         direction_vector += regulator_direction_vector
 
-        if pitch_stab or roll_stab or yaw_stab:
+        if pitch_stab or roll_stab:
             self._transform_world_orientation_to_body(direction_vector)
 
 
