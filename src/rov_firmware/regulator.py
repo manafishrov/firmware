@@ -433,7 +433,7 @@ class Regulator:
         try:
             u = np.linalg.solve(a, b)
         except np.linalg.LinAlgError:
-            u, *_ = np.linalg.lstsq(a, b, rcond=None)
+            u, *_ = np.linalg.lstsq(a, b, rcond=None) # For redundancy, this can solve singular matrices
 
         return u.astype(np.float32)
 
@@ -466,26 +466,33 @@ class Regulator:
     def _transform_world_orientation_to_body(self, direction_vector: NDArray[np.float32]) -> None:
         dir_coeffs = self.state.rov_config.direction_coefficients
         pitch_coeff = float(getattr(dir_coeffs, "pitch", 1.0)) or 1.0
-        yaw_coeff = float(getattr(dir_coeffs, "yaw", 1.0)) or 1.0
-        roll_coeff = float(getattr(dir_coeffs, "roll", 1.0)) or 1.0
+        yaw_coeff   = float(getattr(dir_coeffs, "yaw",   1.0)) or 1.0
+        roll_coeff  = float(getattr(dir_coeffs, "roll",  1.0)) or 1.0
 
-        pitch_w = float(direction_vector[3])
-        yaw_w = float(direction_vector[4])
-        roll_w = float(direction_vector[5])
+        pitch_w = float(direction_vector[3])  # world-frame pitch command
+        yaw_w   = float(direction_vector[4])  # world-frame yaw command
+        roll_w  = float(direction_vector[5])  # world-frame roll command
 
-        omega_world = np.array(
-            [roll_coeff * roll_w, pitch_coeff * pitch_w, yaw_coeff * yaw_w],
-            dtype=np.float64,
-        )
+        coeffs = np.array([roll_coeff, pitch_coeff, yaw_coeff], dtype=np.float64)
 
-        u_body_xyz = self._solve_body_vector_from_world(
-            omega_world,
-            np.array([roll_coeff, pitch_coeff, yaw_coeff], dtype=np.float64),
-        )
+        # Build three *separate* world omega vectors, they are seperated because some signs need to be flipped after transform
+        omega_world_roll  = np.array([roll_coeff  * roll_w,  0.0,                0.0               ], dtype=np.float64)
+        omega_world_pitch = np.array([0.0,                 pitch_coeff * pitch_w, 0.0               ], dtype=np.float64)
+        omega_world_yaw   = np.array([0.0,                 0.0,                yaw_coeff   * yaw_w ], dtype=np.float64)
 
-        direction_vector[3] = float(u_body_xyz[1])  # pitch
-        direction_vector[4] = float(u_body_xyz[2])  # yaw
-        direction_vector[5] = float(u_body_xyz[0])  # roll
+        u_roll  = self._solve_body_vector_from_world(omega_world_roll,  coeffs)
+        u_pitch = self._solve_body_vector_from_world(omega_world_pitch, coeffs)
+        u_yaw   = self._solve_body_vector_from_world(omega_world_yaw,   coeffs)
+
+        u_yaw[0] = -u_yaw[0]
+        
+        u = u_roll + u_pitch + u_yaw
+
+        # Back to your direction_vector layout:
+        direction_vector[3] = float(u[1])  # pitch command (body Y)
+        direction_vector[4] = float(u[2])  # yaw command   (body Z)
+        direction_vector[5] = float(u[0])  # roll command  (body X)
+
 
     # -------------------------------------------------------------------------
     # Scaling/clipping (kept consistent with your behavior)
@@ -508,9 +515,9 @@ class Regulator:
         depth_hold = bool(self.state.system_status.depth_hold)
         pitch_stab = bool(self.state.system_status.pitch_stabilization)
         roll_stab = bool(self.state.system_status.roll_stabilization)
+        # Add for yaw stabilization
 
-
-        if depth_hold and not self._prev_depth_hold:
+        if depth_hold and not self._prev_depth_hold: # <- This can be removed, happens in other script
             self._depth_hold_enable_edge()
         if (pitch_stab or roll_stab) and not (self._prev_pitch_stab or self._prev_roll_stab):
             self._attitude_enable_edge()
@@ -534,7 +541,7 @@ class Regulator:
                 world_vel,
                 np.array([surge_coeff, sway_coeff, heave_coeff], dtype=np.float64),
             )
-            regulator_direction_vector[0:3] = u_body
+            regulator_direction_vector[0:3] = u_body #Change here to solve depth hold issue ?
 
         regulator_direction_vector[3] = np.float32(self._handle_pitch_stabilization(float(direction_vector[3])))
         regulator_direction_vector[5] = np.float32(self._handle_roll_stabilization(float(direction_vector[5])))
@@ -543,7 +550,7 @@ class Regulator:
         self._scale_regulator_direction_vector(regulator_direction_vector)
 
         if depth_hold:
-            self._transform_translation_for_depth_hold(direction_vector)
+            self._transform_translation_for_depth_hold(direction_vector) #This is responsible for surge/sway when depth hold is on, has yet to be debugged
 
         self._scale_direction_vector_with_user_max_power(direction_vector)
 
@@ -556,7 +563,7 @@ class Regulator:
 
         direction_vector += regulator_direction_vector
 
-        if pitch_stab or roll_stab:
+        if pitch_stab or roll_stab: # ADD YAW HERE..
             self._transform_world_orientation_to_body(direction_vector)
 
 
