@@ -196,7 +196,8 @@ class Regulator:
 
     def _yaw_stab_enabled(self) -> bool:
         # Prefer real flag if you add it later; otherwise use test toggle.
-        return bool(getattr(self.state.system_status, "yaw_stabilization", TEST_ENABLE_YAW_STABILIZATION))
+        #return bool(getattr(self.state.system_status, "yaw_stabilization", TEST_ENABLE_YAW_STABILIZATION))
+        return True # REMOVE LATER
 
     def _normalize_angles(self, pitch: float, roll: float, yaw: float) -> tuple[float, float, float]:
         roll = _wrap_angle_deg(roll)
@@ -214,6 +215,7 @@ class Regulator:
         self, direction_vector: NDArray[np.float32]
     ) -> None:
         """Update desired pitch/roll/yaw from direction vector."""
+
         config = self.state.rov_config.regulator
 
         if self.state.system_status.pitch_stabilization:
@@ -507,12 +509,17 @@ class Regulator:
     # -------------------------------------------------------------------------
     def apply_regulator_to_direction_vector(self, direction_vector: NDArray[np.float32]) -> None:
         """Apply regulator actuation to direction vector in-place."""
+        print("Applying regulator to direction vector")
+        log_error("IS THIS EVEN CALLED???")
+
         regulator_direction_vector = np.zeros(8, dtype=np.float32)
 
         depth_hold = bool(self.state.system_status.depth_hold)
         pitch_stab = bool(self.state.system_status.pitch_stabilization)
         roll_stab = bool(self.state.system_status.roll_stabilization)
-        yaw_stab = bool(self._yaw_stab_enabled())
+        #yaw_stab = bool(self._yaw_stab_enabled())
+        yaw_stab = True # REMOVE LATER
+        
 
         if depth_hold and not self._prev_depth_hold:
             self._depth_hold_enable_edge()
