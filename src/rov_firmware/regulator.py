@@ -207,6 +207,11 @@ class Regulator:
 
         config = self.state.rov_config.regulator
 
+        if self.state.system_status.depth_hold:
+            heave_change = float(direction_vector[2])
+            desired_depth = float(self.state.regulator.desired_depth) + (-heave_change) * TEST_DEPTH_HOLD_SETPOINT_RATE_MPS * self.delta_t
+            self.state.regulator.desired_depth = float(desired_depth)
+
         if self.state.system_status.pitch_stabilization:
             pitch_change = float(direction_vector[3])
             desired_pitch = float(self.state.regulator.desired_pitch) + pitch_change * float(config.turn_speed) * self.delta_t
@@ -224,9 +229,10 @@ class Regulator:
                 desired_roll += 360.0
             self.state.regulator.desired_roll = float(desired_roll)
 
-        if self.state.system_status.pitch_stabilization: # CHANGE HERE, ENABLED BY PITCH FOR NOW BECAUSE YAW NOT IMPLEMENTED ON FRONTEND
+        if self.state.system_status.pitch_stabilization or self.state.system_status.yaw_stabilization: # CHANGE HERE, ENABLED BY PITCH FOR NOW BECAUSE YAW NOT IMPLEMENTED ON FRONTEND
             yaw_change = float(direction_vector[4])
             self._desired_yaw_deg = _wrap_angle_deg(self._desired_yaw_deg + yaw_change * float(config.turn_speed) * self.delta_t)
+
 
     # -------------------------------------------------------------------------
     # Public API (must keep name/signature): update_regulator_data_from_imu
@@ -288,13 +294,6 @@ class Regulator:
         self.state.regulator.integral_depth = 0.0
         self.current_dt_depth = 0.0
         self.previous_depth = current_depth
-
-    def _handle_depth_hold_setpoint(self, heave_input: float) -> None:
-        if not self.state.system_status.depth_hold:
-            return
-        desired_depth = float(self.state.regulator.desired_depth)
-        desired_depth += (-float(heave_input)) * TEST_DEPTH_HOLD_SETPOINT_RATE_MPS * self.delta_t
-        self.state.regulator.desired_depth = float(desired_depth)
 
     def _handle_depth_hold(self, heave_input: float) -> float:
         current_depth = float(self.state.pressure.depth)
@@ -513,9 +512,6 @@ class Regulator:
         regulator_direction_vector = np.zeros(8, dtype=np.float32)
 
         self._handle_edges() # Initializes parameters to right values if stabilization or depth hold just turned on
-
-        heave_input = float(direction_vector[2])
-        self._handle_depth_hold_setpoint(heave_input) #CAN BE MERGED WITH THE UPDATE DESIRED FUNCTION!
 
         # Applying regulators
         if self.state.system_status.depth_hold:
