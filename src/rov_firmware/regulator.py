@@ -444,7 +444,7 @@ class Regulator:
         direction_vector[1] = float(u_body[1])
         direction_vector[2] = 0.0  # heave input is setpoint nudging
 
-    def _turn_heave_world_motion_to_body_motion(self, depth_regulation_actuation: np.float32) -> NDArray[np.float32]:
+    def _transform_heave_world_motion_to_body_motion(self, depth_regulation_actuation: np.float32) -> NDArray[np.float32]:
         body_motion = self._solve_body_vector_from_world(np.array([0.0, 0.0, float(depth_regulation_actuation)], dtype=np.float32))
 
         # Using coefficients to scale heave motion appropriately
@@ -460,7 +460,7 @@ class Regulator:
 
         return body_motion
 
-    def _transform_world_orientation_to_body(self, direction_vector: NDArray[np.float32]) -> None:
+    def _transform_world_pitch_yaw_roll_to_body(self, direction_vector: NDArray[np.float32]) -> None:
         pitch_w = float(direction_vector[3])  # world-frame pitch command
         yaw_w   = float(direction_vector[4])  # world-frame yaw command
         roll_w  = float(direction_vector[5])  # world-frame roll command
@@ -516,7 +516,7 @@ class Regulator:
         # Applying regulators
         if self.state.system_status.depth_hold:
             depth_regulator_actuation = self._handle_depth_hold(float(direction_vector[2]))
-            regulator_direction_vector[0:3] = self._turn_heave_world_motion_to_body_motion(depth_regulator_actuation) 
+            regulator_direction_vector[0:3] = self._transform_heave_world_motion_to_body_motion(depth_regulator_actuation) 
             self._transform_surge_sway_for_depth_hold(direction_vector) #This is responsible for surge/sway when depth hold is on, has yet to be debugged
         if self.state.system_status.pitch_stabilization:
             direction_vector[3] = 0.0
@@ -528,7 +528,7 @@ class Regulator:
             direction_vector[4] = 0.0
             regulator_direction_vector[4] = np.float32(self._handle_yaw_stabilization(float(direction_vector[4])))
         if self.state.system_status.pitch_stabilization or self.state.system_status.roll_stabilization: # ADD YAW HERE..
-            self._transform_world_orientation_to_body(direction_vector)
+            self._transform_world_pitch_yaw_roll_to_body(direction_vector)
 
         # Scaling according to values specified in settings by user
         self._scale_regulator_direction_vector(regulator_direction_vector)
