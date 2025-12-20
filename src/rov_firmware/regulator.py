@@ -407,10 +407,10 @@ class Regulator:
     # -------------------------------------------------------------------------
     def _solve_body_vector_from_world(
         self,
-        world_vec: NDArray[np.float64],
+        world_vec: NDArray[np.float32],
     ) -> NDArray[np.float32]:
         rot = self._get_rotation_body_to_world()
-        rmat = rot.as_matrix().astype(np.float64)
+        rmat = rot.as_matrix().astype(np.float32)
 
         b = world_vec
 
@@ -422,27 +422,27 @@ class Regulator:
         return u.astype(np.float32)
 
     def _transform_surge_sway_for_depth_hold(self, direction_vector: NDArray[np.float32]) -> None:
+        surge_world = np.array([direction_vector[0], 0.0, 0.0], dtype=np.float32)  # NEEDTO LOOK MORE AT THIS FUNCTION
+        sway_world = np.array([0.0, direction_vector[1], 0.0], dtype=np.float32)
+
+        u_body_surge = self._solve_body_vector_from_world(surge_world)
+        u_body_sway = self._solve_body_vector_from_world(sway_world)
+
+        # Using coefficients to scale surge/sway motion appropriately
         dir_coeffs = self.state.rov_config.direction_coefficients
         surge_coeff = float(getattr(dir_coeffs, "surge", 1.0)) or 1.0
         sway_coeff = float(getattr(dir_coeffs, "sway", 1.0)) or 1.0
         heave_coeff = float(getattr(dir_coeffs, "heave", 1.0)) or 1.0
 
-        surge_in = float(direction_vector[0])
-        sway_in = float(direction_vector[1])
+        u_body_surge *= np.array([1.0, 1.0, surge_coeff/heave_coeff], dtype=np.float32)
+        u_body_sway  *= np.array([1.0, 1.0, sway_coeff/heave_coeff], dtype=np.float32)
 
-        yaw = float(self._yaw_deg)
-        r_yaw = R.from_euler("z", yaw, degrees=True)
+        # Sign correction (Have to test to find them):
 
-        world_vel = r_yaw.apply(np.array([surge_coeff * surge_in, sway_coeff * sway_in, 0.0], dtype=np.float64))
+        u_body_total = u_body_surge + u_body_sway
 
-        u_body = self._solve_body_vector_from_world(
-            world_vel.astype(np.float64),
-            np.array([surge_coeff, sway_coeff, heave_coeff], dtype=np.float64),
-        )
+        direction_vector[0:3] = u_body_total[0:3]
 
-        direction_vector[0] = float(u_body[0])
-        direction_vector[1] = float(u_body[1])
-        direction_vector[2] = 0.0  # heave input is setpoint nudging
 
     def _transform_heave_world_motion_to_body_motion(self, depth_regulation_actuation: np.float32) -> NDArray[np.float32]:
         body_motion = self._solve_body_vector_from_world(np.array([0.0, 0.0, float(depth_regulation_actuation)], dtype=np.float32))
@@ -466,10 +466,10 @@ class Regulator:
         roll_w  = float(direction_vector[5])  # world-frame roll command
 
         # Build three *separate* world omega vectors, they are seperated because some signs need to be flipped after transform
-        omega_world_pitch = np.array([0.0,                 pitch_w, 0.0               ], dtype=np.float64)
-        omega_world_yaw   = np.array([0.0,                 0.0,                yaw_w ], dtype=np.float64)
+        omega_world_pitch = np.array([0.0,                 pitch_w, 0.0               ], dtype=np.float32)
+        omega_world_yaw   = np.array([0.0,                 0.0,                yaw_w ], dtype=np.float32)
 
-        u_roll  = np.array([0.0, 0.0, roll_w], dtype=np.float64)  # Roll stays unchanged
+        u_roll  = np.array([0.0, 0.0, roll_w], dtype=np.float32)  # Roll stays unchanged
         u_pitch = self._solve_body_vector_from_world(omega_world_pitch)
         u_yaw   = self._solve_body_vector_from_world(omega_world_yaw)
 
