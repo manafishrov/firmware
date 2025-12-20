@@ -153,6 +153,8 @@ class Regulator:
         # Quaternion attitude estimator
         self._ahrs: _MahonyAhrs = _MahonyAhrs(kp=TEST_AHRS_MAHONY_KP, ki=TEST_AHRS_MAHONY_KI)
 
+        self.attitude = R.identity()
+
         # Edge detection for bumpless transfer and ramp-in
         self._prev_depth_hold_enabled: bool = False
         self._prev_stabilization_enabled: bool = False
@@ -181,6 +183,22 @@ class Regulator:
 
         if self.state.system_status.stabilization:
             # Update the desired quaternion, use quaternion math, here would be the place to check if the FPV mode is enabled
+
+            # Yaw change
+            desired_yaw_change = direction_vector[4] * self.delta_t * self.state.rov_config.regulator.turn_speed
+            yaw_rotation = R.from_rotvec([0.0, 0.0, np.deg2rad(desired_yaw_change)]) # Yaw rate scaled down
+            self.attitude = yaw_rotation * self.attitude
+
+            # Pitch change
+            desired_pitch_change = direction_vector[3] * self.delta_t * self.state.rov_config.regulator.turn_speed
+            pitch, yaw, roll = self.attitude.as_euler("YZX", degrees=True)
+            pitch = pitch + float(desired_pitch_change)
+            pitch = float(np.clip(pitch, -PITCH_MAX, PITCH_MAX)) # Clipping pitch to avoid gimbal lock
+            self.attitude = R.from_euler("YZX", [pitch, yaw, roll], degrees=True)
+
+            desired_roll_change = direction_vector[5] * self.delta_t * self.state.rov_config.regulator.turn_speed
+            roll_rotation = R.from_rotvec([np.deg2rad(desired_roll_change), 0.0, 0.0])
+            self.attitude = self.attitude * roll_rotation
 
 
     # -------------------------------------------------------------------------
@@ -211,7 +229,7 @@ class Regulator:
 
         # Getting euler angles from quaternion for visualization in app.
         rot = self._ahrs._q 
-        roll, pitch, yaw = rot.as_euler("xyz", degrees=True)
+        roll, pitch, yaw = rot.as_euler("XYZ", degrees=True)
 
         self.state.regulator.pitch = pitch
         self.state.regulator.roll = roll
