@@ -201,7 +201,7 @@ class Regulator:
         # Compute delta_t
         now = time.time()
         if self.last_measurement_time > 0.0:
-            self.delta_t = now - self.last_measurement_time
+            self.delta_t = _clamp_dt(now - self.last_measurement_time)
         else:
             self.delta_t = 0.0167
         self.last_measurement_time = now
@@ -217,220 +217,77 @@ class Regulator:
         self.state.regulator.roll = roll
 
 
+    def _handle_edges(self) -> None:
+        depth_hold_enabled = self.state.system_status.depth_hold
+        stabilization_enabled = self.state.system_status.pitch_stabilization # TEMPORARY - change to general stabilization instead of pitch only
+
+        if depth_hold_enabled and not self._prev_depth_hold_enabled:
+            self._depth_hold_enable_edge()
+        if stabilization_enabled and not self._prev_stabilization_enabled:
+            self._attitude_enable_edge()
+
+        self._prev_depth_hold_enabled = depth_hold_enabled
+        self._prev_stabilization_enabled = stabilization_enabled
+
+
     # -------------------------------------------------------------------------
-    # Depth hold internals                            -.-.-.-.-.-.-.-.-.-.-.-.-.-.-..-..-.-.-.-...-...-...-.-.-.-.-.-.-.-.-.-.--.-.-.-.-.-.-.
+    # Depth hold internals
     # -------------------------------------------------------------------------
-    def _depth_hold_enable_edge(self) -> None:
-        current_depth = float(self.state.pressure.depth)
+    def _depth_hold_enable_edge(self) -> None: # Note to Michael: I know this is done in another script too, but it is better to do here because we have to change the integral terms which are only in this class, and in future we might need to have more complex behaviour on edges.
+        current_depth = self.state.pressure.depth
         self.state.regulator.desired_depth = current_depth
         self.state.regulator.integral_depth = 0.0
         self.current_dt_depth = 0.0
         self.previous_depth = current_depth
 
     def _handle_depth_hold(self, heave_input: float) -> float:
-        current_depth = float(self.state.pressure.depth)
-        desired_depth = float(self.state.regulator.desired_depth)
+        current_depth = self.state.pressure.depth
+        desired_depth = self.state.regulator.desired_depth
 
+        # Update error
         error = current_depth - desired_depth  # positive => too deep => command up
 
-        integral_scale = float(np.clip((1.0 - abs(float(heave_input))), 0.0, 1.0))
-        self.state.regulator.integral_depth += error * self.delta_t * integral_scale
-        self.state.regulator.integral_depth = float(
-            np.clip(self.state.regulator.integral_depth, -TEST_DEPTH_INTEGRAL_WINDUP_CLIP, TEST_DEPTH_INTEGRAL_WINDUP_CLIP)
-        )
+        # Update integral term
+        integral_scale = np.clip((1.0 - abs(heave_input)), 0.0, 1.0) # Stick-based integral relaxation, higher input -> less integral accumulation
+        self.state.regulator.integral_depth += error * self.delta_t * integral_scale # Integrate depth error
+        self.state.regulator.integral_depth = np.clip(self.state.regulator.integral_depth, -TEST_DEPTH_INTEGRAL_WINDUP_CLIP, TEST_DEPTH_INTEGRAL_WINDUP_CLIP) # Windup prevention
 
-        alpha = float(np.exp(-self.delta_t / float(DEPTH_DERIVATIVE_EMA_TAU)))
+        # Update derivative term (using EMA filter)
+        alpha = np.exp(-self.delta_t / float(DEPTH_DERIVATIVE_EMA_TAU))
         raw_rate = (current_depth - self.previous_depth) / self.delta_t
         self.current_dt_depth = alpha * self.current_dt_depth + (1.0 - alpha) * float(raw_rate)
         self.previous_depth = current_depth
 
+        # PID computation to get actuation
         config = self.state.rov_config.regulator
-        heave_cmd = (
+        depth_regulator_actuation = (
             float(config.depth.kp) * error
-            + float(config.depth.ki) * float(self.state.regulator.integral_depth)
+            + float(config.depth.ki) * float(self.state.regulator.integral_depth) 
             + float(config.depth.kd) * float(self.current_dt_depth)
         )
-        return float(heave_cmd)
 
-    def _handle_edges(self) -> None:
-        depth_hold = bool(self.state.system_status.depth_hold)
-        pitch_stab = bool(self.state.system_status.pitch_stabilization)
-        roll_stab = bool(self.state.system_status.roll_stabilization)
-        # Add for yaw stabilization
-
-        if depth_hold and not self._prev_depth_hold_enabled:
-            self._depth_hold_enable_edge()
-        if (pitch_stab or roll_stab) and not (self._prev_stabilization_enabled and self._prev_roll_stab):
-            self._attitude_enable_edge()
-
-        self._prev_depth_hold_enabled = depth_hold
-        self._prev_stabilization_enabled = pitch_stab
-        self._prev_roll_stab = roll_stab
-
+        return float(depth_regulator_actuation)
 
     # -------------------------------------------------------------------------
     # Attitude stabilization internals
     # -------------------------------------------------------------------------
     def _attitude_enable_edge(self) -> None:
-        self.state.regulator.desired_pitch = 0
-        self.state.regulator.desired_roll = 0
-        self._desired_yaw_deg = float(self._yaw_deg)
+        # Set desired and integral terms to 0
 
-        self.state.regulator.integral_pitch = 0.0
-        self.state.regulator.integral_roll = 0.0
-        self._integral_yaw_deg = 0.0
-
-    def _handle_pitch_stabilization(self, pitch_actuation_input: float) -> float:
-        config = self.state.rov_config.regulator
-        desired_pitch = float(self.state.regulator.desired_pitch)
-        current_pitch = float(self.state.regulator.pitch)
-
-        err_deg = desired_pitch - current_pitch
-        integral_scale = float(np.clip((1.0 - abs(float(pitch_actuation_input))), 0.0, 1.0))
-        self.state.regulator.integral_pitch += err_deg * self.delta_t * integral_scale
-        self.state.regulator.integral_pitch = float(
-            np.clip(self.state.regulator.integral_pitch, -INTEGRAL_WINDUP_CLIP_DEGREES, INTEGRAL_WINDUP_CLIP_DEGREES)
-        )
-
-        gyro_pitch_deg_s = float(self.gyro[1])
-        return float(
-            float(config.pitch.kp) * float(np.radians(err_deg))
-            + float(config.pitch.ki) * float(np.radians(float(self.state.regulator.integral_pitch)))
-            + float(config.pitch.kd) * float(np.radians(gyro_pitch_deg_s))
-        )
-
-    def _handle_roll_stabilization(self, roll_actuation_input: float) -> float:
-        config = self.state.rov_config.regulator
-        desired_roll = float(self.state.regulator.desired_roll)
-        current_roll = float(self.state.regulator.roll)
-
-        err_deg = _angle_error_deg(desired_roll, current_roll)
-        integral_scale = float(np.clip((1.0 - abs(float(roll_actuation_input))), 0.0, 1.0))
-        self.state.regulator.integral_roll += err_deg * self.delta_t * integral_scale
-        self.state.regulator.integral_roll = float(
-            np.clip(self.state.regulator.integral_roll, -INTEGRAL_WINDUP_CLIP_DEGREES, INTEGRAL_WINDUP_CLIP_DEGREES)
-        )
-
-        gyro_roll_deg_s = float(self.gyro[0])
-        return float(
-            float(config.roll.kp) * float(np.radians(err_deg))
-            + float(config.roll.ki) * float(np.radians(float(self.state.regulator.integral_roll)))
-            - float(config.roll.kd) * float(np.radians(gyro_roll_deg_s))
-        )
-
-    def _handle_yaw_stabilization(self, yaw_actuation_input: float) -> float:
-        err_deg = _angle_error_deg(self._desired_yaw_deg, self._yaw_deg)
-
-        integral_scale = float(np.clip((1.0 - abs(float(yaw_actuation_input))), 0.0, 1.0))
-        self._integral_yaw_deg += err_deg * self.delta_t * integral_scale
-        self._integral_yaw_deg = float(
-            np.clip(self._integral_yaw_deg, -INTEGRAL_WINDUP_CLIP_DEGREES, INTEGRAL_WINDUP_CLIP_DEGREES)
-        )
-
-        gyro_yaw_deg_s = float(self.gyro[2])
-        return float(
-            TEST_YAW_KP * float(np.radians(err_deg))
-            + TEST_YAW_KI * float(np.radians(self._integral_yaw_deg))
-            + TEST_YAW_KD * float(np.radians(gyro_yaw_deg_s))
-        )
+    def _handle_stabilization(self):
+        # Here will be the quaternion-based PID stabilization for pitch, roll, yaw
 
     # -------------------------------------------------------------------------
     # Frame transforms using quaternion attitude and direction coefficients
     # -------------------------------------------------------------------------
-    def _solve_body_vector_from_world(
-        self,
-        world_vec: NDArray[np.float32],
-    ) -> NDArray[np.float32]:
-        rot = self._get_rotation_body_to_world()
-        rmat = rot.as_matrix().astype(np.float32)
 
-        b = world_vec
-
-        try:
-            u = np.linalg.solve(rmat, b)
-        except np.linalg.LinAlgError:
-            u, *_ = np.linalg.lstsq(rmat, b, rcond=None) # For redundancy, this can solve singular matrices
-
-        return u.astype(np.float32)
-
-    def _transform_surge_sway_for_depth_hold(self, direction_vector: NDArray[np.float32]) -> None:
-        surge_world = np.array([direction_vector[0], 0.0, 0.0], dtype=np.float32)  # NEEDTO LOOK MORE AT THIS FUNCTION
-        sway_world = np.array([0.0, direction_vector[1], 0.0], dtype=np.float32)
-
-        u_body_surge = self._solve_body_vector_from_world(surge_world)
-        u_body_sway = self._solve_body_vector_from_world(sway_world)
-
-        # Using coefficients to scale surge/sway motion appropriately
-        dir_coeffs = self.state.rov_config.direction_coefficients
-        surge_coeff = float(getattr(dir_coeffs, "surge", 1.0)) or 1.0
-        sway_coeff = float(getattr(dir_coeffs, "sway", 1.0)) or 1.0
-        heave_coeff = float(getattr(dir_coeffs, "heave", 1.0)) or 1.0
-
-        u_body_surge *= np.array([1.0, 1.0, surge_coeff/heave_coeff], dtype=np.float32)
-        u_body_sway  *= np.array([1.0, 1.0, sway_coeff/heave_coeff], dtype=np.float32)
-
-        # Sign correction (Have to test to find them):
-
-        u_body_total = u_body_surge + u_body_sway
+    def _transform_movement_vector_world_to_body(self, direction_vector: NDArray[np.float32]) -> None: # Must be completely rewritten
+        # Transform surge/sway commands from world frame to body frame
 
         direction_vector[0:3] = u_body_total[0:3]
 
-
-    def _transform_heave_world_motion_to_body_motion(self, depth_regulation_actuation: np.float32) -> NDArray[np.float32]:
-        body_motion = self._solve_body_vector_from_world(np.array([0.0, 0.0, float(depth_regulation_actuation)], dtype=np.float32))
-
-        # Using coefficients to scale heave motion appropriately
-        dir_coeffs = self.state.rov_config.direction_coefficients
-        surge_coeff = float(getattr(dir_coeffs, "surge", 1.0)) or 1.0
-        sway_coeff = float(getattr(dir_coeffs, "sway", 1.0)) or 1.0
-        heave_coeff = float(getattr(dir_coeffs, "heave", 1.0)) or 1.0
-
-        body_motion *= np.array([heave_coeff/surge_coeff, heave_coeff/sway_coeff, 1.0], dtype=np.float32)
-
-        # Sign correction:
-        body_motion[1] = -body_motion[1]
-
-        return body_motion
-
-    def _transform_world_pitch_yaw_roll_to_body(self, direction_vector: NDArray[np.float32]) -> None:
-        pitch_w = float(direction_vector[3])  # world-frame pitch command (about world +Y)
-        yaw_w   = float(direction_vector[4])  # world-frame yaw command   (about world +Z)
-        roll_w  = float(direction_vector[5])  # world-frame roll command  (about world +X)  <-- FIXED
-
-        rot = self._get_rotation_body_to_world()
-        R_bw = rot.as_matrix()  # body -> world (3x3)
-
-        # World angular-velocity command contributions (about fixed world axes)
-        w_roll  = np.array([roll_w,  0.0,    0.0], dtype=np.float64)  # about world X
-        w_pitch = np.array([0.0,    pitch_w, 0.0], dtype=np.float64)  # about world Y
-        w_yaw   = np.array([0.0,    0.0,    yaw_w], dtype=np.float64)  # about world Z
-
-        # Convert each to body angular velocity: w_body = R_bw^T * w_world
-        b_roll_xyz  = R_bw.T @ w_roll
-        b_pitch_xyz = R_bw.T @ w_pitch
-        b_yaw_xyz   = R_bw.T @ w_yaw
-
-        # Your direction_vector rotational layout is:
-        #   [3]=pitch command (body Y), [4]=yaw command (body Z), [5]=roll command (body X)
-        # so convert [x,y,z] -> [pitch(y), yaw(z), roll(x)]
-        u_roll  = np.array([b_roll_xyz[1],  b_roll_xyz[2],  b_roll_xyz[0]], dtype=np.float64)
-        u_pitch = np.array([b_pitch_xyz[1], b_pitch_xyz[2], b_pitch_xyz[0]], dtype=np.float64)
-        u_yaw   = np.array([b_yaw_xyz[1],   b_yaw_xyz[2],   b_yaw_xyz[0]], dtype=np.float64)
-
-        u_yaw[2] = -u_yaw[2]  # Correct yaw sign
-
-        u = u_roll + u_pitch + u_yaw
-
-
-
-        direction_vector[3] = np.float32(u[0])  # pitch (body Y)
-        direction_vector[4] = np.float32(u[1])  # yaw   (body Z)
-        direction_vector[5] = np.float32(u[2])  # roll  (body X)
-
-
-
     # -------------------------------------------------------------------------
-    # Scaling/clipping (kept consistent with your behavior)
+    # Scaling/clipping 
     # -------------------------------------------------------------------------
     def _scale_direction_vector_with_user_max_power(self, direction_vector: NDArray[np.float32]) -> None:
         scale = float(self.state.rov_config.power.user_max_power) / 100.0
@@ -441,7 +298,7 @@ class Regulator:
         _ = np.clip(regulator_direction_vector, -power, power, out=regulator_direction_vector)
 
     # -------------------------------------------------------------------------
-    # Public API (must keep name/signature): apply_regulator_to_direction_vector
+    # Main function: apply_regulator_to_direction_vector
     # -------------------------------------------------------------------------
     def apply_regulator_to_direction_vector(self, direction_vector: NDArray[np.float32]) -> None:
         """Apply regulator actuation to direction vector in-place."""
@@ -451,18 +308,15 @@ class Regulator:
 
         # Applying regulators
         if self.state.system_status.depth_hold:
+            # The regulator direction vector and direction vector are updated seperately because they need to be scaled seperately
             depth_regulator_actuation = self._handle_depth_hold(float(direction_vector[2]))
-            regulator_direction_vector[0:3] = self._transform_heave_world_motion_to_body_motion(np.float32(depth_regulator_actuation)) 
-            self._transform_surge_sway_for_depth_hold(direction_vector) #This is responsible for surge/sway when depth hold is on, has yet to be debugged
+            regulator_direction_vector[0:3] = self._transform_movement_vector_world_to_body(np.array([0.0, 0.0, float(depth_regulator_actuation)], dtype=np.float32))
+            direction_vector[2] = 0.0
+            direction_vector[0:3] = self._transform_movement_vector_world_to_body(direction_vector[0:3].copy())
+
         if self.state.system_status.pitch_stabilization:
-            direction_vector[3] = 0.0
-            regulator_direction_vector[3] = np.float32(self._handle_pitch_stabilization(float(direction_vector[3])))
-        if self.state.system_status.roll_stabilization:
-            direction_vector[5] = 0.0
-            regulator_direction_vector[5] = np.float32(self._handle_roll_stabilization(float(direction_vector[5])))
-        if self.state.system_status.pitch_stabilization or self.state.system_status.roll_stabilization: # CHANGE HERE, ENABLED BY PITCH FOR NOW BECAUSE YAW NOT IMPLEMENTED ON FRONTEND
-            direction_vector[4] = 0.0
-            regulator_direction_vector[4] = np.float32(self._handle_yaw_stabilization(float(direction_vector[4])))
+            direction_vector[3:6] = 0.0
+            regulator_direction_vector[3:6] = self._handle_stabilization()
 
         # Scaling according to values specified in settings by user
         self._scale_regulator_direction_vector(regulator_direction_vector)
@@ -470,9 +324,6 @@ class Regulator:
 
         # Adding regulator output to direction vector
         direction_vector += regulator_direction_vector
-
-        if self.state.system_status.pitch_stabilization or self.state.system_status.roll_stabilization: # ADD YAW HERE..
-            self._transform_world_pitch_yaw_roll_to_body(direction_vector)
 
 
     def handle_auto_tuning(self, current_time: float) -> NDArray[np.float32] | None:
