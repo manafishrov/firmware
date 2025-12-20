@@ -50,8 +50,7 @@ TEST_DT_MAX_SECONDS: float = 0.1
 
 # Depth hold behavior
 TEST_DEPTH_INTEGRAL_WINDUP_CLIP: float = 3.0
-TEST_DEPTH_HOLD_SETPOINT_RATE_MPS: float = 0.6          # heave stick -> depth target rate
-TEST_DEPTH_HOLD_ENABLE_RAMP_SECONDS: float = 0.5        # smooth ramp on enable
+TEST_DEPTH_HOLD_SETPOINT_RATE_MPS: float = 0.3          # heave stick -> depth target rate
 
 # Yaw PID gains (kept inside this file; independent from config)
 TEST_YAW_KP: float = 0.5
@@ -59,17 +58,7 @@ TEST_YAW_KI: float = 0.0
 TEST_YAW_KD: float = 0.1
 
 
-def _wrap_angle_deg(angle: float) -> float:
-    """Wrap to [-180, 180)."""
-    return ((angle + 180.0) % 360.0) - 180.0
-
-
-def _angle_error_deg(target: float, current: float) -> float:
-    """Shortest signed error target-current in degrees, wrapped to [-180, 180)."""
-    return _wrap_angle_deg(target - current)
-
-
-def _clamp_dt(dt: float) -> float:
+def _clamp_dt(dt: float) -> float: # For extra redundancy
     if not np.isfinite(dt):
         return 0.0167
     return float(np.clip(dt, TEST_DT_MIN_SECONDS, TEST_DT_MAX_SECONDS))
@@ -89,35 +78,31 @@ class _MahonyAhrs:
         self._integral: NDArray[np.float64] = np.zeros(3, dtype=np.float64)
         self._q: R = R.identity()
 
-    @property
-    def rotation_body_to_world(self) -> R:
-        return self._q
-
     def reset(self) -> None:
         self._integral[:] = 0.0
         self._q = R.identity()
 
-    def update(
+    def update( 
         self,
         gyro_rad_s: NDArray[np.float32],
         accel: NDArray[np.float32],
         dt: float,
     ) -> None:
+        """Update attitude reading with gyro (rad/s) and accel (m/s²) readings."""
         dt = _clamp_dt(dt)
 
         ax, ay, az = float(accel[0]), float(accel[1]), float(accel[2])
         a_norm = float(np.sqrt(ax * ax + ay * ay + az * az))
-        if not np.isfinite(a_norm) or a_norm < TEST_AHRS_ACCEL_MIN_NORM:
+        if not np.isfinite(a_norm) or a_norm < TEST_AHRS_ACCEL_MIN_NORM: # If accel reading is crazy coco loco, integrate gyro only
             self._integrate_gyro_only(gyro_rad_s, dt)
             return
 
         a = np.array([ax, ay, az], dtype=np.float64) / a_norm
 
-        # Estimated "up" direction in body frame from current attitude:
+        # Estimated "up" direction in body frame from current attitude (the reason we use up is that this is the expected accel from gravity).
         g_body = self._q.inv().apply(np.array([0.0, 0.0, 1.0], dtype=np.float64))
 
         # Error drives estimated up toward measured accel direction.
-        # If your signs come out inverted, flip a -> -a here once.
         e = np.cross(a, g_body)
 
         if self.ki > 0.0:
@@ -134,14 +119,15 @@ class _MahonyAhrs:
 
         self._integrate_omega(omega, dt)
 
-    def _integrate_gyro_only(self, gyro_rad_s: NDArray[np.float32], dt: float) -> None:
+    def _integrate_gyro_only(self, gyro_rad_s: NDArray[np.float32], dt: float) -> None: #Called by update
         omega = np.array(
             [float(gyro_rad_s[0]), float(gyro_rad_s[1]), float(gyro_rad_s[2])],
             dtype=np.float64,
         )
         self._integrate_omega(omega, dt)
 
-    def _integrate_omega(self, omega_rad_s: NDArray[np.float64], dt: float) -> None:
+    def _integrate_omega(self, omega_rad_s: NDArray[np.float64], dt: float) -> None: #Called by update
+
         dtheta = omega_rad_s * float(dt)
         dR = R.from_rotvec(dtheta)
         self._q = self._q * dR  # body-to-world update
@@ -166,17 +152,11 @@ class Regulator:
 
         # Quaternion attitude estimator
         self._ahrs: _MahonyAhrs = _MahonyAhrs(kp=TEST_AHRS_MAHONY_KP, ki=TEST_AHRS_MAHONY_KI)
-        self._attitude_initialized: bool = False
-
-        # Internal yaw state (so you don't need to add state.regulator.yaw/desired_yaw/integral_yaw yet)
-        self._yaw_deg: float = 0.0
-        self._desired_yaw_deg: float = 0.0
-        self._integral_yaw_deg: float = 0.0
 
         # Edge detection for bumpless transfer and ramp-in
-        self._prev_depth_hold: bool = False
-        self._prev_pitch_stab: bool = False
-        self._prev_roll_stab: bool = False
+        self._prev_depth_hold_enabled: bool = False
+        self._prev_stabilization_enabled: bool = False
+
 
         # Auto tuning fields (kept as-is)
         self.auto_tuning_phase: str = ""
@@ -188,50 +168,19 @@ class Regulator:
         self.auto_tuning_amplitude: float = 0.0
         self.auto_tuning_oscillation_start: float = 0.0
 
-    def _normalize_angles(self, pitch: float, roll: float, yaw: float) -> tuple[float, float, float]:
-        roll = _wrap_angle_deg(roll)
-        yaw = _wrap_angle_deg(yaw)
-        pitch = float(np.clip(pitch, -PITCH_MAX, PITCH_MAX))
-        return pitch, roll, yaw
 
-    def _get_rotation_body_to_world(self) -> R:
-        return self._ahrs.rotation_body_to_world
-
-    # -------------------------------------------------------------------------
-    # Public API (must keep name/signature): update_desired_from_direction_vector
-    # -------------------------------------------------------------------------
     def update_desired_from_direction_vector(
         self, direction_vector: NDArray[np.float32]
     ) -> None:
-        """Update desired pitch/roll/yaw from direction vector."""
-
-        config = self.state.rov_config.regulator
+        """Update desired attitude quaternion from direction vector."""
 
         if self.state.system_status.depth_hold:
             heave_change = float(direction_vector[2])
             desired_depth = float(self.state.regulator.desired_depth) + (-heave_change) * TEST_DEPTH_HOLD_SETPOINT_RATE_MPS * self.delta_t
             self.state.regulator.desired_depth = float(desired_depth)
 
-        if self.state.system_status.pitch_stabilization:
-            pitch_change = float(direction_vector[3])
-            desired_pitch = float(self.state.regulator.desired_pitch) + pitch_change * float(config.turn_speed) * self.delta_t
-            self.state.regulator.desired_pitch = float(np.clip(desired_pitch, -PITCH_MAX, PITCH_MAX))
-
-        if self.state.system_status.roll_stabilization:
-            roll_change = float(direction_vector[5])
-            desired_roll = float(self.state.regulator.desired_roll) + roll_change * float(config.turn_speed) * self.delta_t
-            desired_roll = _wrap_angle_deg(desired_roll)
-
-            current_roll = float(self.state.regulator.roll)
-            if desired_roll - current_roll > ROLL_WRAP_MAX:
-                desired_roll -= 360.0
-            if desired_roll - current_roll < -ROLL_WRAP_MAX:
-                desired_roll += 360.0
-            self.state.regulator.desired_roll = float(desired_roll)
-
-        if self.state.system_status.pitch_stabilization or self.state.system_status.yaw_stabilization: # CHANGE HERE, ENABLED BY PITCH FOR NOW BECAUSE YAW NOT IMPLEMENTED ON FRONTEND
-            yaw_change = float(direction_vector[4])
-            self._desired_yaw_deg = _wrap_angle_deg(self._desired_yaw_deg + yaw_change * float(config.turn_speed) * self.delta_t)
+        if self.state.system_status.stabilization:
+            # Update the desired quaternion, use quaternion math, here would be the place to check if the FPV mode is enabled
 
 
     # -------------------------------------------------------------------------
@@ -242,51 +191,34 @@ class Regulator:
         if not self.state.system_health.imu_ok:
             return
 
+        # Retrieve IMU data
         imu_data = self.state.imu
         accel = cast(NDArray[np.float32], imu_data.acceleration)
-        gyr = cast(NDArray[np.float32], imu_data.gyroscope)  # rad/s
+        gyr = cast(NDArray[np.float32], imu_data.gyroscope)
 
-        self.gyro = np.degrees(gyr).astype(np.float32)
+        self.gyro = np.degrees(gyr).astype(np.float32) # Keeping this for now as it might be used by the D terms?
 
+        # Compute delta_t
         now = time.time()
         if self.last_measurement_time > 0.0:
-            self.delta_t = _clamp_dt(now - self.last_measurement_time)
+            self.delta_t = now - self.last_measurement_time
         else:
             self.delta_t = 0.0167
         self.last_measurement_time = now
 
-        if not self._attitude_initialized:
-            ax, ay, az = float(accel[0]), float(accel[1]), float(accel[2])
-            a_norm = float(np.sqrt(ax * ax + ay * ay + az * az))
-            if np.isfinite(a_norm) and a_norm > TEST_AHRS_ACCEL_MIN_NORM:
-                a = np.array([ax, ay, az], dtype=np.float64) / a_norm
-                z_world = np.array([0.0, 0.0, 1.0], dtype=np.float64)
-                v = np.cross(a, z_world)
-                s = float(np.linalg.norm(v))
-                c = float(np.dot(a, z_world))
-                self._ahrs.reset()
-                if s > 1e-9:
-                    axis = v / s
-                    angle = float(np.arctan2(s, c))
-                    self._ahrs._q = R.from_rotvec(axis * angle)  # pylint: disable=protected-access
-                self._attitude_initialized = True
-
+        # Update AHRS attitude quaternion
         self._ahrs.update(gyr, accel, self.delta_t)
 
-        rot = self._get_rotation_body_to_world()
+        # Getting euler angles from quaternion for visualization in app.
+        rot = self._ahrs._q 
         roll, pitch, yaw = rot.as_euler("xyz", degrees=True)
-        pitch, roll, yaw = self._normalize_angles(float(pitch), float(roll), float(yaw))
-
-        pitch = -pitch  # NED to ENU
-        yaw = -yaw      # NED to ENU
 
         self.state.regulator.pitch = pitch
         self.state.regulator.roll = roll
-        self._yaw_deg = yaw #UPDATE TO MATCH THOSE ABOVE WHEN YAW IS ADDED TO STATE
 
 
     # -------------------------------------------------------------------------
-    # Depth hold internals
+    # Depth hold internals                            -.-.-.-.-.-.-.-.-.-.-.-.-.-.-..-..-.-.-.-...-...-...-.-.-.-.-.-.-.-.-.-.--.-.-.-.-.-.-.
     # -------------------------------------------------------------------------
     def _depth_hold_enable_edge(self) -> None:
         current_depth = float(self.state.pressure.depth)
@@ -318,7 +250,7 @@ class Regulator:
             + float(config.depth.ki) * float(self.state.regulator.integral_depth)
             + float(config.depth.kd) * float(self.current_dt_depth)
         )
-        return float(heave_cmd) * self._depth_hold_ramp()
+        return float(heave_cmd)
 
     def _handle_edges(self) -> None:
         depth_hold = bool(self.state.system_status.depth_hold)
@@ -326,13 +258,13 @@ class Regulator:
         roll_stab = bool(self.state.system_status.roll_stabilization)
         # Add for yaw stabilization
 
-        if depth_hold and not self._prev_depth_hold:
+        if depth_hold and not self._prev_depth_hold_enabled:
             self._depth_hold_enable_edge()
-        if (pitch_stab or roll_stab) and not (self._prev_pitch_stab and self._prev_roll_stab):
+        if (pitch_stab or roll_stab) and not (self._prev_stabilization_enabled and self._prev_roll_stab):
             self._attitude_enable_edge()
 
-        self._prev_depth_hold = depth_hold
-        self._prev_pitch_stab = pitch_stab
+        self._prev_depth_hold_enabled = depth_hold
+        self._prev_stabilization_enabled = pitch_stab
         self._prev_roll_stab = roll_stab
 
 
@@ -461,36 +393,40 @@ class Regulator:
         return body_motion
 
     def _transform_world_pitch_yaw_roll_to_body(self, direction_vector: NDArray[np.float32]) -> None:
-        pitch_w = float(direction_vector[3])  # world-frame pitch command
-        yaw_w   = float(direction_vector[4])  # world-frame yaw command
-        roll_w  = float(direction_vector[5])  # world-frame roll command
+        pitch_w = float(direction_vector[3])  # world-frame pitch command (about world +Y)
+        yaw_w   = float(direction_vector[4])  # world-frame yaw command   (about world +Z)
+        roll_w  = float(direction_vector[5])  # world-frame roll command  (about world +X)  <-- FIXED
 
-        # Build three *separate* world omega vectors, they are seperated because some signs need to be flipped after transform
-        omega_world_pitch = np.array([0.0,                 pitch_w, 0.0               ], dtype=np.float32)
-        omega_world_yaw   = np.array([0.0,                 0.0,                yaw_w ], dtype=np.float32)
+        rot = self._get_rotation_body_to_world()
+        R_bw = rot.as_matrix()  # body -> world (3x3)
 
-        u_roll  = np.array([0.0, 0.0, roll_w], dtype=np.float32)  # Roll stays unchanged
-        u_pitch = self._solve_body_vector_from_world(omega_world_pitch)
-        u_yaw   = self._solve_body_vector_from_world(omega_world_yaw)
+        # World angular-velocity command contributions (about fixed world axes)
+        w_roll  = np.array([roll_w,  0.0,    0.0], dtype=np.float64)  # about world X
+        w_pitch = np.array([0.0,    pitch_w, 0.0], dtype=np.float64)  # about world Y
+        w_yaw   = np.array([0.0,    0.0,    yaw_w], dtype=np.float64)  # about world Z
 
-        # Scaling with direction coefficients
-        dir_coeffs = self.state.rov_config.direction_coefficients
-        pitch_coeff = float(getattr(dir_coeffs, "pitch", 1.0)) or 1.0
-        yaw_coeff   = float(getattr(dir_coeffs, "yaw",   1.0)) or 1.0
-        roll_coeff  = float(getattr(dir_coeffs, "roll",  1.0)) or 1.0
+        # Convert each to body angular velocity: w_body = R_bw^T * w_world
+        b_roll_xyz  = R_bw.T @ w_roll
+        b_pitch_xyz = R_bw.T @ w_pitch
+        b_yaw_xyz   = R_bw.T @ w_yaw
 
-        u_pitch *= np.array([1.0, pitch_coeff/yaw_coeff, 1.0], dtype=np.float64)
-        u_yaw  *= np.array([1.0, 1.0, yaw_coeff/roll_coeff], dtype=np.float64)
+        # Your direction_vector rotational layout is:
+        #   [3]=pitch command (body Y), [4]=yaw command (body Z), [5]=roll command (body X)
+        # so convert [x,y,z] -> [pitch(y), yaw(z), roll(x)]
+        u_roll  = np.array([b_roll_xyz[1],  b_roll_xyz[2],  b_roll_xyz[0]], dtype=np.float64)
+        u_pitch = np.array([b_pitch_xyz[1], b_pitch_xyz[2], b_pitch_xyz[0]], dtype=np.float64)
+        u_yaw   = np.array([b_yaw_xyz[1],   b_yaw_xyz[2],   b_yaw_xyz[0]], dtype=np.float64)
 
-        # Sign correction:
-        u_yaw[0] = -u_yaw[0]
+        u_yaw[2] = -u_yaw[2]  # Correct yaw sign
 
         u = u_roll + u_pitch + u_yaw
 
-        # Back to your direction_vector layout:
-        direction_vector[3] = float(u[1])  # pitch command (body Y)
-        direction_vector[4] = float(u[2])  # yaw command   (body Z)
-        direction_vector[5] = float(u[0])  # roll command  (body X)
+
+
+        direction_vector[3] = np.float32(u[0])  # pitch (body Y)
+        direction_vector[4] = np.float32(u[1])  # yaw   (body Z)
+        direction_vector[5] = np.float32(u[2])  # roll  (body X)
+
 
 
     # -------------------------------------------------------------------------
@@ -516,7 +452,7 @@ class Regulator:
         # Applying regulators
         if self.state.system_status.depth_hold:
             depth_regulator_actuation = self._handle_depth_hold(float(direction_vector[2]))
-            regulator_direction_vector[0:3] = self._transform_heave_world_motion_to_body_motion(depth_regulator_actuation) 
+            regulator_direction_vector[0:3] = self._transform_heave_world_motion_to_body_motion(np.float32(depth_regulator_actuation)) 
             self._transform_surge_sway_for_depth_hold(direction_vector) #This is responsible for surge/sway when depth hold is on, has yet to be debugged
         if self.state.system_status.pitch_stabilization:
             direction_vector[3] = 0.0
@@ -527,8 +463,6 @@ class Regulator:
         if self.state.system_status.pitch_stabilization or self.state.system_status.roll_stabilization: # CHANGE HERE, ENABLED BY PITCH FOR NOW BECAUSE YAW NOT IMPLEMENTED ON FRONTEND
             direction_vector[4] = 0.0
             regulator_direction_vector[4] = np.float32(self._handle_yaw_stabilization(float(direction_vector[4])))
-        if self.state.system_status.pitch_stabilization or self.state.system_status.roll_stabilization: # ADD YAW HERE..
-            self._transform_world_pitch_yaw_roll_to_body(direction_vector)
 
         # Scaling according to values specified in settings by user
         self._scale_regulator_direction_vector(regulator_direction_vector)
@@ -536,6 +470,9 @@ class Regulator:
 
         # Adding regulator output to direction vector
         direction_vector += regulator_direction_vector
+
+        if self.state.system_status.pitch_stabilization or self.state.system_status.roll_stabilization: # ADD YAW HERE..
+            self._transform_world_pitch_yaw_roll_to_body(direction_vector)
 
 
     def handle_auto_tuning(self, current_time: float) -> NDArray[np.float32] | None:
