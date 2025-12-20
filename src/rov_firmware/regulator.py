@@ -515,7 +515,7 @@ class Regulator:
 
         # Applying regulators
         if self.state.system_status.depth_hold:
-            depth_regulator_actuation = self._handle_depth_hold(heave_input)
+            depth_regulator_actuation = self._handle_depth_hold(float(direction_vector[2]))
             regulator_direction_vector[0:3] = self._turn_heave_world_motion_to_body_motion(depth_regulator_actuation) 
             self._transform_surge_sway_for_depth_hold(direction_vector) #This is responsible for surge/sway when depth hold is on, has yet to be debugged
         if self.state.system_status.pitch_stabilization:
