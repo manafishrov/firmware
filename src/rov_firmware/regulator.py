@@ -1,5 +1,7 @@
 """Regulator module for ROV control (TEST VERSION: self-contained new params/state)."""
 
+# This regulator uses the NED convention.
+
 from __future__ import annotations
 
 import time
@@ -76,11 +78,11 @@ class _MahonyAhrs:
         self.kp = float(kp)
         self.ki = float(ki)
         self._integral: NDArray[np.float64] = np.zeros(3, dtype=np.float64)
-        self._q: R = R.identity()
+        self.current_attitude: R = R.identity()
 
     def reset(self) -> None:
         self._integral[:] = 0.0
-        self._q = R.identity()
+        self.current_attitude = R.identity()
 
     def update( 
         self,
@@ -97,10 +99,10 @@ class _MahonyAhrs:
             self._integrate_gyro_only(gyro_rad_s, dt)
             return
 
-        a = np.array([ax, ay, az], dtype=np.float64) / a_norm
+        a = -np.array([ax, ay, az], dtype=np.float64) / a_norm # - In front to follow NED convention
 
         # Estimated "up" direction in body frame from current attitude (the reason we use up is that this is the expected accel from gravity).
-        g_body = self._q.inv().apply(np.array([0.0, 0.0, 1.0], dtype=np.float64))
+        g_body = self.current_attitude.inv().apply(np.array([0.0, 0.0, 1.0], dtype=np.float64))
 
         # Error drives estimated up toward measured accel direction.
         e = np.cross(a, g_body)
@@ -130,11 +132,11 @@ class _MahonyAhrs:
 
         dtheta = omega_rad_s * float(dt)
         dR = R.from_rotvec(dtheta)
-        self._q = self._q * dR  # body-to-world update
+        self.current_attitude = self.current_attitude * dR  # body-to-world update
 
-        q = self._q.as_quat()
+        q = self.current_attitude.as_quat()
         q /= np.linalg.norm(q)
-        self._q = R.from_quat(q)
+        self.current_attitude = R.from_quat(q)
 
 
 class Regulator:
@@ -153,7 +155,7 @@ class Regulator:
         # Quaternion attitude estimator
         self._ahrs: _MahonyAhrs = _MahonyAhrs(kp=TEST_AHRS_MAHONY_KP, ki=TEST_AHRS_MAHONY_KI)
 
-        self.attitude = R.identity()
+        self.desired_attitude = R.identity()
 
         # Edge detection for bumpless transfer and ramp-in
         self._prev_depth_hold_enabled: bool = False
@@ -178,7 +180,7 @@ class Regulator:
 
         if self.state.system_status.depth_hold:
             heave_change = float(direction_vector[2])
-            desired_depth = float(self.state.regulator.desired_depth) + (-heave_change) * TEST_DEPTH_HOLD_SETPOINT_RATE_MPS * self.delta_t
+            desired_depth = float(self.state.regulator.desired_depth) + heave_change * TEST_DEPTH_HOLD_SETPOINT_RATE_MPS * self.delta_t
             self.state.regulator.desired_depth = float(desired_depth)
 
         if self.state.system_status.stabilization:
@@ -187,18 +189,25 @@ class Regulator:
             # Yaw change
             desired_yaw_change = direction_vector[4] * self.delta_t * self.state.rov_config.regulator.turn_speed
             yaw_rotation = R.from_rotvec([0.0, 0.0, np.deg2rad(desired_yaw_change)]) # Yaw rate scaled down
-            self.attitude = yaw_rotation * self.attitude
+            self.desired_attitude = yaw_rotation * self.desired_attitude
 
             # Pitch change
             desired_pitch_change = direction_vector[3] * self.delta_t * self.state.rov_config.regulator.turn_speed
-            pitch, yaw, roll = self.attitude.as_euler("YZX", degrees=True)
+            pitch, yaw, roll = self.desired_attitude.as_euler("YZX", degrees=True)
             pitch = pitch + float(desired_pitch_change)
             pitch = float(np.clip(pitch, -PITCH_MAX, PITCH_MAX)) # Clipping pitch to avoid gimbal lock
-            self.attitude = R.from_euler("YZX", [pitch, yaw, roll], degrees=True)
+            self.desired_attitude = R.from_euler("YZX", [pitch, yaw, roll], degrees=True)
 
+            # Roll change
             desired_roll_change = direction_vector[5] * self.delta_t * self.state.rov_config.regulator.turn_speed
             roll_rotation = R.from_rotvec([np.deg2rad(desired_roll_change), 0.0, 0.0])
-            self.attitude = self.attitude * roll_rotation
+            self.desired_attitude = self.desired_attitude * roll_rotation
+
+            # Updating desired pitch, roll, yaw in state for app visualization
+            pitch, yaw, roll = self.desired_attitude.as_euler("YZX", degrees=True)
+            self.state.regulator.desired_pitch = pitch
+            self.state.regulator.desired_roll = roll
+            #self.state.regulator.desired_yaw = yaw TEMPORARY COMMENTED, IMPLEMENT LATER
 
 
     # -------------------------------------------------------------------------
@@ -227,12 +236,12 @@ class Regulator:
         # Update AHRS attitude quaternion
         self._ahrs.update(gyr, accel, self.delta_t)
 
-        # Getting euler angles from quaternion for visualization in app.
-        rot = self._ahrs._q 
-        roll, pitch, yaw = rot.as_euler("XYZ", degrees=True)
+        # Getting euler angles from quaternion for visualization in app. 
+        roll, pitch, yaw = self._ahrs.current_attitude.as_euler("XYZ", degrees=True)
 
         self.state.regulator.pitch = pitch
         self.state.regulator.roll = roll
+        #self.state.regulator.yaw = yaw TEMPOSRARY - implement later
 
 
     def _handle_edges(self) -> None:
@@ -290,7 +299,16 @@ class Regulator:
     # Attitude stabilization internals
     # -------------------------------------------------------------------------
     def _attitude_enable_edge(self) -> None:
-        # Set desired and integral terms to 0
+        # Set desired attitude pitch and roll to 0 and yaw to current yaw 
+        self.desired_attitude = R.identity()
+        current_yaw = self._ahrs.current_attitude.as_euler("YZX", degrees=False)[1]
+        yaw_rotation = R.from_rotvec([0.0, 0.0, current_yaw])
+        self.desired_attitude = yaw_rotation * self.desired_attitude
+
+        # Reset I terms
+
+
+
 
     def _handle_stabilization(self):
         # Here will be the quaternion-based PID stabilization for pitch, roll, yaw
