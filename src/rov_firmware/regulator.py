@@ -145,7 +145,8 @@ class Regulator:
     def __init__(self, state: RovState):
         self.state: RovState = state
 
-        self.gyro: NDArray[np.float32] = np.array([0.0, 0.0, 0.0], dtype=np.float32)  # deg/s
+        self.gyro_rad_s: NDArray[np.float32] = np.array([0.0, 0.0, 0.0], dtype=np.float32)  # rad/s
+
         self.last_measurement_time: float = 0.0
         self.delta_t: float = 0.0167
 
@@ -156,8 +157,9 @@ class Regulator:
         self._ahrs: _MahonyAhrs = _MahonyAhrs(kp=TEST_AHRS_MAHONY_KP, ki=TEST_AHRS_MAHONY_KI)
 
         self.desired_attitude = R.identity()
+        self.integral_attitude_rad: NDArray[np.float32] = np.array([0.0, 0.0, 0.0], dtype=np.float32)
 
-        # Edge detection for bumpless transfer and ramp-in
+        # Edge detection for resetting when enabling regulators
         self._prev_depth_hold_enabled: bool = False
         self._prev_stabilization_enabled: bool = False
 
@@ -223,7 +225,7 @@ class Regulator:
         accel = cast(NDArray[np.float32], imu_data.acceleration)
         gyr = cast(NDArray[np.float32], imu_data.gyroscope)
 
-        self.gyro = np.degrees(gyr).astype(np.float32) # Keeping this for now as it might be used by the D terms?
+        self.gyro_rad_s = gyr
 
         # Compute delta_t
         now = time.time()
@@ -306,12 +308,51 @@ class Regulator:
         self.desired_attitude = yaw_rotation * self.desired_attitude
 
         # Reset I terms
+        self.integral_attitude_rad[:] = 0.0
 
 
 
 
-    def _handle_stabilization(self):
+    def _handle_stabilization(self, direction_vector: NDArray[np.float32]) -> NDArray[np.float32]:
         # Here will be the quaternion-based PID stabilization for pitch, roll, yaw
+        """Quaternion-based PID attitude stabilization.
+
+        Returns actuation vector in order: [pitch, yaw, roll].
+        """
+        dt = _clamp_dt(self.delta_t)
+        config = self.state.rov_config.regulator
+
+        current_attitude: R = self._ahrs.current_attitude
+        desired_attitude: R = self.desired_attitude
+
+        # Calculate attitude error quaternion
+        R_err = current_attitude.inv() * desired_attitude
+
+        # Convert to rotation vector, the rotation vector describes the error as rotations around the xyz axes in the body frame
+        err_rotvec = R_err.as_rotvec()
+        if not np.all(np.isfinite(err_rotvec)):
+            err_rotvec = np.zeros(3, dtype=np.float32)
+
+        # Update integral term
+        integral_scale = np.clip((1.0 - np.linalg.norm(direction_vector[3:6])), 0.0, 1.0) # Stick-based integral relaxation, higher input -> less integral accumulation
+
+        self.integral_attitude_rad += err_rotvec * dt * integral_scale
+
+        clip_rad = float(np.deg2rad(INTEGRAL_WINDUP_CLIP_DEGREES))
+        self.integral_attitude_rad = np.clip(self.integral_attitude_rad, -clip_rad, clip_rad) # Windup prevention
+
+        # Gyro body rates in rad/s
+        omega = self.gyro_rad_s.astype(np.float32, copy=False)
+
+        # PID per axis (roll=x, pitch=y, yaw=z)
+        u_roll  = config.roll.kp  * err_rotvec[0] + config.roll.ki  * self.integral_attitude_rad[0] + config.roll.kd  * (-omega[0])
+        u_pitch = config.pitch.kp * err_rotvec[1] + config.pitch.ki * self.integral_attitude_rad[1] + config.pitch.kd * (-omega[1])
+        u_yaw   = TEST_YAW_KP   * err_rotvec[2] + TEST_YAW_KI   * self.integral_attitude_rad[2] + TEST_YAW_KD   * (-omega[2])
+
+        stabilization_actuation = np.array([u_pitch, u_yaw, u_roll], dtype=np.float32)/100.0  # Divided by 100 to avoid having annoyingly small PID constant values
+
+        return stabilization_actuation
+
 
     # -------------------------------------------------------------------------
     # Frame transforms using quaternion attitude and direction coefficients
@@ -351,8 +392,8 @@ class Regulator:
             direction_vector[0:3] = self._transform_movement_vector_world_to_body(direction_vector[0:3].copy())
 
         if self.state.system_status.pitch_stabilization:
+            regulator_direction_vector[3:6] = self._handle_stabilization(direction_vector[3:6].copy())
             direction_vector[3:6] = 0.0
-            regulator_direction_vector[3:6] = self._handle_stabilization()
 
         # Scaling according to values specified in settings by user
         self._scale_regulator_direction_vector(regulator_direction_vector)
