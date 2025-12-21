@@ -1,6 +1,6 @@
 """Regulator module for ROV control (TEST VERSION: self-contained new params/state)."""
 
-# This regulator uses the NED convention.
+# This regulator uses the NED convention. Direction vector represents [surge, sway, heave, pitch, yaw, roll, action1, action2], where action1 and action2 are unused by this code.
 
 from __future__ import annotations
 
@@ -9,22 +9,25 @@ from typing import cast
 
 import numpy as np
 from numpy.typing import NDArray
-from scipy.optimize import curve_fit  # kept to avoid touching your imports
+from scipy.optimize import curve_fit
 from scipy.spatial.transform import Rotation as R
 
 from .constants import (
+    AHRS_ACCEL_MIN_NORM,
+    AHRS_MAHONY_KI,
+    AHRS_MAHONY_KP,
     AUTO_TUNING_AMPLITUDE_THRESHOLD_DEGREES,
     AUTO_TUNING_AMPLITUDE_THRESHOLD_DEPTH_METERS,
     AUTO_TUNING_OSCILLATION_DURATION_SECONDS,
     AUTO_TUNING_TOAST_ID,
     AUTO_TUNING_ZERO_THRESHOLD_DEGREES,
     AUTO_TUNING_ZERO_THRESHOLD_DEPTH_METERS,
-    COMPLEMENTARY_FILTER_ALPHA,  # unused in this rewrite, kept for compatibility
     DEPTH_DERIVATIVE_EMA_TAU,
+    DEPTH_INTEGRAL_WINDUP_CLIP,
+    DT_MAX_SECONDS,
+    DT_MIN_SECONDS,
     INTEGRAL_WINDUP_CLIP_DEGREES,
     PITCH_MAX,
-    ROLL_UPSIDE_DOWN_THRESHOLD,  # unused in this rewrite, kept for compatibility
-    ROLL_WRAP_MAX,
 )
 from .log import log_error, log_info
 from .models.config import (
@@ -38,21 +41,11 @@ from .websocket.queue import get_message_queue
 
 
 # =============================================================================
-# TEST TUNABLES (edit here; no changes required elsewhere in your codebase)
+# PARAMETERS TO BE ADDED TO CONFIG AND SETTINGS, REMOVE WHEN APPLICATION UPDATED
 # =============================================================================
 
-# AHRS (Mahony) gains
-TEST_AHRS_MAHONY_KP: float = 2.5
-TEST_AHRS_MAHONY_KI: float = 0.05
-TEST_AHRS_ACCEL_MIN_NORM: float = 1e-3
-
-# dt guards
-TEST_DT_MIN_SECONDS: float = 1e-3
-TEST_DT_MAX_SECONDS: float = 0.1
-
 # Depth hold behavior
-TEST_DEPTH_INTEGRAL_WINDUP_CLIP: float = 3.0
-TEST_DEPTH_HOLD_SETPOINT_RATE_MPS: float = 0.3          # heave stick -> depth target rate
+TEST_DEPTH_HOLD_SETPOINT_RATE_MPS: float = 0.3 # HOW QUICKLY DEPTH CHANGES WHEN DEPTH HOLD ENABLED
 
 # Yaw PID gains (kept inside this file; independent from config)
 TEST_YAW_KP: float = 0.5
@@ -63,20 +56,19 @@ TEST_YAW_KD: float = 0.1
 def _clamp_dt(dt: float) -> float: # For extra redundancy
     if not np.isfinite(dt):
         return 0.0167
-    return float(np.clip(dt, TEST_DT_MIN_SECONDS, TEST_DT_MAX_SECONDS))
+    return float(np.clip(dt, DT_MIN_SECONDS, DT_MAX_SECONDS))
 
 
 class _MahonyAhrs:
-    """
-    Mahony AHRS (gyro + accel) in quaternion form.
+    """Mahony AHRS (gyro + accel) in quaternion form.
 
     - Stabilizes roll/pitch with accel (gravity).
     - Yaw is integrated from gyro (will drift without external heading reference).
     """
 
     def __init__(self, kp: float, ki: float) -> None:
-        self.kp = float(kp)
-        self.ki = float(ki)
+        self.kp: float = float(kp)
+        self.ki: float = float(ki)
         self._integral: NDArray[np.float64] = np.zeros(3, dtype=np.float64)
         self.current_attitude: R = R.identity()
 
@@ -84,7 +76,7 @@ class _MahonyAhrs:
         self._integral[:] = 0.0
         self.current_attitude = R.identity()
 
-    def update( 
+    def update(
         self,
         gyro_rad_s: NDArray[np.float32],
         accel: NDArray[np.float32],
@@ -95,7 +87,7 @@ class _MahonyAhrs:
 
         ax, ay, az = float(accel[0]), float(accel[1]), float(accel[2])
         a_norm = float(np.sqrt(ax * ax + ay * ay + az * az))
-        if not np.isfinite(a_norm) or a_norm < TEST_AHRS_ACCEL_MIN_NORM: # If accel reading is crazy coco loco, integrate gyro only
+        if not np.isfinite(a_norm) or a_norm < AHRS_ACCEL_MIN_NORM: # If accel reading is crazy coco loco, integrate gyro only
             self._integrate_gyro_only(gyro_rad_s, dt)
             return
 
@@ -143,6 +135,11 @@ class Regulator:
     """PID regulator for ROV stabilization."""
 
     def __init__(self, state: RovState):
+        """Initialize the Regulator with ROV state.
+
+        Args:
+            state: The RovState object containing the current ROV state and configuration.
+        """
         self.state: RovState = state
 
         self.gyro_rad_s: NDArray[np.float32] = np.array([0.0, 0.0, 0.0], dtype=np.float32)  # rad/s
@@ -156,7 +153,7 @@ class Regulator:
         self.current_dt_depth: float = 0.0
 
         # Quaternion attitude estimator
-        self.ahrs: _MahonyAhrs = _MahonyAhrs(kp=TEST_AHRS_MAHONY_KP, ki=TEST_AHRS_MAHONY_KI)
+        self.ahrs: _MahonyAhrs = _MahonyAhrs(kp=AHRS_MAHONY_KP, ki=AHRS_MAHONY_KI)
 
         self.desired_attitude = R.identity()
         self.integral_attitude_rad: NDArray[np.float32] = np.array([0.0, 0.0, 0.0], dtype=np.float32)
@@ -281,7 +278,7 @@ class Regulator:
         # Update integral term
         integral_scale = np.clip((1.0 - abs(heave_input)), 0.0, 1.0) # Stick-based integral relaxation, higher input -> less integral accumulation
         self.state.regulator.integral_depth += error * self.delta_t_run_regulator * integral_scale # Integrate depth error
-        self.state.regulator.integral_depth = np.clip(self.state.regulator.integral_depth, -TEST_DEPTH_INTEGRAL_WINDUP_CLIP, TEST_DEPTH_INTEGRAL_WINDUP_CLIP) # Windup prevention
+        self.state.regulator.integral_depth = np.clip(self.state.regulator.integral_depth, -DEPTH_INTEGRAL_WINDUP_CLIP, DEPTH_INTEGRAL_WINDUP_CLIP) # Windup prevention
 
         # Update derivative term (using EMA filter)
         alpha = np.exp(-self.delta_t_run_regulator / float(DEPTH_DERIVATIVE_EMA_TAU))
