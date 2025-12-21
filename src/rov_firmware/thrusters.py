@@ -109,8 +109,6 @@ class Thrusters:
         self._smooth_direction_vector(direction_vector, self.previous_direction_vector)
         self.previous_direction_vector = direction_vector.copy()
 
-        self.regulator.update_desired_from_direction_vector(direction_vector)
-
         self.regulator.apply_regulator_to_direction_vector(direction_vector)
 
         thrust_vector = self._create_thrust_vector_from_direction_vector(
