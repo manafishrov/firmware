@@ -238,6 +238,7 @@ in
           if [ ! -f "$HOME/.firmware_setup" ]; then
             mkdir -p $HOME/firmware
             cp -r ${./.}/* $HOME/firmware/
+            chmod -R u+w $HOME/firmware
             touch "$HOME/.firmware_setup"
           fi
         '';

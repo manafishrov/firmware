@@ -136,7 +136,7 @@ class RovConfig(CamelCaseModel):
         """Validate and convert thruster allocation to numpy array."""
         return np.array(v, dtype=np.float32)
 
-    _config_path: ClassVar[Path] = Path(__file__).parents[2] / "config.json"
+    _config_path: ClassVar[Path] = Path(__file__).parents[1] / "config.json"
 
     @classmethod
     def load(cls) -> "RovConfig":
