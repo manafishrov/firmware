@@ -1,6 +1,7 @@
 """Regulator module for ROV control (TEST VERSION: self-contained new params/state)."""
 
-# This regulator uses the NED convention. Direction vector represents [surge, sway, heave, pitch, yaw, roll, action1, action2], where action1 and action2 are unused by this code.
+# This regulator uses the NED convention.
+# Direction vector represents [surge, sway, heave, pitch, yaw, roll, action1, action2], where action1 and action2 are unused by this code.
 
 from __future__ import annotations
 
@@ -46,7 +47,7 @@ from .websocket.queue import get_message_queue
 # =============================================================================
 
 # Depth hold behavior
-TEST_DEPTH_HOLD_SETPOINT_RATE_MPS: float = 0.3 # HOW QUICKLY DEPTH CHANGES WHEN DEPTH HOLD ENABLED
+TEST_DEPTH_HOLD_SETPOINT_RATE_MPS: float = 0.5 # HOW QUICKLY DEPTH CHANGES WHEN DEPTH HOLD ENABLED
 
 # Yaw PID gains (kept inside this file; independent from config)
 TEST_YAW_KP: float = 0.5
@@ -181,7 +182,7 @@ class Regulator:
         """Update desired attitude quaternion from direction vector."""
         if self.state.system_status.depth_hold:
             heave_change = float(direction_vector[2])
-            desired_depth = float(self.state.regulator.desired_depth) + heave_change * TEST_DEPTH_HOLD_SETPOINT_RATE_MPS * self.delta_t_update_ahrs
+            desired_depth = float(self.state.regulator.desired_depth) + heave_change * TEST_DEPTH_HOLD_SETPOINT_RATE_MPS * self.delta_t_run_regulator
             self.state.regulator.desired_depth = float(desired_depth)
 
         if self.state.system_status.pitch_stabilization: #CHANGE TO GENERAL STABILIZATION WHEN IMPLEMENTED IN APP
