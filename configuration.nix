@@ -180,7 +180,7 @@ in
     enable = true;
     settings = {
       streams.cam =
-        "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline -o -";
+        "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline --width 1440 --height 1080 --framerate 30 -o -";
       api = {
         listen = ":1984";
         origin = "*";
