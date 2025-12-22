@@ -195,10 +195,10 @@ class Regulator:
 
             # Pitch change
             desired_pitch_change = direction_vector[3] * self.delta_t_run_regulator * self.state.rov_config.regulator.turn_speed
-            pitch, yaw, roll = self.desired_attitude.as_euler("YZX", degrees=True)
+            yaw, pitch, roll = self.desired_attitude.as_euler("ZYX", degrees=True)
             pitch = pitch + float(desired_pitch_change)
             pitch = float(np.clip(pitch, -PITCH_MAX, PITCH_MAX)) # Clipping pitch to avoid gimbal lock
-            self.desired_attitude = R.from_euler("YZX", [pitch, yaw, roll], degrees=True)
+            self.desired_attitude = R.from_euler("ZYX", [yaw, pitch, roll], degrees=True)
 
             # Roll change
             desired_roll_change = direction_vector[5] * self.delta_t_run_regulator * self.state.rov_config.regulator.turn_speed
@@ -206,7 +206,7 @@ class Regulator:
             self.desired_attitude = self.desired_attitude * roll_rotation
 
             # Updating desired pitch, roll, yaw in state for app visualization
-            pitch, yaw, roll = self.desired_attitude.as_euler("YZX", degrees=True)
+            yaw, pitch, roll = self.desired_attitude.as_euler("ZYX", degrees=True)
             self.state.regulator.desired_pitch = pitch
             self.state.regulator.desired_roll = roll
             #self.state.regulator.desired_yaw = yaw TEMPORARY COMMENTED, IMPLEMENT LATER
@@ -239,7 +239,7 @@ class Regulator:
         self.ahrs.update(gyr, accel, self.delta_t_update_ahrs)
 
         # Getting euler angles from quaternion for visualization in app. 
-        roll, pitch, yaw = self.ahrs.current_attitude.as_euler("XYZ", degrees=True)
+        yaw, pitch, roll = self.ahrs.current_attitude.as_euler("ZYX", degrees=True)
 
         self.state.regulator.pitch = -pitch
         self.state.regulator.roll = roll
@@ -303,7 +303,7 @@ class Regulator:
     def _attitude_enable_edge(self) -> None:
         # Set desired attitude pitch and roll to 0 and yaw to current yaw 
         self.desired_attitude = R.identity()
-        current_yaw = self.ahrs.current_attitude.as_euler("YZX", degrees=False)[1]
+        current_yaw = self.ahrs.current_attitude.as_euler("ZYX", degrees=False)[0]
         yaw_rotation = R.from_rotvec([0.0, 0.0, current_yaw])
         self.desired_attitude = yaw_rotation * self.desired_attitude
 
@@ -366,8 +366,8 @@ class Regulator:
         current_attitude = self.ahrs.current_attitude
 
         # Remove yaw component from current attitude, because surge should always make ROV move forward relative to body, regardless of yaw
-        roll, pitch, yaw = current_attitude.as_euler("XYZ", degrees=False)
-        current_attitude = R.from_euler("XYZ", [roll, pitch, 0], degrees=False) 
+        yaw, pitch, roll = current_attitude.as_euler("ZYX", degrees=False)
+        current_attitude = R.from_euler("ZYX", [yaw, pitch, 0], degrees=False) 
 
         # Transforming movements from world to body frame
         surge_movement_body = current_attitude.inv().apply(surge_movement_world)
