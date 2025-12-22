@@ -26,6 +26,7 @@ from .constants import (
     DEPTH_INTEGRAL_WINDUP_CLIP,
     DT_MAX_SECONDS,
     DT_MIN_SECONDS,
+    INTEGRAL_RELAX_THRESHOLD,
     INTEGRAL_WINDUP_CLIP_DEGREES,
     PITCH_MAX,
 )
@@ -155,7 +156,7 @@ class Regulator:
         # Quaternion attitude estimator
         self.ahrs: _MahonyAhrs = _MahonyAhrs(kp=AHRS_MAHONY_KP, ki=AHRS_MAHONY_KI)
 
-        self.desired_attitude = R.identity()
+        self.desired_attitude: R = R.identity()
         self.integral_attitude_rad: NDArray[np.float32] = np.array([0.0, 0.0, 0.0], dtype=np.float32)
 
         # Edge detection for resetting when enabling regulators
@@ -178,13 +179,12 @@ class Regulator:
         self, direction_vector: NDArray[np.float32]
     ) -> None:
         """Update desired attitude quaternion from direction vector."""
-
         if self.state.system_status.depth_hold:
             heave_change = float(direction_vector[2])
             desired_depth = float(self.state.regulator.desired_depth) + heave_change * TEST_DEPTH_HOLD_SETPOINT_RATE_MPS * self.delta_t_update_ahrs
             self.state.regulator.desired_depth = float(desired_depth)
 
-        if self.state.system_status.stabilization:
+        if self.state.system_status.pitch_stabilization: #CHANGE TO GENERAL STABILIZATION WHEN IMPLEMENTED IN APP
             # Update the desired quaternion, use quaternion math, here would be the place to check if the FPV mode is enabled
 
             # Yaw change
@@ -333,9 +333,8 @@ class Regulator:
             err_rotvec = np.zeros(3, dtype=np.float32)
 
         # Update integral term
-        integral_scale = np.clip((1.0 - np.linalg.norm(direction_vector_attitude[0:3])), 0.0, 1.0) # Stick-based integral relaxation, higher input -> less integral accumulation
-
-        self.integral_attitude_rad += err_rotvec * dt * integral_scale
+        if np.linalg.norm(direction_vector_attitude[0:3]) < INTEGRAL_RELAX_THRESHOLD: # Setpoint-based / stick-based integral relax. Stop integrating if input over threshold
+            self.integral_attitude_rad += err_rotvec * dt
 
         clip_rad = float(np.deg2rad(INTEGRAL_WINDUP_CLIP_DEGREES))
         self.integral_attitude_rad = np.clip(self.integral_attitude_rad, -clip_rad, clip_rad) # Windup prevention
