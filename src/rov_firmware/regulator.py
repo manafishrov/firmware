@@ -93,10 +93,10 @@ class _MahonyAhrs:
             self._integrate_gyro_only(gyro_rad_s, dt)
             return
 
-        a = np.array([ax, ay, az], dtype=np.float64) / a_norm # - In front to follow NED convention
+        a = np.array([ax, ay, az], dtype=np.float64) 
 
         # Estimated "up" direction in body frame from current attitude (the reason we use up is that this is the expected accel from gravity).
-        g_body = self.current_attitude.inv().apply(np.array([0.0, 0.0, 1.0], dtype=np.float64))
+        g_body = self.current_attitude.inv().apply(np.array([0.0, 0.0, -1.0], dtype=np.float64))
 
         # Error drives estimated up toward measured accel direction.
         e = np.cross(a, g_body)
@@ -225,6 +225,12 @@ class Regulator:
         accel = cast(NDArray[np.float32], imu_data.acceleration)
         gyr = cast(NDArray[np.float32], imu_data.gyroscope)
 
+        # Converting IMU data to NED convention (can be moved to IMU class)
+        accel[1] = -accel[1]
+        gyr[1] = -gyr[1]
+        accel[2] = -accel[2]
+        gyr[2] = -gyr[2]
+
         self.gyro_rad_s = gyr
 
         # Compute delta_t
@@ -241,7 +247,7 @@ class Regulator:
         # Getting euler angles from quaternion for visualization in app. 
         yaw, pitch, roll = self.ahrs.current_attitude.as_euler("ZYX", degrees=True)
 
-        self.state.regulator.pitch = -pitch
+        self.state.regulator.pitch = pitch
         self.state.regulator.roll = roll
         #self.state.regulator.yaw = yaw TEMPOSRARY - implement later
 
@@ -329,7 +335,7 @@ class Regulator:
         R_err = current_attitude.inv() * desired_attitude
 
         # Convert to rotation vector, the rotation vector describes the error as rotations around the xyz axes in the body frame
-        err_rotvec = -R_err.as_rotvec()
+        err_rotvec = R_err.as_rotvec()
         if not np.all(np.isfinite(err_rotvec)):
             err_rotvec = np.zeros(3, dtype=np.float32)
 
@@ -344,9 +350,9 @@ class Regulator:
         omega = self.gyro_rad_s.astype(np.float32, copy=False)
 
         # PID per axis (roll=x, pitch=y, yaw=z)
-        u_roll  = config.roll.kp  * err_rotvec[0] + config.roll.ki  * self.integral_attitude_rad[0] - config.roll.kd  * (-omega[0])
-        u_pitch = config.pitch.kp * err_rotvec[1] + config.pitch.ki * self.integral_attitude_rad[1] - config.pitch.kd * (-omega[1])
-        u_yaw   = TEST_YAW_KP   * err_rotvec[2] + TEST_YAW_KI   * self.integral_attitude_rad[2] - TEST_YAW_KD   * (-omega[2])
+        u_roll  = config.roll.kp  * err_rotvec[0] + config.roll.ki  * self.integral_attitude_rad[0] + config.roll.kd  * (-omega[0])
+        u_pitch = config.pitch.kp * err_rotvec[1] + config.pitch.ki * self.integral_attitude_rad[1] + config.pitch.kd * (-omega[1])
+        u_yaw   = TEST_YAW_KP   * err_rotvec[2] + TEST_YAW_KI   * self.integral_attitude_rad[2] + TEST_YAW_KD   * (-omega[2])
 
         stabilization_actuation = np.array([u_pitch, u_yaw, u_roll], dtype=np.float32)/10.0  # Divided by 10 to avoid having annoyingly small PID constant values
 
