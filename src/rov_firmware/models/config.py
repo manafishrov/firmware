@@ -89,7 +89,7 @@ class RovConfig(CamelCaseModel):
         MicrocontrollerFirmwareVariant.DSHOT
     )
     fluid_type: FluidType = FluidType.SALTWATER
-    smoothing_factor: float = 0.4
+    smoothing_factor: float = 0.2
     thruster_pin_setup: ThrusterPinSetup = ThrusterPinSetup(
         identifiers=np.array([0, 1, 2, 3, 4, 5, 6, 7], dtype=np.int8),
         spin_directions=np.array([1, 1, 1, 1, 1, 1, 1, 1], dtype=np.int8),
