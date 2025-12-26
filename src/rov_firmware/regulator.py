@@ -280,7 +280,7 @@ class Regulator:
         desired_depth = self.state.regulator.desired_depth
 
         # Update error
-        error = current_depth - desired_depth  # positive => too deep => command up
+        error = desired_depth - current_depth  # positive => too deep => command up
 
         # Update integral term
         integral_scale = np.clip((1.0 - abs(heave_input)), 0.0, 1.0) # Stick-based integral relaxation, higher input -> less integral accumulation
@@ -373,7 +373,7 @@ class Regulator:
 
         # Remove yaw component from current attitude, because surge should always make ROV move forward relative to body, regardless of yaw
         yaw, pitch, roll = current_attitude.as_euler("ZYX", degrees=False)
-        current_attitude = R.from_euler("ZYX", [yaw, pitch, 0], degrees=False) 
+        current_attitude = R.from_euler("ZYX", [0, pitch, roll], degrees=False) 
 
         # Transforming movements from world to body frame
         surge_movement_body = current_attitude.inv().apply(surge_movement_world)
