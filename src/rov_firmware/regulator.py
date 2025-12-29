@@ -93,7 +93,7 @@ class _MahonyAhrs:
             self._integrate_gyro_only(gyro_rad_s, dt)
             return
 
-        a = np.array([ax, ay, az], dtype=np.float64) 
+        a = np.array([ax, ay, az], dtype=np.float64)/ a_norm  # Normalized accel measurement
 
         # Estimated "up" direction in body frame from current attitude (the reason we use up is that this is the expected accel from gravity).
         g_body = self.current_attitude.inv().apply(np.array([0.0, 0.0, -1.0], dtype=np.float64))
@@ -147,9 +147,9 @@ class Regulator:
         self.gyro_rad_s: NDArray[np.float32] = np.array([0.0, 0.0, 0.0], dtype=np.float32)  # rad/s
 
         self.last_update_ahrs_time: float = 0.0
-        self.delta_t_update_ahrs: float = 0.0167
+        self.delta_t_update_ahrs: float = 1/60.0
         self.last_run_regulator_time: float = 0.0
-        self.delta_t_run_regulator: float = 0.0167
+        self.delta_t_run_regulator: float = 1/60.0
 
         self.previous_depth: float = 0.0
         self.current_dt_depth: float = 0.0
@@ -222,14 +222,13 @@ class Regulator:
 
         # Retrieve IMU data
         imu_data = self.state.imu
-        accel = cast(NDArray[np.float32], imu_data.acceleration)
-        gyr = cast(NDArray[np.float32], imu_data.gyroscope)
 
-        # Converting IMU data to NED convention (can be moved to IMU class)
-        accel[1] = -accel[1]
-        gyr[1] = -gyr[1]
-        accel[2] = -accel[2]
-        gyr[2] = -gyr[2]
+        accel = np.array(cast(np.ndarray, imu_data.acceleration), dtype=np.float32, copy=True)
+        gyr   = np.array(cast(np.ndarray, imu_data.gyroscope),     dtype=np.float32, copy=True)
+
+        # Flipping y and z axes to convert from IMU convention to NED
+        accel *= np.array([1.0, -1.0, -1.0], dtype=np.float32)
+        gyr   *= np.array([1.0, -1.0, -1.0], dtype=np.float32)
 
         self.gyro_rad_s = gyr
 
