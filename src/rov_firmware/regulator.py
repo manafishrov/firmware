@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import time
+from tkinter import E
 from typing import cast
 
 import numpy as np
@@ -27,8 +28,10 @@ from .constants import (
     DEPTH_INTEGRAL_WINDUP_CLIP,
     DT_MAX_SECONDS,
     DT_MIN_SECONDS,
+    EXPECTED_FREQUENCY_HZ,
     INTEGRAL_RELAX_THRESHOLD,
     INTEGRAL_WINDUP_CLIP_DEGREES,
+    MAX_GYRO_DEG_PER_SEC,
     PITCH_MAX,
 )
 from .log import log_error, log_info
@@ -57,7 +60,7 @@ TEST_YAW_KD: float = 0
 
 def _clamp_dt(dt: float) -> float: # For extra redundancy
     if not np.isfinite(dt):
-        return 0.0167
+        return 1/EXPECTED_FREQUENCY_HZ
     return float(np.clip(dt, DT_MIN_SECONDS, DT_MAX_SECONDS))
 
 
@@ -86,6 +89,11 @@ class _MahonyAhrs:
     ) -> None:
         """Update attitude reading with gyro (rad/s) and accel (m/s²) readings."""
         dt = _clamp_dt(dt)
+
+        # Discard gyro reading if unreasonable big
+        if np.any(np.abs(gyro_rad_s) > np.deg2rad(MAX_GYRO_DEG_PER_SEC)):
+            log_error("AHRS: Discarding unreasonable gyro reading")
+            gyro_rad_s[:] = 0.0
 
         ax, ay, az = float(accel[0]), float(accel[1]), float(accel[2])
         a_norm = float(np.sqrt(ax * ax + ay * ay + az * az))
@@ -147,9 +155,9 @@ class Regulator:
         self.gyro_rad_s: NDArray[np.float32] = np.array([0.0, 0.0, 0.0], dtype=np.float32)  # rad/s
 
         self.last_update_ahrs_time: float = 0.0
-        self.delta_t_update_ahrs: float = 1/60.0
+        self.delta_t_update_ahrs: float = 1/EXPECTED_FREQUENCY_HZ
         self.last_run_regulator_time: float = 0.0
-        self.delta_t_run_regulator: float = 1/60.0
+        self.delta_t_run_regulator: float = 1/EXPECTED_FREQUENCY_HZ
 
         self.previous_depth: float = 0.0
         self.current_dt_depth: float = 0.0
@@ -237,7 +245,7 @@ class Regulator:
         if self.last_update_ahrs_time > 0.0:
             self.delta_t_update_ahrs = _clamp_dt(now - self.last_update_ahrs_time)
         else:
-            self.delta_t_update_ahrs = 0.0167
+            self.delta_t_update_ahrs = 1/EXPECTED_FREQUENCY_HZ
         self.last_update_ahrs_time = now
 
         # Update AHRS attitude quaternion
@@ -419,7 +427,7 @@ class Regulator:
         if self.last_run_regulator_time> 0.0:
             self.delta_t_run_regulator = _clamp_dt(now - self.last_run_regulator_time)
         else:
-            self.delta_t_run_regulator = 0.0167
+            self.delta_t_run_regulator = 1/EXPECTED_FREQUENCY_HZ
         self.last_run_regulator_time = now
 
         self._update_desired_from_direction_vector(direction_vector)
