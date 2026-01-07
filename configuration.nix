@@ -172,6 +172,12 @@ in
           value = 1000000;
         };
       };
+      options = {
+        gpu_mem = {
+          enable = true;
+          value = 256;
+        };
+      };
     };
   };
 
@@ -180,7 +186,7 @@ in
     enable = true;
     settings = {
       streams.cam =
-        "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline --width 1440 --height 1080 --framerate 30 -o -";
+        "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline --width 1440 --height 1080 --framerate 30 --codec h264 -o -";
       api = {
         listen = ":1984";
         origin = "*";
@@ -194,6 +200,8 @@ in
   # System packages
   environment = {
     systemPackages = with pkgs; [
+      btop
+      sysstat
       rpi.libcamera
       rpi.rpicam-apps
       i2c-tools
