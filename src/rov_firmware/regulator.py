@@ -6,7 +6,6 @@
 from __future__ import annotations
 
 import time
-from tkinter import E
 from typing import cast
 
 import numpy as np
