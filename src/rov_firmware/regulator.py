@@ -25,13 +25,11 @@ from .constants import (
     AUTO_TUNING_ZERO_THRESHOLD_DEPTH_METERS,
     DEPTH_DERIVATIVE_EMA_TAU,
     DEPTH_INTEGRAL_WINDUP_CLIP,
-    DT_MAX_SECONDS,
-    DT_MIN_SECONDS,
-    EXPECTED_FREQUENCY_HZ,
     INTEGRAL_RELAX_THRESHOLD,
     INTEGRAL_WINDUP_CLIP_DEGREES,
     MAX_GYRO_DEG_PER_SEC,
     PITCH_MAX,
+    THRUSTER_SEND_FREQUENCY,
 )
 from .log import log_error, log_info
 from .models.config import (
@@ -59,8 +57,8 @@ TEST_YAW_KD: float = 0
 
 def _clamp_dt(dt: float) -> float: # For extra redundancy
     if not np.isfinite(dt):
-        return 1/EXPECTED_FREQUENCY_HZ
-    return float(np.clip(dt, DT_MIN_SECONDS, DT_MAX_SECONDS))
+        return 1/THRUSTER_SEND_FREQUENCY
+    return float(np.clip(dt, (1/THRUSTER_SEND_FREQUENCY)*0.5, (1/THRUSTER_SEND_FREQUENCY)*10))
 
 
 class _MahonyAhrs:
@@ -154,9 +152,9 @@ class Regulator:
         self.gyro_rad_s: NDArray[np.float32] = np.array([0.0, 0.0, 0.0], dtype=np.float32)  # rad/s
 
         self.last_update_ahrs_time: float = 0.0
-        self.delta_t_update_ahrs: float = 1/EXPECTED_FREQUENCY_HZ
+        self.delta_t_update_ahrs: float = 1/THRUSTER_SEND_FREQUENCY
         self.last_run_regulator_time: float = 0.0
-        self.delta_t_run_regulator: float = 1/EXPECTED_FREQUENCY_HZ
+        self.delta_t_run_regulator: float = 1/THRUSTER_SEND_FREQUENCY
 
         self.previous_depth: float = 0.0
         self.current_dt_depth: float = 0.0
@@ -244,7 +242,7 @@ class Regulator:
         if self.last_update_ahrs_time > 0.0:
             self.delta_t_update_ahrs = _clamp_dt(now - self.last_update_ahrs_time)
         else:
-            self.delta_t_update_ahrs = 1/EXPECTED_FREQUENCY_HZ
+            self.delta_t_update_ahrs = 1/THRUSTER_SEND_FREQUENCY
         self.last_update_ahrs_time = now
 
         # Update AHRS attitude quaternion
@@ -426,7 +424,7 @@ class Regulator:
         if self.last_run_regulator_time> 0.0:
             self.delta_t_run_regulator = _clamp_dt(now - self.last_run_regulator_time)
         else:
-            self.delta_t_run_regulator = 1/EXPECTED_FREQUENCY_HZ
+            self.delta_t_run_regulator = 1/THRUSTER_SEND_FREQUENCY
         self.last_run_regulator_time = now
 
         self._update_desired_from_direction_vector(direction_vector)
