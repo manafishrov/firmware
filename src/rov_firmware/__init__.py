@@ -20,6 +20,3 @@ def start() -> None:
     finally:
         log_info("Shutting down.")
 
-if __name__ == "__main__":
-    start()
-    
