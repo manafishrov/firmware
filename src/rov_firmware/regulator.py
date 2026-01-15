@@ -228,13 +228,11 @@ class Regulator:
         # Retrieve IMU data
         imu_data = self.state.imu
 
+        # Getting acceleration and gyroscope data from the IMU, already converted to the NED convention in imu.py
         accel = np.array(cast(np.ndarray, imu_data.acceleration), dtype=np.float32, copy=True)
         gyr   = np.array(cast(np.ndarray, imu_data.gyroscope),     dtype=np.float32, copy=True)
 
-        # Flipping y and z axes to convert from IMU convention to NED
-        accel *= np.array([1.0, -1.0, -1.0], dtype=np.float32)
-        gyr   *= np.array([1.0, -1.0, -1.0], dtype=np.float32)
-
+        # Storing gyro data as this is used directly in the D-term
         self.gyro_rad_s = gyr
 
         # Compute delta_t

@@ -75,9 +75,16 @@ class Imu:
         if self.imu is None:
             return None
         try:
+            accel = self.imu.get_acc_data().astype(np.float32)
+            gyr = self.imu.get_gyr_data().astype(np.float32)
+
+            # Change convention from ENU to NED
+            accel *= np.array([1.0, -1.0, -1.0], dtype=np.float32)
+            gyr   *= np.array([1.0, -1.0, -1.0], dtype=np.float32)
+
             return ImuData(
-                acceleration=self.imu.get_acc_data().astype(np.float32),
-                gyroscope=self.imu.get_gyr_data().astype(np.float32),
+                acceleration=accel,
+                gyroscope=gyr,
                 temperature=self.imu.get_temp_data(),
             )
         except Exception as e:
