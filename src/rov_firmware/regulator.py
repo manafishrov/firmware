@@ -421,7 +421,7 @@ class Regulator:
 
         # Compute delta_t
         now = time.time()
-        if self.last_run_regulator_time> 0.0:
+        if self.last_run_regulator_time > 0.0:
             self.delta_t_run_regulator = _clamp_dt(now - self.last_run_regulator_time)
         else:
             self.delta_t_run_regulator = 1/THRUSTER_SEND_FREQUENCY
