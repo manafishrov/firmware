@@ -46,10 +46,10 @@ from .websocket.queue import get_message_queue
 # PARAMETERS TO BE ADDED TO CONFIG AND SETTINGS, REMOVE WHEN APPLICATION UPDATED
 # =============================================================================
 
-# Depth hold behavior
+# TODO: Add this to config/settings UI and remove from here
 TEST_DEPTH_HOLD_SETPOINT_RATE_MPS: float = 0.5 # HOW QUICKLY DEPTH CHANGES WHEN DEPTH HOLD ENABLED
 
-# Yaw PID gains (kept inside this file; independent from config)
+# TODO: Add this to config/settings UI and remove from here
 TEST_YAW_KP: float = 3
 TEST_YAW_KI: float = 0.0
 TEST_YAW_KD: float = 0
@@ -190,7 +190,7 @@ class Regulator:
             desired_depth = float(self.state.regulator.desired_depth) + heave_change * TEST_DEPTH_HOLD_SETPOINT_RATE_MPS * self.delta_t_run_regulator
             self.state.regulator.desired_depth = float(desired_depth)
 
-        if self.state.system_status.pitch_stabilization: #CHANGE TO GENERAL STABILIZATION WHEN IMPLEMENTED IN APP
+        if self.state.system_status.pitch_stabilization: # TODO: Change to general stabilization when implemented, "pitch_stabilization" will no longer be a thing
             # Update the desired quaternion, use quaternion math, here would be the place to check if the FPV mode is enabled
 
             # Yaw change
@@ -215,6 +215,7 @@ class Regulator:
             self.state.regulator.desired_pitch = pitch
             self.state.regulator.desired_roll = roll
             #self.state.regulator.desired_yaw = yaw TEMPORARY COMMENTED, IMPLEMENT LATER
+            # TODO: Implement desired yaw in state and in attitude display in app, and uncomment above line
 
 
     # -------------------------------------------------------------------------
@@ -252,11 +253,12 @@ class Regulator:
         self.state.regulator.pitch = pitch
         self.state.regulator.roll = roll
         #self.state.regulator.yaw = yaw TEMPOSRARY - implement later
+        # TODO: This also needs to be implemented in state and app for yaw visualization on the attitude indicator
 
 
     def _handle_edges(self) -> None:
         depth_hold_enabled = self.state.system_status.depth_hold
-        stabilization_enabled = self.state.system_status.pitch_stabilization # TEMPORARY - change to general stabilization instead of pitch only
+        stabilization_enabled = self.state.system_status.pitch_stabilization # TODO: Change to general stabilization when implemented, "pitch_stabilization" will no longer be a thing
 
         if depth_hold_enabled and not self._prev_depth_hold_enabled:
             self._depth_hold_enable_edge()
@@ -322,7 +324,6 @@ class Regulator:
 
 
     def _handle_stabilization(self, direction_vector_attitude: NDArray[np.float32]) -> NDArray[np.float32]:
-        # Here will be the quaternion-based PID stabilization for pitch, roll, yaw
         """Quaternion-based PID attitude stabilization.
 
         Returns actuation vector in order: [pitch, yaw, roll].
@@ -365,7 +366,7 @@ class Regulator:
     # Frame transforms using quaternion attitude and direction coefficients
     # -------------------------------------------------------------------------
 
-    def _transform_movement_vector_world_to_body(self, direction_vector_movement: NDArray[np.float32]) -> NDArray[np.float32]: # Must be completely rewritten
+    def _transform_movement_vector_world_to_body(self, direction_vector_movement: NDArray[np.float32]) -> NDArray[np.float32]:
         """Transform movement vector from world frame to body frame, applying direction coefficients."""
         surge_movement_world = np.array([direction_vector_movement[0], 0, 0])
         sway_movement_world = np.array([0, direction_vector_movement[1], 0])
@@ -436,7 +437,7 @@ class Regulator:
             direction_vector[2] = 0.0
             direction_vector[0:3] = self._transform_movement_vector_world_to_body(direction_vector[0:3].copy())
 
-        if self.state.system_status.pitch_stabilization:
+        if self.state.system_status.pitch_stabilization: # TODO: Replace with general stabilization bool
             regulator_direction_vector[3:6] = self._handle_stabilization(direction_vector[3:6].copy())
             direction_vector[3:6] = 0.0
 
