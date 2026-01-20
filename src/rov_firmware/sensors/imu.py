@@ -71,13 +71,12 @@ class Imu:
             )
 
     def read_data(self) -> ImuData | None:
-        """
-        Read the current IMU sample and return sensor measurements in NED coordinates.
-        
+        """Read the current IMU sample and return sensor measurements in NED coordinates.
+
         Reads accelerometer, gyroscope, and temperature from the BMI270, converts accelerometer
         and gyroscope data from ENU to NED axis convention, and packages them into an ImuData.
         Returns None if the IMU is not initialized or a read error occurs.
-        
+
         Returns:
             ImuData | None: An ImuData instance containing `acceleration`, `gyroscope`, and
             `temperature` on success; `None` if the device is uninitialized or a read fails.
@@ -90,7 +89,7 @@ class Imu:
 
             # Change convention from ENU to NED
             accel *= np.array([1.0, -1.0, -1.0], dtype=np.float32)
-            gyr   *= np.array([1.0, -1.0, -1.0], dtype=np.float32)
+            gyr *= np.array([1.0, -1.0, -1.0], dtype=np.float32)
 
             return ImuData(
                 acceleration=accel,

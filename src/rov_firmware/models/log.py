@@ -1,11 +1,11 @@
 """Log data models for the ROV firmware."""
 
-from enum import Enum
+from enum import StrEnum
 
 from .base import CamelCaseModel
 
 
-class LogLevel(str, Enum):
+class LogLevel(StrEnum):
     """Enum for log levels."""
 
     INFO = "info"
@@ -13,7 +13,7 @@ class LogLevel(str, Enum):
     ERROR = "error"
 
 
-class LogOrigin(str, Enum):
+class LogOrigin(StrEnum):
     """Enum for log origins."""
 
     FIRMWARE = "firmware"

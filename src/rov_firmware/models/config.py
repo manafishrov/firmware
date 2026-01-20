@@ -1,6 +1,6 @@
 """Configuration models for the ROV firmware."""
 
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import ClassVar
 
@@ -12,14 +12,14 @@ from pydantic import field_validator
 from .base import CamelCaseModel
 
 
-class MicrocontrollerFirmwareVariant(str, Enum):
+class MicrocontrollerFirmwareVariant(StrEnum):
     """Enum for microcontroller firmware variants."""
 
     PWM = "pwm"
     DSHOT = "dshot"
 
 
-class FluidType(str, Enum):
+class FluidType(StrEnum):
     """Enum for fluid types."""
 
     FRESHWATER = "freshwater"

@@ -1,9 +1,9 @@
 """WebSocket message types for the ROV firmware."""
 
-from enum import Enum
+from enum import StrEnum
 
 
-class MessageType(str, Enum):
+class MessageType(StrEnum):
     """Enum for WebSocket message types."""
 
     DIRECTION_VECTOR = "directionVector"
