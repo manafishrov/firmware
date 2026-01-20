@@ -1,7 +1,4 @@
-"""Regulator module for ROV control (TEST VERSION: self-contained new params/state)."""
-
-# This regulator uses the NED convention.
-# Direction vector represents [surge, sway, heave, pitch, yaw, roll, action1, action2], where action1 and action2 are unused by this code.
+"""Regulator module for ROV control (NED convention)."""
 
 from __future__ import annotations
 
@@ -91,7 +88,7 @@ class _MahonyAhrs:
         """
         self.kp: float = float(kp)
         self.ki: float = float(ki)
-        self._integral: NDArray[np.float64] = np.zeros(3, dtype=np.float64)
+        self._integral: NDArray[np.float32] = np.zeros(3, dtype=np.float32)
         self.current_attitude: Rotation = Rotation.identity()
 
     def reset(self) -> None:
@@ -128,19 +125,19 @@ class _MahonyAhrs:
             log_error("AHRS: Discarding unreasonable gyro reading")
             gyro_rad_s[:] = 0.0
 
-        ax, ay, az = float(accel[0]), float(accel[1]), float(accel[2])
-        a_norm = float(np.sqrt(ax * ax + ay * ay + az * az))
+        ax, ay, az = accel[0], accel[1], accel[2]
+        a_norm = np.sqrt(ax * ax + ay * ay + az * az)
         if not np.isfinite(a_norm) or a_norm < AHRS_ACCEL_MIN_NORM:
             self._integrate_gyro_only(gyro_rad_s, dt)
             return
 
         a = (
-            np.array([ax, ay, az], dtype=np.float64) / a_norm
+            np.array([ax, ay, az], dtype=np.float32) / a_norm
         )  # Normalized accel measurement
 
         # Estimated "up" direction in body frame from current attitude (the reason we use up is that this is the expected accel from gravity).
         g_body = self.current_attitude.inv().apply(
-            np.array([0.0, 0.0, -1.0], dtype=np.float64)
+            np.array([0.0, 0.0, -1.0], dtype=np.float32)
         )
 
         # Error drives estimated up toward measured accel direction.
@@ -151,11 +148,11 @@ class _MahonyAhrs:
 
         omega = np.array(
             [
-                float(gyro_rad_s[0]) + self.kp * e[0] + self._integral[0],
-                float(gyro_rad_s[1]) + self.kp * e[1] + self._integral[1],
-                float(gyro_rad_s[2]) + self.kp * e[2] + self._integral[2],
+                gyro_rad_s[0] + self.kp * e[0] + self._integral[0],
+                gyro_rad_s[1] + self.kp * e[1] + self._integral[1],
+                gyro_rad_s[2] + self.kp * e[2] + self._integral[2],
             ],
-            dtype=np.float64,
+            dtype=np.float32,
         )
 
         self._integrate_omega(omega, dt)
@@ -168,23 +165,23 @@ class _MahonyAhrs:
             dt (float): Time step in seconds over which to integrate.
         """
         omega = np.array(
-            [float(gyro_rad_s[0]), float(gyro_rad_s[1]), float(gyro_rad_s[2])],
-            dtype=np.float64,
+            [gyro_rad_s[0], gyro_rad_s[1], gyro_rad_s[2]],
+            dtype=np.float32,
         )
         self._integrate_omega(omega, dt)
 
-    def _integrate_omega(self, omega_rad_s: NDArray[np.float64], dt: float) -> None:
+    def _integrate_omega(self, omega_rad_s: NDArray[np.float32], dt: float) -> None:
         """Integrates an angular velocity vector over a time step and updates the current attitude quaternion.
 
         Parameters:
-            omega_rad_s (NDArray[np.float64]): Angular velocity vector in radians per second (rotation vector in body frame).
+            omega_rad_s (NDArray[np.float32]): Angular velocity vector in radians per second (rotation vector in body frame).
             dt (float): Time step in seconds.
 
         Details:
             - Applies the rotation represented by omega_rad_s * dt to self.current_attitude.
             - Normalizes the resulting quaternion to unit length and stores it back to self.current_attitude.
         """
-        dtheta = omega_rad_s * float(dt)
+        dtheta = omega_rad_s * dt
         dr = Rotation.from_rotvec(dtheta)
         self.current_attitude = self.current_attitude * dr  # body-to-world update
 
@@ -255,14 +252,14 @@ class Regulator:
 
         """
         if self.state.system_status.depth_hold:
-            heave_change = float(direction_vector[2])
+            heave_change = direction_vector[2]
             desired_depth = (
-                float(self.state.regulator.desired_depth)
+                self.state.regulator.desired_depth
                 + heave_change
                 * TEST_DEPTH_HOLD_SETPOINT_RATE_MPS
                 * self.delta_t_run_regulator
             )
-            self.state.regulator.desired_depth = float(desired_depth)
+            self.state.regulator.desired_depth = desired_depth
 
         if self.state.system_status.pitch_stabilization:  # TODO: Change to general stabilization when implemented, "pitch_stabilization" will no longer be a thing
             desired_yaw_change = (
@@ -405,7 +402,7 @@ class Regulator:
             + float(config.depth.kd) * float(self.current_dt_depth)
         )
 
-        return float(depth_regulator_actuation)
+        return depth_regulator_actuation
 
     def _attitude_enable_edge(self) -> None:
         """Set the target attitude to level (zero pitch and roll) while preserving the current yaw, and reset the attitude integral term.
@@ -438,7 +435,7 @@ class Regulator:
 
         r_err = current_attitude.inv() * desired_attitude
 
-        err_rotvec = r_err.as_rotvec()
+        err_rotvec = r_err.as_rotvec().astype(np.float32)
         if not np.all(np.isfinite(err_rotvec)):
             err_rotvec = np.zeros(3, dtype=np.float32)
 
@@ -588,9 +585,7 @@ class Regulator:
             )
             regulator_direction_vector[0:3] = (
                 self._transform_movement_vector_world_to_body(
-                    np.array(
-                        [0.0, 0.0, float(depth_regulator_actuation)], dtype=np.float32
-                    )
+                    np.array([0.0, 0.0, depth_regulator_actuation], dtype=np.float32)
                 )
             )
             direction_vector[2] = 0.0
