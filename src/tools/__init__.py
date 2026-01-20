@@ -24,6 +24,7 @@ def cli() -> None:
     _ = sys.stdout.write("3. Test Thrusters\n")
     _ = sys.stdout.write("4. Check Required Packages\n")
     _ = sys.stdout.write("5. Run Mock Websocket Server\n")
+    _ = sys.stdout.write("6. Run Mock Websocket Server Locally\n")
     _ = sys.stdout.write("q. Quit\n")
 
     choice = input("\nSelect a tool > ").strip().lower()
@@ -42,6 +43,13 @@ def cli() -> None:
             test_packages_available.main()
         elif choice == "5":
             asyncio.run(mock_websocket_server.main())
+        elif choice == "6":
+            original_argv = sys.argv[:]
+            sys.argv = ["mock_websocket_server.py", "--local"]
+            try:
+                asyncio.run(mock_websocket_server.main())
+            finally:
+                sys.argv = original_argv
         else:
             _ = sys.stdout.write(f"Invalid selection: {choice}")
             sys.exit(1)

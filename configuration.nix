@@ -3,6 +3,74 @@ let
   pico-sdk-with-submodules = pkgs.pico-sdk.override {
     withSubmodules = true;
   };
+
+  # Custom python environment with all dependencies included
+  python-env = pkgs.python312.withPackages (pypkgs: with pypkgs; [
+    pip
+    numpy
+    websockets
+    pydantic
+    smbus2
+    scipy
+    pyserial-asyncio
+  ] ++ [
+    (pkgs.python312Packages.buildPythonPackage rec {
+      pname = "numpydantic";
+      version = "1.7.0";
+      format = "pyproject";
+      src = pkgs.fetchPypi {
+        inherit pname version;
+        hash = "sha256-JoKFvuAm2d/fI+/u4T9gw7ddR94v/fLli08MF6aCTjs=";
+      };
+      nativeBuildInputs = with pkgs.python312Packages; [ pdm-backend ];
+      propagatedBuildInputs = with pkgs.python312Packages; [ pydantic numpy ];
+      doCheck = false;
+    })
+    (pkgs.python312Packages.buildPythonPackage {
+      pname = "bmi270";
+      version = "0.4.3";
+      format = "other";
+      src = pkgs.fetchFromGitHub {
+        owner = "CoRoLab-Berlin";
+        repo = "bmi270_python";
+        rev = "8309e687d6b346455833c5d0c2734eeb56e98789";
+        hash = "sha256-IxkMWWcrsglFV5HGDMK0GBx5o0svNfRXqhW8/ZWpsUk=";
+      };
+      buildPhase = ":";
+      installPhase = ''
+        runHook preInstall
+        install -d $out/${pkgs.python312.sitePackages}
+        cp -r src/bmi270 $out/${pkgs.python312.sitePackages}/
+        runHook postInstall
+      '';
+      doCheck = false;
+    })
+    (pkgs.python312Packages.buildPythonPackage {
+      pname = "ms5837";
+      version = "0.1.0";
+      src = pkgs.fetchFromGitHub {
+        owner = "bluerobotics";
+        repo = "ms5837-python";
+        rev = "02996d71d2f08339b3d317b3f4da0a83781c706e";
+        hash = "sha256-LBwM9sTvr7IaBcY8PcsPZcAbNRWBa4hj7tUC4oOr4eM=";
+      };
+      doCheck = false;
+    })
+  ]);
+
+  # Wrapper script to start the firmware
+  startScript = pkgs.writeShellScriptBin "start" ''
+    cd $HOME/firmware
+    export PYTHONPATH=src
+    exec ${python-env}/bin/python3 -c "from rov_firmware import start; start()"
+  '';
+
+  # Wrapper script to run the tools CLI
+  toolsScript = pkgs.writeShellScriptBin "tools" ''
+    cd $HOME/firmware
+    export PYTHONPATH=src
+    exec ${python-env}/bin/python3 -c "from tools import cli; cli()"
+  '';
 in
 {
   # Nix state version
@@ -104,6 +172,12 @@ in
           value = 1000000;
         };
       };
+      options = {
+        gpu_mem = {
+          enable = true;
+          value = 256;
+        };
+      };
     };
   };
 
@@ -112,7 +186,7 @@ in
     enable = true;
     settings = {
       streams.cam =
-        "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline -o -";
+        "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline --width 1440 --height 1080 --framerate 30 --codec h264 -o -";
       api = {
         listen = ":1984";
         origin = "*";
@@ -126,6 +200,8 @@ in
   # System packages
   environment = {
     systemPackages = with pkgs; [
+      btop
+      sysstat
       rpi.libcamera
       rpi.rpicam-apps
       i2c-tools
@@ -134,10 +210,13 @@ in
       gcc-arm-embedded
       clang
       clang-tools
+      uv
       picotool
       pico-sdk-with-submodules
-      uv
-     ];
+      python-env
+      startScript
+      toolsScript
+    ];
     sessionVariables = {
       PICO_SDK_PATH = "${pico-sdk-with-submodules}/lib/pico-sdk";
     };
@@ -167,8 +246,7 @@ in
           if [ ! -f "$HOME/.firmware_setup" ]; then
             mkdir -p $HOME/firmware
             cp -r ${./.}/* $HOME/firmware/
-            cd $HOME/firmware
-            uv sync
+            chmod -R u+w $HOME/firmware
             touch "$HOME/.firmware_setup"
           fi
         '';
@@ -186,7 +264,7 @@ in
         Type = "simple";
         User = "pi";
         WorkingDirectory = "/home/pi/firmware";
-        ExecStart = "${pkgs.uv}/bin/uv run start";
+        ExecStart = "${startScript}/bin/start";
         Restart = "always";
         RestartSec = "5";
       };

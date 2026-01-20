@@ -12,3 +12,7 @@ dist
 
 # config
 config.json
+
+# nix
+keys
+nixos.qcow2
