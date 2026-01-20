@@ -62,8 +62,13 @@ class PressureSensor:
     def read_data(self) -> PressureData | None:
         """Read pressure data from the sensor.
 
+        Reads pressure, temperature, and depth from the MS5837 sensor. Units are pressure
+        in mbar, temperature in °C, and depth in meters (calculated using configured fluid
+        density).
+
         Returns:
-            PressureData if successful, None otherwise.
+            PressureData if successful (containing pressure in mbar, temperature in °C,
+            depth in m), None otherwise.
         """
         if self.sensor is None:
             return None

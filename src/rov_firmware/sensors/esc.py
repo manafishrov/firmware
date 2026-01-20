@@ -75,17 +75,23 @@ class EscSensor:
         return calculated_checksum == packet[7]
 
     def _update_telemetry(self, packet: bytearray) -> None:
+        """Update ESC telemetry data from a validated packet.
+
+        Parses the packet and updates the corresponding motor's telemetry in state.
+        Assumed units (BLHeli standard): erpm in ERPM, voltage in 0.01V, current in 0.01A,
+        temperature in °C, stress in raw units (possibly % or internal metric).
+        """
         global_id = packet[1]
         packet_type = packet[2]
         value = cast(int, struct.unpack("<i", packet[3:7])[0])
         if 0 <= global_id < NUM_MOTORS:
             if packet_type == ESC_PACKET_TYPE_ERPM:
-                self.state.esc.erpm[global_id] = value
+                self.state.esc.erpm[global_id] = value  # ERPM
             elif packet_type == ESC_PACKET_TYPE_VOLTAGE:
-                self.state.esc.voltage[global_id] = value
+                self.state.esc.voltage[global_id] = value  # 1V
             elif packet_type == ESC_PACKET_TYPE_TEMPERATURE:
-                self.state.esc.temperature[global_id] = value
+                self.state.esc.temperature[global_id] = value  # °C
             elif packet_type == ESC_PACKET_TYPE_CURRENT:
-                self.state.esc.current[global_id] = value
+                self.state.esc.current[global_id] = value  # 1A
             elif packet_type == ESC_PACKET_TYPE_STRESS:
-                self.state.esc.stress[global_id] = value
+                self.state.esc.stress[global_id] = value  # raw units
