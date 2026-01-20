@@ -24,7 +24,7 @@ async def handle_direction_vector(
         state: The ROV state.
         payload: The direction vector.
     """
-    state.thrusters.direction_vector = payload.root  # pyright: ignore[reportUnknownMemberType]
+    state.thrusters.direction_vector = payload.root
     state.thrusters.last_direction_time = time.time()
 
 
