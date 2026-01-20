@@ -55,12 +55,15 @@
         (pkgs.python313Packages.buildPythonPackage {
           pname = "ms5837";
           version = "0.1.0";
+          format = "pyproject";
           src = pkgs.fetchFromGitHub {
             owner = "bluerobotics";
             repo = "ms5837-python";
             rev = "02996d71d2f08339b3d317b3f4da0a83781c706e";
             hash = "sha256-LBwM9sTvr7IaBcY8PcsPZcAbNRWBa4hj7tUC4oOr4eM=";
           };
+          nativeBuildInputs = with pkgs.python313Packages; [ setuptools wheel ];
+          propagatedBuildInputs = with pkgs.python313Packages; [ smbus2 ];
           doCheck = false;
         })
       ]);
