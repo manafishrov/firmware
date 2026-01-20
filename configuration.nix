@@ -209,7 +209,6 @@ in {
     systemPackages = with pkgs; [
       btop
       sysstat
-      rpi.libcamera
       rpi.rpicam-apps
       i2c-tools
       cmake
