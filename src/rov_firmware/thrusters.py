@@ -101,11 +101,10 @@ class Thrusters:
         thrust_vector[:] = np.clip(thrust_vector, -1.0, 1.0)
 
     def _create_thrust_vector(self) -> NDArray[np.float32]:
-        """
-        Create the final thrust vector for the microcontroller from the current thruster direction vector.
-        
+        """Create the final thrust vector for the microcontroller from the current thruster direction vector.
+
         The returned vector is produced by smoothing the stored direction vector, applying the regulator to adjust control signals, converting the direction vector into motor thrusts, then reordering, applying per-motor spin-direction multipliers, and clipping each component to the allowed range.
-        
+
         Returns:
             thrust_vector (ndarray[float32]): 1D array of motor thrust values in the range [-1.0, 1.0], ordered for hardware output and sized to the configured number of motors.
         """
