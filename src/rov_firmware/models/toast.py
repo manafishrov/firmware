@@ -1,12 +1,12 @@
 """Toast data models for the ROV firmware."""
 
-from enum import Enum
+from enum import StrEnum
 
 from ..websocket.cancel_messages import CancelRegulatorAutoTuning, CancelThrusterTest
 from .base import CamelCaseModel
 
 
-class ToastType(str, Enum):
+class ToastType(StrEnum):
     """Enum for toast types."""
 
     SUCCESS = "success"

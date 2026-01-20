@@ -54,16 +54,21 @@ class PressureSensor:
         if self.sensor is None:
             return
         if self.state.rov_config.fluid_type == FluidType.SALTWATER:
-            self.sensor.setFluidDensity(DENSITY_SALTWATER)  # pyright: ignore[reportUnknownMemberType]
+            self.sensor.setFluidDensity(DENSITY_SALTWATER)
         else:
-            self.sensor.setFluidDensity(DENSITY_FRESHWATER)  # pyright: ignore[reportUnknownMemberType]
+            self.sensor.setFluidDensity(DENSITY_FRESHWATER)
         self.current_fluid_type = self.state.rov_config.fluid_type
 
     def read_data(self) -> PressureData | None:
         """Read pressure data from the sensor.
 
+        Reads pressure, temperature, and depth from the MS5837 sensor. Units are pressure
+        in mbar, temperature in °C, and depth in meters (calculated using configured fluid
+        density).
+
         Returns:
-            PressureData if successful, None otherwise.
+            PressureData if successful (containing pressure in mbar, temperature in °C,
+            depth in m), None otherwise.
         """
         if self.sensor is None:
             return None

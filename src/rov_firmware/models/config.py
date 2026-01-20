@@ -1,6 +1,6 @@
 """Configuration models for the ROV firmware."""
 
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import ClassVar
 
@@ -12,14 +12,14 @@ from pydantic import field_validator
 from .base import CamelCaseModel
 
 
-class MicrocontrollerFirmwareVariant(str, Enum):
+class MicrocontrollerFirmwareVariant(StrEnum):
     """Enum for microcontroller firmware variants."""
 
     PWM = "pwm"
     DSHOT = "dshot"
 
 
-class FluidType(str, Enum):
+class FluidType(StrEnum):
     """Enum for fluid types."""
 
     FRESHWATER = "freshwater"
@@ -89,7 +89,7 @@ class RovConfig(CamelCaseModel):
         MicrocontrollerFirmwareVariant.DSHOT
     )
     fluid_type: FluidType = FluidType.SALTWATER
-    smoothing_factor: float = 0.4
+    smoothing_factor: float = 0.0
     thruster_pin_setup: ThrusterPinSetup = ThrusterPinSetup(
         identifiers=np.array([0, 1, 2, 3, 4, 5, 6, 7], dtype=np.int8),
         spin_directions=np.array([1, 1, 1, 1, 1, 1, 1, 1], dtype=np.int8),

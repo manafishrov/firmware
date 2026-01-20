@@ -72,3 +72,4 @@ reportMissingTypeStubs = false
 reportUnknownVariableType = false
 reportUnusedParameter = false
 reportUnnecessaryTypeIgnoreComment = false
+reportUnknownMemberType = false

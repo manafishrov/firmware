@@ -71,13 +71,31 @@ class Imu:
             )
 
     def read_data(self) -> ImuData | None:
-        """Read IMU data synchronously."""
+        """Read the current IMU sample and return sensor measurements in NED coordinates.
+
+        Reads accelerometer, gyroscope, and temperature from the BMI270. The BMI270 library
+        automatically converts raw data to SI units (accel in m/s², gyro in rad/s). Applies
+        ENU to NED axis convention transform. Returns None if the IMU is not initialized or
+        a read error occurs.
+
+        Returns:
+            ImuData | None: An ImuData instance containing `acceleration` (m/s²), `gyroscope`
+            (rad/s), and `temperature` (°C) on success; `None` if the device is uninitialized
+            or a read fails.
+        """
         if self.imu is None:
             return None
         try:
+            accel = self.imu.get_acc_data().astype(np.float32)
+            gyr = self.imu.get_gyr_data().astype(np.float32)
+
+            # Change convention from ENU to NED
+            accel *= np.array([1.0, -1.0, -1.0], dtype=np.float32)
+            gyr *= np.array([1.0, -1.0, -1.0], dtype=np.float32)
+
             return ImuData(
-                acceleration=self.imu.get_acc_data().astype(np.float32),
-                gyroscope=self.imu.get_gyr_data().astype(np.float32),
+                acceleration=accel,
+                gyroscope=gyr,
                 temperature=self.imu.get_temp_data(),
             )
         except Exception as e:
