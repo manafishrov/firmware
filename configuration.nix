@@ -161,18 +161,30 @@ in {
   # Enable camera and I2C with a high baud rate
   hardware = {
     i2c.enable = true;
-    raspberry-pi.config.all.base-dt-params = {
-      camera_auto_detect = {
-        enable = true;
-        value = true;
+    raspberry-pi.config.all = {
+      base-dt-params = {
+        camera_auto_detect = {
+          enable = true;
+          value = true;
+        };
+        i2c_arm = {
+          enable = true;
+          value = "on";
+        };
+        i2c_arm_baudrate = {
+          enable = true;
+          value = 1000000;
+        };
       };
-      i2c_arm = {
+    };
+    dt-overlays = {
+      vc4-kms-v3d = {
         enable = true;
-        value = "on";
-      };
-      i2c_arm_baudrate = {
-        enable = true;
-        value = 1000000;
+        params = {
+          cma-512 = {
+            enable = true;
+          };
+        };
       };
     };
   };
