@@ -11,11 +11,7 @@ from .main import main
 
 
 def start() -> None:
-    """
-    Start the ROV firmware runtime and orchestrate application startup and shutdown.
-    
-    Runs the package's asynchronous `main()` entrypoint, logs a startup message before execution, suppresses `KeyboardInterrupt` to allow a controlled shutdown, and logs a shutdown message on exit.
-    """
+    """Entry point for the application."""
     log_info("Starting ROV Firmware...")
     try:
         asyncio.run(main())
