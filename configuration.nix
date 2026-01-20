@@ -176,13 +176,13 @@ in {
           value = 1000000;
         };
       };
-    };
-    dt-overlays = {
-      vc4-kms-v3d = {
-        enable = true;
-        params = {
-          cma-512 = {
-            enable = true;
+      dt-overlays = {
+        vc4-kms-v3d = {
+          enable = true;
+          params = {
+            cma-512 = {
+              enable = true;
+            };
           };
         };
       };
