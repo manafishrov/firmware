@@ -1,7 +1,6 @@
 {
   pkgs,
   home-manager,
-  cameraModule,
   ...
 }: let
   pico-sdk-with-submodules = pkgs.pico-sdk.override {
@@ -162,26 +161,18 @@ in {
   # Enable camera and I2C with a high baud rate
   hardware = {
     i2c.enable = true;
-    raspberry-pi.config.all = {
-      dt-overlays = {
-        ${cameraModule} = {
-          enable = true;
-          params = {};
-        };
+    raspberry-pi.config.all.base-dt-params = {
+      camera_auto_detect = {
+        enable = true;
+        value = true;
       };
-      base-dt-params = {
-        camera_auto_detect = {
-          enable = true;
-          value = false;
-        };
-        i2c_arm = {
-          enable = true;
-          value = "on";
-        };
-        i2c_arm_baudrate = {
-          enable = true;
-          value = 1000000;
-        };
+      i2c_arm = {
+        enable = true;
+        value = "on";
+      };
+      i2c_arm_baudrate = {
+        enable = true;
+        value = 1000000;
       };
     };
   };
