@@ -62,8 +62,8 @@
             rev = "02996d71d2f08339b3d317b3f4da0a83781c706e";
             hash = "sha256-LBwM9sTvr7IaBcY8PcsPZcAbNRWBa4hj7tUC4oOr4eM=";
           };
-          nativeBuildInputs = with pkgs.python313Packages; [ setuptools wheel ];
-          propagatedBuildInputs = with pkgs.python313Packages; [ smbus2 ];
+          nativeBuildInputs = with pkgs.python313Packages; [setuptools wheel];
+          propagatedBuildInputs = with pkgs.python313Packages; [smbus2];
           doCheck = false;
         })
       ]);
@@ -183,12 +183,6 @@ in {
           value = 1000000;
         };
       };
-      options = {
-        gpu_mem = {
-          enable = true;
-          value = 256;
-        };
-      };
     };
   };
 
@@ -196,7 +190,7 @@ in {
   services.go2rtc = {
     enable = true;
     settings = {
-      streams.cam = "exec:${pkgs.rpi.rpicam-apps}/bin/libcamera-vid -t 0 -n --inline --width 1440 --height 1080 --framerate 30 --codec h264 -o -";
+      streams.cam = "exec:${pkgs.rpi.rpicam-apps}/bin/rpicam-vid -t 0 -n --inline --width 1440 --height 1080 --framerate 30 --codec h264 -o -";
       api = {
         listen = ":1984";
         origin = "*";
