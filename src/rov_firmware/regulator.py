@@ -56,6 +56,18 @@ TEST_YAW_KD: float = 0
 
 
 def _clamp_dt(dt: float) -> float: # For extra redundancy
+    """
+    Clamp a time step to a safe range around the thruster send interval.
+    
+    Non-finite dt values are replaced with 1/THRUSTER_SEND_FREQUENCY. Finite dt values are constrained to the interval
+    [0.5 * (1/THRUSTER_SEND_FREQUENCY), 10 * (1/THRUSTER_SEND_FREQUENCY)].
+    
+    Parameters:
+        dt (float): Proposed time delta in seconds.
+    
+    Returns:
+        float: Clamped time delta in seconds.
+    """
     if not np.isfinite(dt):
         return 1/THRUSTER_SEND_FREQUENCY
     return float(np.clip(dt, (1/THRUSTER_SEND_FREQUENCY)*0.5, (1/THRUSTER_SEND_FREQUENCY)*10))
@@ -69,12 +81,27 @@ class _MahonyAhrs:
     """
 
     def __init__(self, kp: float, ki: float) -> None:
+        """
+        Create a Mahony AHRS estimator configured with the given proportional and integral gains.
+        
+        Parameters:
+            kp (float): Proportional gain for the attitude correction term.
+            ki (float): Integral gain for error accumulation over time.
+        
+        Notes:
+            Initializes the internal integral term to a zero 3-vector and sets the current attitude to identity (no rotation).
+        """
         self.kp: float = float(kp)
         self.ki: float = float(ki)
         self._integral: NDArray[np.float64] = np.zeros(3, dtype=np.float64)
         self.current_attitude: R = R.identity()
 
     def reset(self) -> None:
+        """
+        Reset the AHRS internal state to its initial condition.
+        
+        Sets the integral error accumulator to zero and the estimated attitude to the identity rotation (no rotation).
+        """
         self._integral[:] = 0.0
         self.current_attitude = R.identity()
 
@@ -84,7 +111,20 @@ class _MahonyAhrs:
         accel: NDArray[np.float32],
         dt: float,
     ) -> None:
-        """Update attitude reading with gyro (rad/s) and accel (m/s²) readings."""
+        """
+        Update internal attitude estimate from gyroscope and accelerometer readings.
+        
+        Clamps the provided time step, rejects unreasonably large gyro samples (zeroing them),
+        and uses the Mahony AHRS update: when accelerometer data is valid the method applies
+        proportional and integral corrections based on the measured gravity direction; if the
+        accelerometer norm is invalid or too small it falls back to gyro-only integration.
+        The method updates the filter's internal attitude and integral state.
+        
+        Parameters:
+            gyro_rad_s (NDArray[np.float32]): Gyroscope rates in radians per second (3-element array).
+            accel (NDArray[np.float32]): Accelerometer vector in m/s^2 (3-element array).
+            dt (float): Elapsed time since last update in seconds (will be clamped to a safe range).
+        """
         dt = _clamp_dt(dt)
 
         # Discard gyro reading if unreasonable big
@@ -121,6 +161,13 @@ class _MahonyAhrs:
         self._integrate_omega(omega, dt)
 
     def _integrate_gyro_only(self, gyro_rad_s: NDArray[np.float32], dt: float) -> None: #Called by update
+        """
+        Advance the internal attitude estimate by integrating gyro angular rates only.
+        
+        Parameters:
+            gyro_rad_s (NDArray[np.float32]): Angular velocity vector [rad/s] in body frame (gx, gy, gz).
+            dt (float): Time step in seconds over which to integrate.
+        """
         omega = np.array(
             [float(gyro_rad_s[0]), float(gyro_rad_s[1]), float(gyro_rad_s[2])],
             dtype=np.float64,
@@ -129,6 +176,17 @@ class _MahonyAhrs:
 
     def _integrate_omega(self, omega_rad_s: NDArray[np.float64], dt: float) -> None: #Called by update
 
+        """
+        Integrates an angular velocity vector over a time step and updates the current attitude quaternion.
+        
+        Parameters:
+            omega_rad_s (NDArray[np.float64]): Angular velocity vector in radians per second (rotation vector in body frame).
+            dt (float): Time step in seconds.
+        
+        Details:
+            - Applies the rotation represented by omega_rad_s * dt to self.current_attitude.
+            - Normalizes the resulting quaternion to unit length and stores it back to self.current_attitude.
+        """
         dtheta = omega_rad_s * float(dt)
         dR = R.from_rotvec(dtheta)
         self.current_attitude = self.current_attitude * dR  # body-to-world update
@@ -184,7 +242,21 @@ class Regulator:
     def _update_desired_from_direction_vector(
         self, direction_vector: NDArray[np.float32]
     ) -> None:
-        """Update desired attitude quaternion from direction vector."""
+        """
+        Update desired depth and attitude targets from the user direction vector.
+        
+        When depth hold is enabled, adjusts state.regulator.desired_depth by the heave input
+        (direction_vector[2]) scaled by TEST_DEPTH_HOLD_SETPOINT_RATE_MPS and the regulator
+        delta-time. When pitch stabilization is enabled, applies yaw, pitch, and roll increments
+        (from direction_vector[4], [3], [5] respectively) to self.desired_attitude using
+        quaternion operations, clamps pitch to ±PITCH_MAX to avoid gimbal issues, and writes
+        desired pitch and roll into state.regulator for UI visualization.
+        
+        Parameters:
+            direction_vector (ndarray[np.float32]): 8-element NED direction vector where
+                index 2 = heave, 3 = pitch input, 4 = yaw input, 5 = roll input.
+        
+        """
         if self.state.system_status.depth_hold:
             heave_change = float(direction_vector[2])
             desired_depth = float(self.state.regulator.desired_depth) + heave_change * TEST_DEPTH_HOLD_SETPOINT_RATE_MPS * self.delta_t_run_regulator
@@ -222,7 +294,11 @@ class Regulator:
     # Public API (must keep name/signature): update_regulator_data_from_imu
     # -------------------------------------------------------------------------
     def update_regulator_data_from_imu(self) -> None:
-        """Update regulator data from IMU readings (quaternion AHRS)."""
+        """
+        Update internal AHRS and regulator fields from the IMU and write current attitude to state for visualization.
+        
+        Updates internal gyro rates used by the regulator, advances the Mahony AHRS using the IMU accelerometer and gyroscope with a clamped delta time, records timing used for future AHRS updates, and writes the estimated pitch and roll into state.regulator for UI/visualization.
+        """
         if not self.state.system_health.imu_ok:
             return
 
@@ -257,6 +333,14 @@ class Regulator:
 
 
     def _handle_edges(self) -> None:
+        """
+        Detect and handle rising-edge transitions for depth-hold and stabilization enable flags.
+        
+        Checks the regulator-related enable flags in state.system_status and, when either
+        feature transitions from disabled to enabled, invokes the corresponding enable
+        handler (depth hold or attitude/stabilization). Updates internal previous-state
+        flags to reflect the current enablement.
+        """
         depth_hold_enabled = self.state.system_status.depth_hold
         stabilization_enabled = self.state.system_status.pitch_stabilization # TODO: Change to general stabilization when implemented, "pitch_stabilization" will no longer be a thing
 
@@ -273,6 +357,11 @@ class Regulator:
     # Depth hold internals
     # -------------------------------------------------------------------------
     def _depth_hold_enable_edge(self) -> None: # Note to Michael: I know this is done in another script too, but it is better to do here because we have to change the integral terms which are only in this class, and in future we might need to have more complex behaviour on edges.
+        """
+        Initialize depth-hold targets and reset related integral/derivative state when depth-hold is enabled.
+        
+        Sets the regulator's desired depth to the current measured depth, clears the depth integral term, resets the depth derivative accumulator, and stores the current depth as the previous depth for subsequent derivative calculations.
+        """
         current_depth = self.state.pressure.depth
         self.state.regulator.desired_depth = current_depth
         self.state.regulator.integral_depth = 0.0
@@ -280,6 +369,15 @@ class Regulator:
         self.previous_depth = current_depth
 
     def _handle_depth_hold(self, heave_input: float) -> float:
+        """
+        Compute PID depth actuation using current and desired depth, with integral relaxation based on user heave input.
+        
+        Parameters:
+            heave_input (float): User heave command magnitude (typically in [-1, 1]); larger |heave_input| reduces integral accumulation.
+        
+        Returns:
+            float: Depth regulator actuation; positive values command upward (reduce depth), negative values command downward.
+        """
         current_depth = self.state.pressure.depth
         desired_depth = self.state.regulator.desired_depth
 
@@ -312,6 +410,11 @@ class Regulator:
     # -------------------------------------------------------------------------
     def _attitude_enable_edge(self) -> None:
         # Set desired attitude pitch and roll to 0 and yaw to current yaw 
+        """
+        Set the target attitude to level (zero pitch and roll) while preserving the current yaw, and reset the attitude integral term.
+        
+        This updates `desired_attitude` so pitch and roll are zero and the yaw equals the AHRS's current yaw, then clears `integral_attitude_rad`.
+        """
         self.desired_attitude = R.identity()
         current_yaw = self.ahrs.current_attitude.as_euler("ZYX", degrees=False)[0]
         yaw_rotation = R.from_rotvec([0.0, 0.0, current_yaw])
@@ -324,9 +427,14 @@ class Regulator:
 
 
     def _handle_stabilization(self, direction_vector_attitude: NDArray[np.float32]) -> NDArray[np.float32]:
-        """Quaternion-based PID attitude stabilization.
-
-        Returns actuation vector in order: [pitch, yaw, roll].
+        """
+        Compute a quaternion-based PID stabilization actuation for attitude.
+        
+        Parameters:
+            direction_vector_attitude (ndarray): 3-element array of user attitude inputs (pitch, yaw, roll) in body frame; when its magnitude is above the integral-relax threshold the attitude integral term is not accumulated.
+        
+        Returns:
+            ndarray: 3-element float32 array [pitch_actuation, yaw_actuation, roll_actuation] containing the PID actuation for each attitude axis (already scaled down for safe application).
         """
         dt = self.delta_t_run_regulator
         config = self.state.rov_config.regulator
@@ -367,7 +475,15 @@ class Regulator:
     # -------------------------------------------------------------------------
 
     def _transform_movement_vector_world_to_body(self, direction_vector_movement: NDArray[np.float32]) -> NDArray[np.float32]:
-        """Transform movement vector from world frame to body frame, applying direction coefficients."""
+        """
+        Convert a world-frame surge/sway/heave movement vector into the vehicle body frame and apply per-axis direction coefficients.
+        
+        Parameters:
+            direction_vector_movement (NDArray[np.float32]): 3-element world-frame movement vector [surge, sway, heave].
+        
+        Returns:
+            NDArray[np.float32]: 3-element movement vector expressed in the body frame with direction coefficients applied.
+        """
         surge_movement_world = np.array([direction_vector_movement[0], 0, 0])
         sway_movement_world = np.array([0, direction_vector_movement[1], 0])
         heave_movement_world = np.array([0, 0, direction_vector_movement[2]])
@@ -404,10 +520,24 @@ class Regulator:
     # Scaling/clipping 
     # -------------------------------------------------------------------------
     def _scale_direction_vector_with_user_max_power(self, direction_vector: NDArray[np.float32]) -> None:
+        """
+        Apply the user-configured maximum power percentage to the provided direction vector in place.
+        
+        Scales the given NumPy float32 direction_vector by state.rov_config.power.user_max_power / 100.0 and updates the array directly.
+        
+        Parameters:
+            direction_vector (numpy.ndarray): Mutable 1-D float32 array (expected length 8) representing the direction vector to be scaled in place.
+        """
         scale = float(self.state.rov_config.power.user_max_power) / 100.0
         direction_vector *= np.float32(scale)
 
     def _scale_regulator_direction_vector(self, regulator_direction_vector: NDArray[np.float32]) -> None:
+        """
+        Clip the regulator direction vector in-place to the configured per-axis maximum regulator power.
+        
+        Parameters:
+            regulator_direction_vector (NDArray[np.float32]): Array of regulator outputs (modified in-place). Each element is clamped to the range [-p, p], where p = state.rov_config.power.regulator_max_power / 100.0.
+        """
         power = float(self.state.rov_config.power.regulator_max_power) / 100.0
         _ = np.clip(regulator_direction_vector, -power, power, out=regulator_direction_vector)
 
@@ -415,7 +545,18 @@ class Regulator:
     # Main function: apply_regulator_to_direction_vector
     # -------------------------------------------------------------------------
     def apply_regulator_to_direction_vector(self, direction_vector: NDArray[np.float32]) -> None:
-        """Apply regulator actuation to direction vector in-place."""
+        """
+        Apply active regulator outputs to the provided 8-element direction vector in place.
+        
+        This updates internal timing, refreshes regulator targets from user input and edge transitions, computes depth-hold and attitude-stabilization contributions when enabled, scales both user and regulator components according to configuration, and adds the regulator vector into the provided direction_vector.
+        
+        Parameters:
+            direction_vector (NDArray[np.float32]): Mutable 8-element NED-format command vector arranged as
+                [surge, sway, heave, pitch, yaw, roll, action1, action2]. The array is modified in place:
+                - depth hold replaces heave (index 2) with regulator-modified motion and zeroes user heave,
+                - attitude stabilization zeroes user pitch/yaw/roll (indices 3:6) and adds regulator corrections,
+                - final result is the elementwise sum of the (possibly scaled) user vector and the scaled regulator contributions.
+        """
         regulator_direction_vector = np.zeros(8, dtype=np.float32)
 
         # Compute delta_t
@@ -450,7 +591,14 @@ class Regulator:
 
 
     def handle_auto_tuning(self, current_time: float) -> NDArray[np.float32] | None:
-        """Handle auto-tuning process for PID parameters."""
+        """
+        Progresses the regulator auto-tuning state machine and produces the actuation vector to apply for the current tuning step.
+        
+        This updates internal auto-tuning state (phase, step, collected data, timers) and, when tuning completes, sets `state.regulator.auto_tuning_active` to False and publishes tuned PID suggestions via the message queue. If called with intervals smaller than 1/60 s, returns a zeroed 8-element actuation vector without advancing the state.
+        
+        Returns:
+            An 8-element numpy float32 array containing the actuation to apply for the current tuning step, or `None` when auto-tuning has finished and results have been published.
+        """
         if not self.auto_tuning_phase:
             self.auto_tuning_phase = "pitch"
             self.auto_tuning_step = "find_zero"

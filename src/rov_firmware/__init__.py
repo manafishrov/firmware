@@ -19,4 +19,3 @@ def start() -> None:
         pass
     finally:
         log_info("Shutting down.")
-
