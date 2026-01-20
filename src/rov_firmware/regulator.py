@@ -394,7 +394,7 @@ class Regulator:
         error = desired_depth - current_depth
 
         integral_scale = cast(
-            NDArray[np.float32],
+            np.float32,
             np.clip((1.0 - abs(heave_input)), 0.0, 1.0, dtype=np.float32),
         )
         self.state.regulator.integral_depth += float(
@@ -529,32 +529,20 @@ class Regulator:
         sway_movement_body = current_attitude.inv().apply(sway_movement_world)
         heave_movement_body = current_attitude.inv().apply(heave_movement_world)
 
-        # Importing direction coefficients
         dir_coeffs = self.state.rov_config.direction_coefficients
-        surge_coeff = (
-            dir_coeffs.surge
-            if np.isfinite(dir_coeffs.surge) and dir_coeffs.surge > 0
-            else 1.0
-        )
-        sway_coeff = (
-            dir_coeffs.sway
-            if np.isfinite(dir_coeffs.sway) and dir_coeffs.sway > 0
-            else 1.0
-        )
-        heave_coeff = (
-            dir_coeffs.heave
-            if np.isfinite(dir_coeffs.heave) and dir_coeffs.heave > 0
-            else 1.0
-        )
+        surge_coeff = dir_coeffs.surge if np.isfinite(dir_coeffs.surge) else 1.0
+        sway_coeff = dir_coeffs.sway if np.isfinite(dir_coeffs.sway) else 1.0
+        heave_coeff = dir_coeffs.heave if np.isfinite(dir_coeffs.heave) else 1.0
 
-        surge_movement_body *= np.array(
-            [1.0, 1.0, surge_coeff / heave_coeff], dtype=np.float32
-        )
-        sway_movement_body *= np.array(
-            [1.0, 1.0, sway_coeff / heave_coeff], dtype=np.float32
-        )
+        surge_heave_ratio = surge_coeff / heave_coeff if heave_coeff != 0 else 0.0
+        sway_heave_ratio = sway_coeff / heave_coeff if heave_coeff != 0 else 0.0
+        heave_surge_ratio = heave_coeff / surge_coeff if surge_coeff != 0 else 0.0
+        heave_sway_ratio = heave_coeff / sway_coeff if sway_coeff != 0 else 0.0
+
+        surge_movement_body *= np.array([1.0, 1.0, surge_heave_ratio], dtype=np.float32)
+        sway_movement_body *= np.array([1.0, 1.0, sway_heave_ratio], dtype=np.float32)
         heave_movement_body *= np.array(
-            [heave_coeff / surge_coeff, heave_coeff / sway_coeff, 1.0], dtype=np.float32
+            [heave_surge_ratio, heave_sway_ratio, 1.0], dtype=np.float32
         )
 
         world_frame_movement = (
