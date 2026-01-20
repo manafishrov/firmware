@@ -128,20 +128,18 @@ class Thrusters:
         return thrust_vector
 
     def _compute_thrust_values(self, thrust_vector: NDArray[np.float32]) -> list[int]:
-        thrust_values: list[int] = []
-        for val in thrust_vector:  # pyright: ignore[reportAny]
-            val_typed = cast(np.float32, val)
-            if val_typed >= 0:
-                thruster_val = int(
-                    THRUSTER_NEUTRAL_PULSE_WIDTH
-                    + val_typed * THRUSTER_FORWARD_PULSE_RANGE
-                )
-            else:
-                thruster_val = int(
-                    THRUSTER_NEUTRAL_PULSE_WIDTH
-                    + val_typed * THRUSTER_REVERSE_PULSE_RANGE
-                )
-            thrust_values.append(thruster_val)
+        thrust_values = cast(
+            list[int],
+            np.where(
+                thrust_vector >= 0,
+                THRUSTER_NEUTRAL_PULSE_WIDTH
+                + thrust_vector * THRUSTER_FORWARD_PULSE_RANGE,
+                THRUSTER_NEUTRAL_PULSE_WIDTH
+                + thrust_vector * THRUSTER_REVERSE_PULSE_RANGE,
+            )
+            .astype(int)
+            .tolist(),
+        )
         thrust_values = (thrust_values + [THRUSTER_NEUTRAL_PULSE_WIDTH] * NUM_MOTORS)[
             :NUM_MOTORS
         ]
