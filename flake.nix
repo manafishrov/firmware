@@ -14,15 +14,20 @@
 
   inputs = {
     nixpkgs.follows = "nixos-raspberrypi/nixpkgs";
-    nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi?shallow=1";
+    nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi";
     home-manager = {
-      url = "github:nix-community/home-manager/release-25.05?shallow=1";
+      url = "github:nix-community/home-manager/release-25.11";
       inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = { self, nixpkgs, nixos-raspberrypi, home-manager, ... }:
-  let
+  outputs = {
+    self,
+    nixpkgs,
+    nixos-raspberrypi,
+    home-manager,
+    ...
+  }: let
     cameras = [
       "ov5647"
       "imx219"
@@ -62,12 +67,14 @@
     mkConfigurations = let
       mkConfig = pi: camera: {
         name = "manafish-${pi.name}-${camera}";
-        value = nixos-raspberrypi.lib.nixosSystem (mkCamera camera // {
-          modules = [ pi.module ] ++ (mkCamera camera).modules;
-        });
+        value = nixos-raspberrypi.lib.nixosSystem (mkCamera camera
+          // {
+            modules = [pi.module] ++ (mkCamera camera).modules;
+          });
       };
     in
-      builtins.listToAttrs (builtins.concatMap
+      builtins.listToAttrs (
+        builtins.concatMap
         (pi: map (camera: mkConfig pi camera) cameras)
         piVersions
       );
@@ -78,15 +85,16 @@
         value = self.nixosConfigurations."manafish-${pi.name}-${camera}".config.system.build.sdImage;
       };
     in
-      builtins.listToAttrs (builtins.concatMap
+      builtins.listToAttrs (
+        builtins.concatMap
         (pi: map (camera: mkPackage pi camera) cameras)
         piVersions
       );
-  in
-  {
+  in {
     nixosConfigurations = mkConfigurations;
 
-    packages = builtins.listToAttrs (map
+    packages = builtins.listToAttrs (
+      map
       (system: {
         name = system;
         value = mkPackages system;
@@ -94,14 +102,15 @@
       supportedSystems
     );
 
-    devShells = builtins.listToAttrs (map
+    devShells = builtins.listToAttrs (
+      map
       (system: let
         pkgs = nixpkgs.legacyPackages.${system};
       in {
         name = system;
         value = {
           default = pkgs.mkShell {
-            buildInputs = [ pkgs.uv ];
+            buildInputs = [pkgs.uv];
           };
         };
       })
