@@ -188,6 +188,9 @@ in {
       };
     };
   };
+  boot.kernelParams = [
+    "cma=512M"
+  ];
 
   # Setup video streaming
   services.go2rtc = {
