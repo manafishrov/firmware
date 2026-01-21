@@ -161,33 +161,28 @@ in {
   # Enable camera and I2C with a high baud rate
   hardware = {
     i2c.enable = true;
-    raspberry-pi.config.all = {
-      base-dt-params = {
-        camera_auto_detect = {
-          enable = true;
-          value = true;
-        };
-        i2c_arm = {
-          enable = true;
-          value = "on";
-        };
-        i2c_arm_baudrate = {
-          enable = true;
-          value = 1000000;
-        };
+    raspberry-pi.config.all.base-dt-params = {
+      camera_auto_detect = {
+        enable = true;
+        value = true;
       };
-      dt-overlays = {
-        vc4-kms-v3d = {
-          enable = true;
-          params = {
-            cma-512 = {
-              enable = true;
-            };
-          };
-        };
+      i2c_arm = {
+        enable = true;
+        value = "on";
+      };
+      i2c_arm_baudrate = {
+        enable = true;
+        value = 1000000;
       };
     };
   };
+  boot.blacklistedKernelModules = [
+    "bcm2835_mmal_vchiq"
+    "vc_sm_cma"
+    "bcm2835_unicam_legacy"
+    "bcm2835_codec"
+    "bcm2835_v4l2"
+  ];
   boot.kernelParams = [
     "cma=512M"
   ];
