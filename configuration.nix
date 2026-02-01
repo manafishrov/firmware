@@ -1,6 +1,7 @@
 {
   pkgs,
   home-manager,
+  cameraModule,
   ...
 }: let
   pico-sdk-with-submodules = pkgs.pico-sdk.override {
@@ -82,7 +83,7 @@
   '';
 in {
   # Nix state version
-  system.stateVersion = "25.05";
+  system.stateVersion = "25.11";
 
   # Disable GUI options for packages
   nixpkgs.overlays = [
@@ -161,31 +162,29 @@ in {
   # Enable camera and I2C with a high baud rate
   hardware = {
     i2c.enable = true;
-    raspberry-pi.config.all.base-dt-params = {
-      camera_auto_detect = {
-        enable = true;
-        value = true;
+    raspberry-pi.config.all = {
+      dt-overlays = {
+        ${cameraModule} = {
+          enable = true;
+          params = {};
+        };
       };
-      i2c_arm = {
-        enable = true;
-        value = "on";
-      };
-      i2c_arm_baudrate = {
-        enable = true;
-        value = 1000000;
+      base-dt-params = {
+        camera_auto_detect = {
+          enable = true;
+          value = false;
+        };
+        i2c_arm = {
+          enable = true;
+          value = "on";
+        };
+        i2c_arm_baudrate = {
+          enable = true;
+          value = 1000000;
+        };
       };
     };
   };
-  boot.blacklistedKernelModules = [
-    "bcm2835_mmal_vchiq"
-    "vc_sm_cma"
-    "bcm2835_unicam_legacy"
-    "bcm2835_codec"
-    "bcm2835_v4l2"
-  ];
-  boot.kernelParams = [
-    "cma=512M"
-  ];
 
   # Setup video streaming
   services.go2rtc = {
@@ -233,7 +232,7 @@ in {
     useGlobalPkgs = true;
     users.pi = {
       home = {
-        stateVersion = "25.05";
+        stateVersion = "25.11";
         packages = with pkgs; [
           neovim
           nano
