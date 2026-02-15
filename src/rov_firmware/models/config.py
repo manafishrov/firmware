@@ -61,6 +61,7 @@ class Regulator(CamelCaseModel):
     roll: AxisConfig
     yaw: AxisConfig
     depth: AxisConfig
+    fpv_mode: bool
 
 
 class DirectionCoefficients(CamelCaseModel):
@@ -110,6 +111,7 @@ class RovConfig(CamelCaseModel):
         roll=AxisConfig(kp=1, ki=0, kd=0.1, rate=1.0),
         yaw=AxisConfig(kp=3, ki=0, kd=0, rate=1.0),
         depth=AxisConfig(kp=0.5, ki=0, kd=0.1, rate=1.0),
+        fpv_mode=False,
     )
     direction_coefficients: DirectionCoefficients = DirectionCoefficients(
         surge=1,
