@@ -24,15 +24,36 @@
   ],
   "customManagers": [
     {
-      "description": "Sync standard Python dependencies with Nixpkgs Repology (NixOS 25.11)",
+      "description": "Sync Python packages from nixpkgs (stable 25.11)",
       "customType": "regex",
-      "fileMatch": ["^pyproject\\.toml$"],
+      "fileMatch": ["^pyproject\\.toml$", "^configuration\\.nix$"],
       "matchStrings": [
-        "\"(?<depName>numpy|websockets|pydantic|smbus2|scipy|pyserial-asyncio)==(?<currentValue>[0-9\\.]+)\""
+        "pname = \"(?<depName>.*?)\";\\s+version = \"(?<currentValue>.*?)\";",
+        "\"(?<depName>.*?)==(?<currentValue>.*?)\""
       ],
       "datasourceTemplate": "repology",
-      "depNameTemplate": "nixos_25_11/python3Packages.{{depName}}",
-      "versioningTemplate": "loose"
+      "depNameTemplate": "nix_stable_25_11/python3.13-{{depName}}",
+      "matchStringsStrategy": "any"
+    },
+    {
+      "description": "Sync GitHub-based Python packages (bmi270)",
+      "customType": "regex",
+      "fileMatch": ["^pyproject\\.toml$", "^configuration\\.nix$"],
+      "matchStrings": [
+        "pname = \"(?<depName>bmi270)\";\\s+version = \"(?<currentValue>[0-9\\.]+)\";[\\s\\S]*?rev = \"(?<currentDigest>[a-f0-9]+)\";",
+        "\"(?<depName>bmi270)==(?<currentValue>[0-9\\.]+)\""
+      ],
+      "datasourceTemplate": "pypi"
+    },
+    {
+      "description": "Sync GitHub-based Python packages (ms5837)",
+      "customType": "regex",
+      "fileMatch": ["^pyproject\\.toml$", "^configuration\\.nix$"],
+      "matchStrings": [
+        "pname = \"(?<depName>ms5837)\";\\s+version = \"(?<currentValue>[0-9\\.]+)\";[\\s\\S]*?rev = \"(?<currentDigest>[a-f0-9]+)\";",
+        "ms5837 @ git\\+https://github\\.com/(?<depName>bluerobotics/ms5837-python)\\.git@(?<currentDigest>[a-f0-9]+)"
+      ],
+      "datasourceTemplate": "github-commits"
     },
     {
       "description": "Sync Python version between pyproject.toml and configuration.nix",
