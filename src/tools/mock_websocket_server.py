@@ -16,7 +16,7 @@ PORT = 9000
 FIRMWARE_VERSION = "1.0.0"
 MOCK_CONFIG = {
     "microcontrollerFirmwareVariant": "dshot",
-    "fluidType": "saltwater",
+    "fluidType": "saltWater",
     "thrusterPinSetup": {
         "identifiers": [0, 1, 2, 3, 4, 5, 6, 7],
         "spinDirections": [1, 1, 1, 1, 1, 1, 1, 1],
