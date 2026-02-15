@@ -32,10 +32,11 @@ MOCK_CONFIG = {
         [-1.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0],
     ],
     "regulator": {
-        "turnSpeed": 40,
-        "pitch": {"kp": 5, "ki": 0.5, "kd": 1},
-        "roll": {"kp": 1.5, "ki": 0.1, "kd": 0.4},
-        "depth": {"kp": 0, "ki": 0.05, "kd": 0.1},
+        "pitch": {"kp": 5, "ki": 0.5, "kd": 1, "rate": 1.0},
+        "roll": {"kp": 1.5, "ki": 0.1, "kd": 0.4, "rate": 1.0},
+        "yaw": {"kp": 3, "ki": 0, "kd": 0, "rate": 1.0},
+        "depth": {"kp": 0, "ki": 0.05, "kd": 0.1, "rate": 1.0},
+        "fpvMode": False,
     },
     "directionCoefficients": {
         "surge": 0.8,
@@ -54,8 +55,7 @@ MOCK_CONFIG = {
 }
 
 SYSTEM_STATUS = {
-    "pitch_stabilization": False,
-    "roll_stabilization": False,
+    "auto_stabilization": False,
     "depth_hold": False,
 }
 
@@ -113,8 +113,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             status_msg = {
                 "type": "statusUpdate",
                 "payload": {
-                    "pitchStabilization": SYSTEM_STATUS["pitch_stabilization"],
-                    "rollStabilization": SYSTEM_STATUS["roll_stabilization"],
+                    "autoStabilization": SYSTEM_STATUS["auto_stabilization"],
                     "depthHold": SYSTEM_STATUS["depth_hold"],
                     "batteryPercentage": battery_percentage,
                     "health": {
@@ -168,29 +167,16 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         },
                     }
                     await websocket.send(json.dumps(toast_msg))
-                elif msg_type == "togglePitchStabilization":
-                    SYSTEM_STATUS["pitch_stabilization"] = not SYSTEM_STATUS[
-                        "pitch_stabilization"
+                elif msg_type == "toggleAutoStabilization":
+                    SYSTEM_STATUS["auto_stabilization"] = not SYSTEM_STATUS[
+                        "auto_stabilization"
                     ]
                     log_msg = {
                         "type": "logMessage",
                         "payload": {
                             "origin": "firmware",
                             "level": "info",
-                            "message": f"Pitch stabilization set to {SYSTEM_STATUS['pitch_stabilization']}",
-                        },
-                    }
-                    await websocket.send(json.dumps(log_msg))
-                elif msg_type == "toggleRollStabilization":
-                    SYSTEM_STATUS["roll_stabilization"] = not SYSTEM_STATUS[
-                        "roll_stabilization"
-                    ]
-                    log_msg = {
-                        "type": "logMessage",
-                        "payload": {
-                            "origin": "firmware",
-                            "level": "info",
-                            "message": f"Roll stabilization set to {SYSTEM_STATUS['roll_stabilization']}",
+                            "message": f"Auto stabilization set to {SYSTEM_STATUS['auto_stabilization']}",
                         },
                     }
                     await websocket.send(json.dumps(log_msg))

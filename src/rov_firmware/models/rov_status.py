@@ -7,8 +7,7 @@ from .system import SystemHealth
 class RovStatus(CamelCaseModel):
     """Model for ROV status."""
 
-    pitch_stabilization: bool
-    roll_stabilization: bool
+    auto_stabilization: bool
     depth_hold: bool
     battery_percentage: int
     health: SystemHealth

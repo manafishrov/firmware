@@ -29,8 +29,8 @@ class FluidType(StrEnum):
 class ThrusterPinSetup(CamelCaseModel):
     """Model for thruster pin setup."""
 
-    identifiers: NDArray[Shape["8"], np.int8]  # pyright: ignore[reportGeneralTypeIssues]
-    spin_directions: NDArray[Shape["8"], np.int8]  # pyright: ignore[reportGeneralTypeIssues]
+    identifiers: NDArray[Shape["8"], np.int8]  # ty: ignore[invalid-type-form]
+    spin_directions: NDArray[Shape["8"], np.int8]  # ty: ignore[invalid-type-form]
 
     @field_validator("identifiers", mode="before")
     @classmethod
@@ -45,21 +45,22 @@ class ThrusterPinSetup(CamelCaseModel):
         return np.array(v, dtype=np.int8)
 
 
-class RegulatorPID(CamelCaseModel):
-    """PID parameters for regulator."""
+class AxisConfig(CamelCaseModel):
+    """Configuration for a single regulator axis."""
 
     kp: float
     ki: float
     kd: float
+    rate: float = 1.0
 
 
 class Regulator(CamelCaseModel):
     """Regulator configuration."""
 
-    turn_speed: int
-    pitch: RegulatorPID
-    roll: RegulatorPID
-    depth: RegulatorPID
+    pitch: AxisConfig
+    roll: AxisConfig
+    yaw: AxisConfig
+    depth: AxisConfig
 
 
 class DirectionCoefficients(CamelCaseModel):
@@ -68,9 +69,6 @@ class DirectionCoefficients(CamelCaseModel):
     surge: float
     sway: float
     heave: float
-    pitch: float
-    yaw: float
-    roll: float
 
 
 class Power(CamelCaseModel):
@@ -94,7 +92,7 @@ class RovConfig(CamelCaseModel):
         identifiers=np.array([0, 1, 2, 3, 4, 5, 6, 7], dtype=np.int8),
         spin_directions=np.array([1, 1, 1, 1, 1, 1, 1, 1], dtype=np.int8),
     )
-    thruster_allocation: NDArray[Shape["8, 8"], np.float32] = np.array(  # pyright: ignore[reportInvalidTypeForm]
+    thruster_allocation: NDArray[Shape["8, 8"], np.float32] = np.array(  # ty: ignore[invalid-type-form]
         (
             (1, 1, 0, 0, -1, 0, 0, 0),
             (1, -1, 0, 0, 1, 0, 0, 0),
@@ -108,18 +106,15 @@ class RovConfig(CamelCaseModel):
         dtype=np.float32,
     )
     regulator: Regulator = Regulator(
-        turn_speed=40,
-        pitch=RegulatorPID(kp=2, ki=0, kd=0.1),
-        roll=RegulatorPID(kp=1, ki=0, kd=0.1),
-        depth=RegulatorPID(kp=0.5, ki=0, kd=0.1),
+        pitch=AxisConfig(kp=2, ki=0, kd=0.1, rate=1.0),
+        roll=AxisConfig(kp=1, ki=0, kd=0.1, rate=1.0),
+        yaw=AxisConfig(kp=3, ki=0, kd=0, rate=1.0),
+        depth=AxisConfig(kp=0.5, ki=0, kd=0.1, rate=1.0),
     )
     direction_coefficients: DirectionCoefficients = DirectionCoefficients(
         surge=1,
         sway=1,
         heave=1,
-        pitch=1,
-        yaw=1,
-        roll=1,
     )
     power: Power = Power(
         user_max_power=30,
@@ -161,6 +156,6 @@ FirmwareVersion = str
 class RegulatorSuggestions(CamelCaseModel):
     """Suggestions for regulator tuning."""
 
-    pitch: RegulatorPID
-    roll: RegulatorPID
-    depth: RegulatorPID
+    pitch: AxisConfig
+    roll: AxisConfig
+    depth: AxisConfig

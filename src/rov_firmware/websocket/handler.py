@@ -24,14 +24,13 @@ from .receive.regulator import (
     handle_start_regulator_auto_tuning,
 )
 from .receive.state import (
+    handle_toggle_auto_stabilization,
     handle_toggle_depth_hold,
-    handle_toggle_pitch_stabilization,
-    handle_toggle_roll_stabilization,
 )
 from .types import MessageType
 
 
-async def handle_message(  # noqa: C901,PLR0912
+async def handle_message(  # noqa: C901
     state: RovState,
     websocket: ServerConnection,
     message: WebsocketMessage,
@@ -65,10 +64,8 @@ async def handle_message(  # noqa: C901,PLR0912
             await handle_cancel_regulator_auto_tuning(state)
         case MessageType.CUSTOM_ACTION:
             await handle_custom_action(state, cast(CustomAction, payload))
-        case MessageType.TOGGLE_PITCH_STABILIZATION:
-            await handle_toggle_pitch_stabilization(state)
-        case MessageType.TOGGLE_ROLL_STABILIZATION:
-            await handle_toggle_roll_stabilization(state)
+        case MessageType.TOGGLE_AUTO_STABILIZATION:
+            await handle_toggle_auto_stabilization(state)
         case MessageType.TOGGLE_DEPTH_HOLD:
             await handle_toggle_depth_hold(state)
         case _:

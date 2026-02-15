@@ -21,7 +21,6 @@ class MessageType(StrEnum):
     TELEMETRY = "telemetry"
     FIRMWARE_VERSION = "firmwareVersion"
     CUSTOM_ACTION = "customAction"
-    TOGGLE_PITCH_STABILIZATION = "togglePitchStabilization"
-    TOGGLE_ROLL_STABILIZATION = "toggleRollStabilization"
+    TOGGLE_AUTO_STABILIZATION = "toggleAutoStabilization"
     TOGGLE_DEPTH_HOLD = "toggleDepthHold"
     FLASH_MICROCONTROLLER_FIRMWARE = "flashMicrocontrollerFirmware"

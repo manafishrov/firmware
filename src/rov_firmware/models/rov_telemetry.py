@@ -8,8 +8,10 @@ class RovTelemetry(CamelCaseModel):
 
     pitch: float
     roll: float
+    yaw: float
     desired_pitch: float
     desired_roll: float
+    desired_yaw: float
     depth: float
     water_temperature: float
     electronics_temperature: float

@@ -115,19 +115,11 @@ class CustomAction(CamelCaseModel):
     payload: CustomActionPayload
 
 
-class TogglePitchStabilization(CamelCaseModel):
-    """WebSocket message for toggling pitch stabilization."""
+class ToggleAutoStabilization(CamelCaseModel):
+    """WebSocket message for toggling auto stabilization."""
 
-    type: Literal[MessageType.TOGGLE_PITCH_STABILIZATION] = (
-        MessageType.TOGGLE_PITCH_STABILIZATION
-    )
-
-
-class ToggleRollStabilization(CamelCaseModel):
-    """WebSocket message for toggling roll stabilization."""
-
-    type: Literal[MessageType.TOGGLE_ROLL_STABILIZATION] = (
-        MessageType.TOGGLE_ROLL_STABILIZATION
+    type: Literal[MessageType.TOGGLE_AUTO_STABILIZATION] = (
+        MessageType.TOGGLE_AUTO_STABILIZATION
     )
 
 
@@ -162,8 +154,7 @@ WebsocketMessage = Annotated[
     | Telemetry
     | FirmwareVersion
     | CustomAction
-    | TogglePitchStabilization
-    | ToggleRollStabilization
+    | ToggleAutoStabilization
     | ToggleDepthHold
     | FlashMicrocontrollerFirmware,
     Field(discriminator="type"),

@@ -6,38 +6,19 @@ from ...log import log_info
 from ...rov_state import RovState
 
 
-async def handle_toggle_pitch_stabilization(
+async def handle_toggle_auto_stabilization(
     state: RovState,
 ) -> None:
-    """Handle toggling pitch stabilization.
+    """Handle toggling auto stabilization.
 
     Args:
         state: The ROV state.
     """
-    state.system_status.pitch_stabilization = (
-        not state.system_status.pitch_stabilization
-    )
-    if not state.system_status.pitch_stabilization:
-        state.regulator.integral_pitch = 0.0
+    state.system_status.auto_stabilization = not state.system_status.auto_stabilization
+    if not state.system_status.auto_stabilization:
         state.regulator.desired_pitch = 0.0
-    log_info(
-        f"Toggled pitch stabilization to {state.system_status.pitch_stabilization}"
-    )
-
-
-async def handle_toggle_roll_stabilization(
-    state: RovState,
-) -> None:
-    """Handle toggling roll stabilization.
-
-    Args:
-        state: The ROV state.
-    """
-    state.system_status.roll_stabilization = not state.system_status.roll_stabilization
-    if not state.system_status.roll_stabilization:
-        state.regulator.integral_roll = 0.0
         state.regulator.desired_roll = 0.0
-    log_info(f"Toggled roll stabilization to {state.system_status.roll_stabilization}")
+    log_info(f"Toggled auto stabilization to {state.system_status.auto_stabilization}")
 
 
 async def handle_toggle_depth_hold(
@@ -50,6 +31,5 @@ async def handle_toggle_depth_hold(
     """
     state.system_status.depth_hold = not state.system_status.depth_hold
     if not state.system_status.depth_hold:
-        state.regulator.integral_depth = 0.0
         state.regulator.desired_depth = state.pressure.depth
     log_info(f"Toggled depth hold to {state.system_status.depth_hold}")

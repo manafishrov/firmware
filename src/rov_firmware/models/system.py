@@ -16,7 +16,6 @@ class SystemHealth(CamelCaseModel):
 class SystemStatus(BaseModel):
     """Model for system status."""
 
-    pitch_stabilization: bool = False
-    roll_stabilization: bool = False
+    auto_stabilization: bool = False
     depth_hold: bool = False
     battery_percentage: float = 0

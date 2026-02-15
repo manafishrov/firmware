@@ -35,8 +35,7 @@ async def handle_status_update(
     )
 
     payload = RovStatus(
-        pitch_stabilization=state.system_status.pitch_stabilization,
-        roll_stabilization=state.system_status.roll_stabilization,
+        auto_stabilization=state.system_status.auto_stabilization,
         depth_hold=state.system_status.depth_hold,
         battery_percentage=int(state.system_status.battery_percentage),
         health=state.system_health,

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import time
-from typing import Final, cast
+from typing import cast
 
 import numpy as np
 from numpy.typing import NDArray
@@ -30,22 +30,13 @@ from .constants import (
 )
 from .log import log_error, log_info
 from .models.config import (
-    RegulatorPID,
+    AxisConfig,
     RegulatorSuggestions as RegulatorSuggestionsPayload,
 )
 from .rov_state import RovState
 from .toast import toast_loading, toast_success
 from .websocket.message import RegulatorSuggestions
 from .websocket.queue import get_message_queue
-
-
-# TODO: Add this to config/settings UI and remove from here
-TEST_DEPTH_HOLD_SETPOINT_RATE_MPS: Final = 0.5
-
-# TODO: Add this to config/settings UI and remove from here
-TEST_YAW_KP: Final = 3
-TEST_YAW_KI: Final = 0.0
-TEST_YAW_KD: Final = 0
 
 
 def _clamp_dt(dt: float) -> float:
@@ -230,6 +221,7 @@ class Regulator:
         self.integral_attitude_rad: NDArray[np.float32] = np.array(
             [0.0, 0.0, 0.0], dtype=np.float32
         )
+        self.integral_depth: float = 0.0
 
         # Edge detection for resetting when enabling regulators
         self._prev_depth_hold_enabled: bool = False
@@ -238,7 +230,7 @@ class Regulator:
         self.auto_tuning_phase: str = ""
         self.auto_tuning_step: str = ""
         self.auto_tuning_data: list[tuple[float, float]] = []
-        self.auto_tuning_params: dict[str, RegulatorPID] = {}
+        self.auto_tuning_params: dict[str, AxisConfig] = {}
         self.auto_tuning_last_update: float = 0.0
         self.auto_tuning_zero_actuation: float = 0.0
         self.auto_tuning_amplitude: float = 0.0
@@ -250,7 +242,7 @@ class Regulator:
         """Update desired depth and attitude targets from the user direction vector.
 
         When depth hold is enabled, adjusts state.regulator.desired_depth by the heave input
-        (direction_vector[2]) scaled by TEST_DEPTH_HOLD_SETPOINT_RATE_MPS and the regulator
+        (direction_vector[2]) scaled by the configured depth_rate and the regulator
         delta-time. When pitch stabilization is enabled, applies yaw, pitch, and roll increments
         (from direction_vector[4], [3], [5] respectively) to self.desired_attitude using
         quaternion operations, clamps pitch to ±PITCH_MAX to avoid gimbal issues, and writes
@@ -266,17 +258,17 @@ class Regulator:
             desired_depth = (
                 self.state.regulator.desired_depth
                 + heave_change
-                * TEST_DEPTH_HOLD_SETPOINT_RATE_MPS
+                * self.state.rov_config.regulator.depth.rate
                 * self.delta_t_run_regulator
             )
             self.state.regulator.desired_depth = desired_depth
 
-        if self.state.system_status.pitch_stabilization:  # TODO: Change to general stabilization when implemented, "pitch_stabilization" will no longer be a thing
+        if self.state.system_status.auto_stabilization:
             desired_yaw_change = cast(
                 float,
                 direction_vector[4]
                 * self.delta_t_run_regulator
-                * self.state.rov_config.regulator.turn_speed,
+                * self.state.rov_config.regulator.yaw.rate,
             )
             yaw_rotation = Rotation.from_rotvec(
                 [0.0, 0.0, np.deg2rad(desired_yaw_change, dtype=np.float32)]
@@ -287,7 +279,7 @@ class Regulator:
                 float,
                 direction_vector[3]
                 * self.delta_t_run_regulator
-                * self.state.rov_config.regulator.turn_speed,
+                * self.state.rov_config.regulator.pitch.rate,
             )
             yaw, pitch, roll = cast(
                 tuple[float, float, float],
@@ -303,7 +295,7 @@ class Regulator:
                 float,
                 direction_vector[5]
                 * self.delta_t_run_regulator
-                * self.state.rov_config.regulator.turn_speed,
+                * self.state.rov_config.regulator.roll.rate,
             )
             roll_rotation = Rotation.from_rotvec(
                 [np.deg2rad(desired_roll_change, dtype=np.float32), 0.0, 0.0]
@@ -313,7 +305,7 @@ class Regulator:
             yaw, pitch, roll = self.desired_attitude.as_euler("ZYX", degrees=True)
             self.state.regulator.desired_pitch = pitch
             self.state.regulator.desired_roll = roll
-            # TODO: Implement desired yaw in state and in attitude display in app
+            self.state.regulator.desired_yaw = yaw
 
     def update_regulator_data_from_imu(self) -> None:
         """Update internal AHRS and regulator fields from the IMU and write current attitude to state for visualization.
@@ -342,10 +334,11 @@ class Regulator:
 
         self.ahrs.update(gyr, accel, self.delta_t_update_ahrs)
 
-        _yaw, pitch, roll = self.ahrs.current_attitude.as_euler("ZYX", degrees=True)
+        yaw, pitch, roll = self.ahrs.current_attitude.as_euler("ZYX", degrees=True)
 
         self.state.regulator.pitch = pitch
         self.state.regulator.roll = roll
+        self.state.regulator.yaw = yaw
 
     def _handle_edges(self) -> None:
         """Detect and handle rising-edge transitions for depth-hold and stabilization enable flags.
@@ -356,7 +349,7 @@ class Regulator:
         flags to reflect the current enablement.
         """
         depth_hold_enabled = self.state.system_status.depth_hold
-        stabilization_enabled = self.state.system_status.pitch_stabilization  # TODO: Change to general stabilization when implemented, "pitch_stabilization" will no longer be a thing
+        stabilization_enabled = self.state.system_status.auto_stabilization
 
         if depth_hold_enabled and not self._prev_depth_hold_enabled:
             self._depth_hold_enable_edge()
@@ -375,7 +368,7 @@ class Regulator:
         """
         current_depth = self.state.pressure.depth
         self.state.regulator.desired_depth = current_depth
-        self.state.regulator.integral_depth = 0.0
+        self.integral_depth = 0.0
         self.current_dt_depth = 0.0
         self.previous_depth = current_depth
 
@@ -397,12 +390,12 @@ class Regulator:
             np.float32,
             np.clip((1.0 - abs(heave_input)), 0.0, 1.0, dtype=np.float32),
         )
-        self.state.regulator.integral_depth += float(
+        self.integral_depth += float(
             error * self.delta_t_run_regulator * integral_scale
         )
 
-        self.state.regulator.integral_depth = np.clip(
-            self.state.regulator.integral_depth,
+        self.integral_depth = np.clip(
+            self.integral_depth,
             -DEPTH_INTEGRAL_WINDUP_CLIP,
             DEPTH_INTEGRAL_WINDUP_CLIP,
             dtype=np.float32,
@@ -419,7 +412,7 @@ class Regulator:
         config = self.state.rov_config.regulator
         depth_regulator_actuation = (
             float(config.depth.kp) * error
-            + float(config.depth.ki) * float(self.state.regulator.integral_depth)
+            + float(config.depth.ki) * float(self.integral_depth)
             + float(config.depth.kd) * float(self.current_dt_depth)
         )
 
@@ -487,9 +480,9 @@ class Regulator:
         )
         u_yaw = cast(
             float,
-            TEST_YAW_KP * err_rotvec[2]
-            + TEST_YAW_KI * self.integral_attitude_rad[2]
-            + TEST_YAW_KD * (-omega[2]),
+            config.yaw.kp * err_rotvec[2]
+            + config.yaw.ki * self.integral_attitude_rad[2]
+            + config.yaw.kd * (-omega[2]),
         )
 
         stabilization_actuation = (
@@ -621,9 +614,7 @@ class Regulator:
                 direction_vector[0:3].copy()
             )
 
-        if (
-            self.state.system_status.pitch_stabilization
-        ):  # TODO: Replace with general stabilization bool
+        if self.state.system_status.auto_stabilization:
             regulator_direction_vector[3:6] = self._handle_stabilization(
                 direction_vector[3:6].copy()
             )
@@ -677,13 +668,13 @@ class Regulator:
             suggestions = RegulatorSuggestions(
                 payload=RegulatorSuggestionsPayload(
                     pitch=self.auto_tuning_params.get(
-                        "pitch", RegulatorPID(kp=0, ki=0, kd=0)
+                        "pitch", AxisConfig(kp=0, ki=0, kd=0)
                     ),
                     roll=self.auto_tuning_params.get(
-                        "roll", RegulatorPID(kp=0, ki=0, kd=0)
+                        "roll", AxisConfig(kp=0, ki=0, kd=0)
                     ),
                     depth=self.auto_tuning_params.get(
-                        "depth", RegulatorPID(kp=0, ki=0, kd=0)
+                        "depth", AxisConfig(kp=0, ki=0, kd=0)
                     ),
                 )
             )
@@ -944,8 +935,8 @@ class Regulator:
             kp = float(0.6 * ku)
             ki = float(1.2 * ku / tu)
             kd = float(0.075 * ku * tu)
-            self.auto_tuning_params[axis] = RegulatorPID(kp=kp, ki=ki, kd=kd)
+            self.auto_tuning_params[axis] = AxisConfig(kp=kp, ki=ki, kd=kd)
             log_info(f"{axis} PID: Kp={kp:.3f}, Ki={ki:.3f}, Kd={kd:.3f}")
         except Exception as e:
             log_error(f"Curve fitting failed for {axis}: {e}")
-            self.auto_tuning_params[axis] = RegulatorPID(kp=0, ki=0, kd=0)
+            self.auto_tuning_params[axis] = AxisConfig(kp=0, ki=0, kd=0)
