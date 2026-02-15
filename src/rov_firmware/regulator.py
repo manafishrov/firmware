@@ -676,6 +676,9 @@ class Regulator:
                     depth=self.auto_tuning_params.get(
                         "depth", AxisConfig(kp=0, ki=0, kd=0)
                     ),
+                    yaw=self.auto_tuning_params.get(
+                        "depth", AxisConfig(kp=0, ki=0, kd=0)
+                    ),
                 )
             )
             queue = get_message_queue()
