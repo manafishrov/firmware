@@ -5,7 +5,7 @@ import logging
 from pathlib import Path
 import struct
 
-from serial_asyncio import open_serial_connection
+from serial_asyncio_fast import open_serial_connection
 
 
 ESC_MAX_READ_BUFFER_SIZE = 16

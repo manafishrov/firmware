@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
-from serial_asyncio import open_serial_connection
+from serial_asyncio_fast import open_serial_connection
 
 from .log import log_error, log_info
 from .rov_state import RovState

@@ -18,7 +18,7 @@
         pydantic
         smbus2
         scipy
-        pyserial-asyncio
+        pyserial-asyncio-fast
       ]
       ++ [
         (pkgs.python313Packages.buildPythonPackage rec {
