@@ -16,7 +16,7 @@ def main() -> None:
         "numpydantic",
         "smbus2",
         "scipy",
-        "serial_asyncio",
+        "serial_asyncio_fast",
         "bmi270",
         "ms5837",
     ]
