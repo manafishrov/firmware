@@ -158,4 +158,5 @@ class RegulatorSuggestions(CamelCaseModel):
 
     pitch: AxisConfig
     roll: AxisConfig
+    yaw: AxisConfig
     depth: AxisConfig
