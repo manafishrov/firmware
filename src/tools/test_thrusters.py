@@ -4,7 +4,6 @@ import asyncio
 import logging
 from pathlib import Path
 import struct
-from typing import cast
 
 from serial_asyncio import open_serial_connection
 
@@ -98,7 +97,7 @@ def _log_telemetry(packet: bytearray, logger: logging.Logger) -> None:
     """Log the telemetry data."""
     global_id = packet[1]
     packet_type = packet[2]
-    value = cast(int, struct.unpack("<i", packet[3:7])[0])
+    value = struct.unpack("<i", packet[3:7])[0]
     if packet_type == ESC_PACKET_TYPE_ERPM:
         erpm_count[0] += 1
         if erpm_count[0] % 100 != 0:

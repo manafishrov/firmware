@@ -33,9 +33,12 @@ async def handle_telemetry(
     payload = RovTelemetry(
         pitch=state.regulator.pitch,
         roll=state.regulator.roll,
+        yaw=state.regulator.yaw,
+        depth=state.pressure.depth,
         desired_pitch=state.regulator.desired_pitch,
         desired_roll=state.regulator.desired_roll,
-        depth=state.pressure.depth,
+        desired_yaw=state.regulator.desired_yaw,
+        desired_depth=state.regulator.desired_depth,
         water_temperature=state.pressure.temperature,
         electronics_temperature=electronics_temperature,
         thruster_rpms=[int(erpm / (THRUSTER_POLES // 2)) for erpm in state.esc.erpm],

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import struct
-from typing import cast
 
 from ..constants import (
     ESC_MAX_READ_BUFFER_SIZE,
@@ -83,7 +82,7 @@ class EscSensor:
         """
         global_id = packet[1]
         packet_type = packet[2]
-        value = cast(int, struct.unpack("<i", packet[3:7])[0])
+        value = struct.unpack("<i", packet[3:7])[0]
         if 0 <= global_id < NUM_MOTORS:
             if packet_type == ESC_PACKET_TYPE_ERPM:
                 self.state.esc.erpm[global_id] = value  # ERPM

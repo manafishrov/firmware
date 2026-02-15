@@ -84,7 +84,7 @@ async def handle_custom_action(
     try:
         module = importlib.import_module(f"src.custom_actions.{payload}")
         if hasattr(module, "execute"):
-            await module.execute(state)  # pyright: ignore[reportAny]
+            await module.execute(state)
         else:
             log_warn(f"Custom action {payload} has no 'execute' function")
     except ImportError:

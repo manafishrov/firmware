@@ -9,10 +9,11 @@ class RovTelemetry(CamelCaseModel):
     pitch: float
     roll: float
     yaw: float
+    depth: float
     desired_pitch: float
     desired_roll: float
     desired_yaw: float
-    depth: float
+    desired_depth: float
     water_temperature: float
     electronics_temperature: float
     thruster_rpms: list[int]

@@ -27,8 +27,8 @@ jobs:
     - name: Install dependencies
       run: uv sync
 
-    - name: Install ruff and basedpyright
-      run: uv tool install ruff && uv tool install basedpyright
+    - name: Install ruff and ty
+      run: uv tool install ruff && uv tool install ty
 
     - name: Run ruff linter
       run: ruff check --no-fix
@@ -36,5 +36,5 @@ jobs:
     - name: Run ruff formatter check
       run: ruff format
 
-    - name: Run basedpyright type check
-      run: basedpyright
+    - name: Run ty type check
+      run: ty check

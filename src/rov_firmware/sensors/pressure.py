@@ -75,9 +75,9 @@ class PressureSensor:
         try:
             if self.sensor.read():
                 return PressureData(
-                    pressure=self.sensor.pressure(),  # pyright: ignore[reportUnknownArgumentType]
-                    temperature=self.sensor.temperature(),  # pyright: ignore[reportUnknownArgumentType]
-                    depth=self.sensor.depth(),  # pyright: ignore[reportUnknownArgumentType]
+                    pressure=self.sensor.pressure(),
+                    temperature=self.sensor.temperature(),
+                    depth=self.sensor.depth(),
                 )
             else:
                 return None

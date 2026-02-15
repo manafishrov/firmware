@@ -10,7 +10,7 @@ def main() -> None:
     """Run the pressure sensor test script."""
     logger = logging.getLogger(__name__)
     sensor = MS5837_30BA()
-    sensor.setFluidDensity(DENSITY_FRESHWATER)  # pyright: ignore[reportUnknownMemberType]
+    sensor.setFluidDensity(DENSITY_FRESHWATER)
 
     if not sensor.init():
         logger.error("Failed to initialize pressure sensor")

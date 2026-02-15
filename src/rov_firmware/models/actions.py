@@ -6,7 +6,7 @@ from numpydantic import NDArray, Shape
 from pydantic import RootModel, model_validator
 
 
-class DirectionVector(RootModel[NDArray[Shape["8"], np.float32]]):
+class DirectionVector(RootModel[NDArray[Shape["8"], np.float32]]):  # ty: ignore[invalid-type-form]
     """A direction vector for ROV movement."""
 
     @model_validator(mode="before")

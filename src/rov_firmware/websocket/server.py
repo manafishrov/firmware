@@ -82,9 +82,9 @@ class WebsocketServer:
         try:
             async for message in websocket:
                 try:
-                    data = json.loads(message)  # pyright: ignore[reportAny]
+                    data = json.loads(message)
                     deserialized_msg = websocket_message_adapter.validate_python(data)
-                    await handle_message(self.state, websocket, deserialized_msg)  # pyright: ignore[reportUnknownArgumentType]
+                    await handle_message(self.state, websocket, deserialized_msg)
                 except json.JSONDecodeError:
                     log_warn(
                         f"Failed to deserialize message from {cast(tuple[str, int] | None, websocket.remote_address)}"

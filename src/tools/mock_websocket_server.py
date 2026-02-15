@@ -60,7 +60,7 @@ SYSTEM_STATUS = {
 }
 
 
-async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR0912,PLR0915
+async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR0915
     """Handle a websocket client connection."""
     global MOCK_CONFIG  # noqa: PLW0603
     logger = logging.getLogger(__name__)
@@ -143,7 +143,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
         last_direction_vector = None
         async for message in websocket:
             try:
-                data = cast(dict[str, Any], json.loads(message))  # pyright: ignore[reportExplicitAny]
+                data = cast(dict[str, Any], json.loads(message))
                 msg_type = data.get("type")
                 payload = data.get("payload")
 
@@ -155,7 +155,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     config_msg = {"type": "config", "payload": MOCK_CONFIG}
                     await websocket.send(json.dumps(config_msg))
                 elif msg_type == "setConfig":
-                    MOCK_CONFIG = payload  # pyright: ignore[reportConstantRedefinition]
+                    MOCK_CONFIG = payload
                     toast_msg = {
                         "type": "showToast",
                         "payload": {

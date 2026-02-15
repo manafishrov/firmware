@@ -18,10 +18,10 @@ class EscData(BaseModel):
 class ImuData(BaseModel):
     """Model for IMU data."""
 
-    acceleration: NDArray[Shape["3"], np.float32] = np.array(  # pyright: ignore[reportGeneralTypeIssues]
+    acceleration: NDArray[Shape["3"], np.float32] = np.array(  # ty: ignore[invalid-type-form]
         [0.0, 0.0, 0.0], dtype=np.float32
     )
-    gyroscope: NDArray[Shape["3"], np.float32] = np.array(  # pyright: ignore[reportGeneralTypeIssues]
+    gyroscope: NDArray[Shape["3"], np.float32] = np.array(  # ty: ignore[invalid-type-form]
         [0.0, 0.0, 0.0], dtype=np.float32
     )
     temperature: float = 0.0
