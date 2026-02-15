@@ -3,7 +3,7 @@ name = "manafish-firmware"
 version = "1.0.0"
 description = "Firmware for the Manafish ROV"
 license = "AGPL-3.0-or-later"
-requires-python = ">=3.13,<3.14"
+requires-python = ">=3.14,<3.15"
 dependencies = [
   "numpy==2.3.4",
   "websockets==15.0.1",
