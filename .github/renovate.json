@@ -10,6 +10,9 @@
     "security:minimumReleaseAgeNpm",
     ":maintainLockFilesWeekly"
   ],
+  "dependencyDashboard": true,
+  "labels": ["dependencies"],
+  "commitMessagePrefix": "chore(deps): ",
   "nix": {
     "enabled": true
   },
