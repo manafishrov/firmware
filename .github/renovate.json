@@ -12,9 +12,6 @@
   "pep621": {
     "enabled": false
   },
-  "uv": {
-    "enabled": false
-  },
   "nix": {
     "enabled": true
   },
