@@ -1,34 +1,34 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
-    "config:recommended",
-    "docker:pinDigests",
-    "helpers:pinGitHubActionDigests",
-    ":configMigration",
-    ":pinDevDependencies",
-    "abandonments:recommended",
-    "security:minimumReleaseAgeNpm",
-    ":maintainLockFilesWeekly"
+    "config:best-practices",
+    "schedule:earlyMondays",
+    ":separateMultipleMajorReleases",
+    ":semanticCommits",
+    ":enablePreCommit",
+    ":dependencyDashboard"
   ],
-  "dependencyDashboard": true,
-  "labels": [
-    "dependencies"
-  ],
-  "commitMessagePrefix": "chore(deps): ",
+  "labels": ["dependencies"],
+  "pep621": {
+    "enabled": false
+  },
+  "uv": {
+    "enabled": false
+  },
   "nix": {
     "enabled": true
   },
   "packageRules": [
     {
-      "matchManagers": [
-        "nix"
-      ],
+      "matchUpdateTypes": ["patch"],
+      "groupName": "patch updates"
+    },
+    {
+      "matchManagers": ["nix"],
       "groupName": "nix dependencies"
     },
     {
-      "matchDatasources": [
-        "repology"
-      ],
+      "matchDatasources": ["repology"],
       "versioning": "loose"
     }
   ],
@@ -36,11 +36,9 @@
     {
       "description": "Standard Python dependencies from Nixpkgs (via Repology)",
       "customType": "regex",
-      "managerFilePatterns": [
-        "/^pyproject\\.toml$/"
-      ],
+      "managerFilePatterns": ["/^pyproject\\.toml$/"],
       "matchStrings": [
-        "\"(?<depName>(?:numpy|websockets|pydantic|smbus2|scipy|pyserial-asyncio))==(?<currentValue>[0-9\\.]+)\""
+        "\"(?<depName>(?:numpy|websockets|pydantic|smbus2|scipy|pyserial-asyncio(?:-fast)?))==(?<currentValue>[0-9\\.]+)\""
       ],
       "datasourceTemplate": "repology",
       "depNameTemplate": "nix_stable_25_11/python:{{depName}}"
@@ -48,10 +46,7 @@
     {
       "description": "Custom Python packages via PyPI (numpydantic, bmi270)",
       "customType": "regex",
-      "managerFilePatterns": [
-        "/^pyproject\\.toml$/",
-        "/^configuration\\.nix$/"
-      ],
+      "managerFilePatterns": ["/^pyproject\\.toml$/", "/^configuration\\.nix$/"],
       "matchStrings": [
         "pname = \"(?<depName>numpydantic|bmi270)\";\\s+version = \"(?<currentValue>[0-9\\.]+)\";",
         "\"(?<depName>numpydantic|bmi270)==(?<currentValue>[0-9\\.]+)\""
@@ -61,10 +56,7 @@
     {
       "description": "GitHub-only Python packages via commits (ms5837)",
       "customType": "regex",
-      "managerFilePatterns": [
-        "/^pyproject\\.toml$/",
-        "/^configuration\\.nix$/"
-      ],
+      "managerFilePatterns": ["/^pyproject\\.toml$/", "/^configuration\\.nix$/"],
       "matchStrings": [
         "pname = \"ms5837\";\\s+version = \"(?<currentValue>[0-9\\.]+)\";[\\s\\S]*?rev = \"(?<currentDigest>[a-f0-9]+)\";",
         "ms5837 @ git\\+https://github\\.com/bluerobotics/ms5837-python\\.git@(?<currentDigest>[a-f0-9]+)"
@@ -75,10 +67,7 @@
     {
       "description": "Python version sync between pyproject.toml and configuration.nix",
       "customType": "regex",
-      "managerFilePatterns": [
-        "/^pyproject\\.toml$/",
-        "/^configuration\\.nix$/"
-      ],
+      "managerFilePatterns": ["/^pyproject\\.toml$/", "/^configuration\\.nix$/"],
       "matchStrings": [
         "requires-python = \">=(?<currentValue>3\\.[0-9]+)\"",
         "pkgs\\.python(?<currentValue>3[0-9]+)\\.withPackages"
