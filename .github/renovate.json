@@ -38,7 +38,7 @@
         "\"(?<depName>(?:numpy|websockets|pydantic|smbus2|scipy|pyserial-asyncio(?:-fast)?))==(?<currentValue>[0-9\\.]+)\""
       ],
       "datasourceTemplate": "repology",
-      "depNameTemplate": "nix_stable_25_11/python:{{depName}}"
+      "depNameTemplate": "nix_stable_25_11/python3.13-{{depName}}"
     },
     {
       "description": "Custom Python packages via PyPI (numpydantic, bmi270)",
