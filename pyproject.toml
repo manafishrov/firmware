@@ -5,7 +5,7 @@ description = "Firmware for the Manafish ROV"
 license = "AGPL-3.0-or-later"
 requires-python = ">=3.13,<3.14"
 dependencies = [
-  "numpy==2.3.4",
+  "numpy==2.4.2",
   "websockets==15.0.1",
   "pydantic==2.12.5",
   "numpydantic==1.7.0",
