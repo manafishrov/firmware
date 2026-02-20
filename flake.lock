@@ -16,6 +16,22 @@
         "type": "github"
       }
     },
+    "bmi270-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1682671935,
+        "narHash": "sha256-IxkMWWcrsglFV5HGDMK0GBx5o0svNfRXqhW8/ZWpsUk=",
+        "owner": "CoRoLab-Berlin",
+        "repo": "bmi270_python",
+        "rev": "8309e687d6b346455833c5d0c2734eeb56e98789",
+        "type": "github"
+      },
+      "original": {
+        "owner": "CoRoLab-Berlin",
+        "repo": "bmi270_python",
+        "type": "github"
+      }
+    },
     "flake-compat": {
       "locked": {
         "lastModified": 1767039857,
@@ -49,6 +65,22 @@
         "owner": "nix-community",
         "ref": "release-25.11",
         "repo": "home-manager",
+        "type": "github"
+      }
+    },
+    "ms5837-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1751318302,
+        "narHash": "sha256-LBwM9sTvr7IaBcY8PcsPZcAbNRWBa4hj7tUC4oOr4eM=",
+        "owner": "bluerobotics",
+        "repo": "ms5837-python",
+        "rev": "02996d71d2f08339b3d317b3f4da0a83781c706e",
+        "type": "github"
+      },
+      "original": {
+        "owner": "bluerobotics",
+        "repo": "ms5837-python",
         "type": "github"
       }
     },
@@ -115,14 +147,33 @@
         "type": "github"
       }
     },
+    "numpydantic-src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1760160211,
+        "narHash": "sha256-77MfCWIZI5jkh6q9An6cC7XUFhDW+LpSgtXcmCnPwcQ=",
+        "owner": "p2p-ld",
+        "repo": "numpydantic",
+        "rev": "2980276ad056d7b9041b75c879b95e5c8c718d8b",
+        "type": "github"
+      },
+      "original": {
+        "owner": "p2p-ld",
+        "repo": "numpydantic",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
+        "bmi270-src": "bmi270-src",
         "home-manager": "home-manager",
+        "ms5837-src": "ms5837-src",
         "nixos-raspberrypi": "nixos-raspberrypi",
         "nixpkgs": [
           "nixos-raspberrypi",
           "nixpkgs"
-        ]
+        ],
+        "numpydantic-src": "numpydantic-src"
       }
     }
   },

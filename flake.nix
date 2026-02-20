@@ -19,6 +19,18 @@
       url = "github:nix-community/home-manager/release-25.11";
       inputs.nixpkgs.follows = "nixpkgs";
     };
+    ms5837-src = {
+      url = "github:bluerobotics/ms5837-python";
+      flake = false;
+    };
+    numpydantic-src = {
+      url = "github:p2p-ld/numpydantic";
+      flake = false;
+    };
+    bmi270-src = {
+      url = "github:CoRoLab-Berlin/bmi270_python";
+      flake = false;
+    };
   };
 
   outputs = {
@@ -27,7 +39,7 @@
     nixos-raspberrypi,
     home-manager,
     ...
-  }: let
+  } @ inputs: let
     cameras = [
       "ov5647"
       "imx219"
@@ -53,9 +65,10 @@
 
     mkCamera = camera: {
       specialArgs = {
+        inherit inputs;
         inherit nixos-raspberrypi;
         inherit home-manager;
-        cameraModule = camera;
+        inherit camera;
       };
       modules = [
         nixos-raspberrypi.nixosModules.sd-image
@@ -79,7 +92,7 @@
         piVersions
       );
 
-    mkPackages = system: let
+    mkPackages = _: let
       mkPackage = pi: camera: {
         name = "${pi.name}-${camera}";
         value = self.nixosConfigurations."manafish-${pi.name}-${camera}".config.system.build.sdImage;
@@ -90,8 +103,19 @@
         (pi: map (camera: mkPackage pi camera) cameras)
         piVersions
       );
+
+    mkFormatter = system: nixpkgs.legacyPackages.${system}.alejandra;
   in {
     nixosConfigurations = mkConfigurations;
+
+    formatter = builtins.listToAttrs (
+      map
+      (system: {
+        name = system;
+        value = mkFormatter system;
+      })
+      supportedSystems
+    );
 
     packages = builtins.listToAttrs (
       map

@@ -1,7 +1,8 @@
 {
   pkgs,
   home-manager,
-  cameraModule,
+  camera,
+  inputs,
   ...
 }: let
   pico-sdk-with-submodules = pkgs.pico-sdk.override {
@@ -21,14 +22,11 @@
         pyserial-asyncio-fast
       ]
       ++ [
-        (pkgs.python313Packages.buildPythonPackage rec {
+        (pkgs.python313Packages.buildPythonPackage {
           pname = "numpydantic";
           version = "1.7.0";
           format = "pyproject";
-          src = pkgs.fetchPypi {
-            inherit pname version;
-            hash = "sha256-JoKFvuAm2d/fI+/u4T9gw7ddR94v/fLli08MF6aCTjs=";
-          };
+          src = inputs.numpydantic-src;
           nativeBuildInputs = with pkgs.python313Packages; [pdm-backend];
           propagatedBuildInputs = with pkgs.python313Packages; [pydantic numpy];
           doCheck = false;
@@ -37,12 +35,7 @@
           pname = "bmi270";
           version = "0.4.3";
           format = "other";
-          src = pkgs.fetchFromGitHub {
-            owner = "CoRoLab-Berlin";
-            repo = "bmi270_python";
-            rev = "8309e687d6b346455833c5d0c2734eeb56e98789";
-            hash = "sha256-IxkMWWcrsglFV5HGDMK0GBx5o0svNfRXqhW8/ZWpsUk=";
-          };
+          src = inputs.bmi270-src;
           buildPhase = ":";
           installPhase = ''
             runHook preInstall
@@ -56,12 +49,7 @@
           pname = "ms5837";
           version = "0.1.0";
           format = "pyproject";
-          src = pkgs.fetchFromGitHub {
-            owner = "bluerobotics";
-            repo = "ms5837-python";
-            rev = "02996d71d2f08339b3d317b3f4da0a83781c706e";
-            hash = "sha256-LBwM9sTvr7IaBcY8PcsPZcAbNRWBa4hj7tUC4oOr4eM=";
-          };
+          src = inputs.ms5837-src;
           nativeBuildInputs = with pkgs.python313Packages; [setuptools wheel];
           propagatedBuildInputs = with pkgs.python313Packages; [smbus2];
           doCheck = false;
@@ -87,13 +75,13 @@ in {
 
   # Disable GUI options for packages
   nixpkgs.overlays = [
-    (final: prev: {
+    (_: prev: {
       rpicam-apps = prev.rpicam-apps.override {
         withQtPreview = false;
         withEglPreview = false;
         withOpenCVPostProc = false;
       };
-      libadwaita = prev.libadwaita.overrideAttrs (old: {
+      libadwaita = prev.libadwaita.overrideAttrs (_: {
         doCheck = false;
       });
     })
@@ -116,7 +104,7 @@ in {
     home = "/home/pi";
   };
 
-  # Set the hostname and IP of the Pi
+  # Networking configuration
   networking = {
     hostName = "manafish";
     interfaces.eth0.ipv4.addresses = [
@@ -125,16 +113,10 @@ in {
         prefixLength = 24;
       }
     ];
-  };
-
-  # Disable firewall so all ports are open to allow easy configuration
-  networking = {
+    # Disable firewall so all ports are open to allow easy configuration
     firewall.enable = false;
     nftables.enable = false;
-  };
-
-  # Enable Wi-Fi (For downloading temporary packages or files, if permanent should instead be included in this configuration)
-  networking = {
+    # Enable Wi-Fi
     wireless.iwd.enable = true;
     networkmanager = {
       enable = true;
@@ -142,29 +124,12 @@ in {
     };
   };
 
-  # mDNS to connect via manafish.local
-  services.avahi = {
-    enable = true;
-    nssmdns4 = true;
-    allowInterfaces = ["eth0"];
-    publish = {
-      enable = true;
-      addresses = true;
-    };
-  };
-
-  # Enable SSH
-  services.openssh = {
-    enable = true;
-    settings.PasswordAuthentication = true;
-  };
-
   # Enable camera and I2C with a high baud rate
   hardware = {
     i2c.enable = true;
     raspberry-pi.config.all = {
       dt-overlays = {
-        ${cameraModule} = {
+        ${camera} = {
           enable = true;
           params = {};
         };
@@ -186,18 +151,38 @@ in {
     };
   };
 
-  # Setup video streaming
-  services.go2rtc = {
-    enable = true;
-    settings = {
-      streams.cam = "exec:${pkgs.rpi.rpicam-apps}/bin/rpicam-vid -t 0 -n --inline --width 1440 --height 1080 --framerate 30 --codec h264 -o -";
-      api = {
-        listen = ":1984";
-        origin = "*";
+  # Services
+  services = {
+    # mDNS to connect via manafish.local
+    avahi = {
+      enable = true;
+      nssmdns4 = true;
+      allowInterfaces = ["eth0"];
+      publish = {
+        enable = true;
+        addresses = true;
       };
-      webrtc.listen = ":8555";
-      rtsp.listen = "";
-      rtmp.listen = "";
+    };
+
+    # Enable SSH
+    openssh = {
+      enable = true;
+      settings.PasswordAuthentication = true;
+    };
+
+    # Setup video streaming
+    go2rtc = {
+      enable = true;
+      settings = {
+        streams.cam = "exec:${pkgs.rpi.rpicam-apps}/bin/rpicam-vid -t 0 -n --inline --width 1440 --height 1080 --framerate 30 --codec h264 -o -";
+        api = {
+          listen = ":1984";
+          origin = "*";
+        };
+        webrtc.listen = ":8555";
+        rtsp.listen = "";
+        rtmp.listen = "";
+      };
     };
   };
 
@@ -237,14 +222,16 @@ in {
           neovim
           nano
         ];
-        file.LICENSE.source = ./LICENSE;
-        file."microcontroller-firmware/dshot.uf2".source = pkgs.fetchurl {
-          url = "https://github.com/manafishrov/microcontroller-firmware/releases/download/v1.0.0-beta.1/dshot.uf2";
-          sha256 = "0lj0hgivshc2nh0m1lxg2ks4821203q2zrw4qd81kvk1vqldzylr";
-        };
-        file."microcontroller-firmware/pwm.uf2".source = pkgs.fetchurl {
-          url = "https://github.com/manafishrov/microcontroller-firmware/releases/download/v1.0.0-beta.1/pwm.uf2";
-          sha256 = "0kmyf5imy6909412nzi87qwxkz5z8z0acxk4vghlw6fb2gwd4wn0";
+        file = {
+          LICENSE.source = ./LICENSE;
+          "microcontroller-firmware/dshot.uf2".source = pkgs.fetchurl {
+            url = "https://github.com/manafishrov/microcontroller-firmware/releases/download/v1.0.0-beta.1/dshot.uf2";
+            sha256 = "0lj0hgivshc2nh0m1lxg2ks4821203q2zrw4qd81kvk1vqldzylr";
+          };
+          "microcontroller-firmware/pwm.uf2".source = pkgs.fetchurl {
+            url = "https://github.com/manafishrov/microcontroller-firmware/releases/download/v1.0.0-beta.1/pwm.uf2";
+            sha256 = "0kmyf5imy6909412nzi87qwxkz5z8z0acxk4vghlw6fb2gwd4wn0";
+          };
         };
         activation.setupFirmware = home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
           if [ ! -f "$HOME/.firmware_setup" ]; then
