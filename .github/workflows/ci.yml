@@ -1,40 +1,80 @@
 name: CI
-
 on:
   push:
     branches:
       - main
   pull_request:
-    branches:
-      - main
-
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
-  check:
+  filter:
+    runs-on: ubuntu-latest
+    outputs:
+      nix: ${{ steps.filter.outputs.nix }}
+      python: ${{ steps.filter.outputs.python }}
+      github: ${{ steps.filter.outputs.github }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: dorny/paths-filter@de90cc6fb38fc0963ad72b210f1f284cd68cea36 # v3
+        id: filter
+        with:
+          filters: |
+            nix:
+              - '**/*.nix'
+              - 'flake.nix'
+              - 'flake.lock'
+            python:
+              - 'pyproject.toml'
+              - 'src/**'
+
+  code-quality-nix:
+    needs: filter
+    if: needs.filter.outputs.nix == 'true'
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
+      - uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
+      - name: Check formatting (Nix)
+        run: nix fmt -- --check .
+      - name: Check linting (Nix)
+        run: nix run nixpkgs#statix -- check .
+      - name: Check for dead code (Nix)
+        run: nix run nixpkgs#deadnix -- --fail .
+      - name: Validate flake (Nix)
+        run: nix flake check --show-trace
 
-    - name: Set up Python
-      uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
-      with:
-        python-version-file: "pyproject.toml"
+  code-quality-python:
+    needs: filter
+    if: needs.filter.outputs.python == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7
+        with:
+          enable-cache: true
+      - name: Install dependencies
+        run: uv sync
+      - name: Run ruff linter
+        run: uv run ruff check --no-fix
+      - name: Run ruff formatter check
+        run: uv run ruff format --check
+      - name: Run ty type check
+        run: uv run ty check
 
-    - name: Install uv
-      uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b # v7
-      with:
-        enable-cache: true
-
-    - name: Install dependencies
-      run: uv sync
-
-    - name: Install ruff and ty
-      run: uv tool install ruff && uv tool install ty
-
-    - name: Run ruff linter
-      run: ruff check --no-fix
-
-    - name: Run ruff formatter check
-      run: ruff format
-
-    - name: Run ty type check
-      run: ty check
+  validate-nix-eval:
+    needs: filter
+    if: needs.filter.outputs.nix == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pi: [pi3, pi4]
+        camera: [ov5647, imx219, imx477]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: DeterminateSystems/nix-installer-action@c5a866b6ab867e88becbed4467b93592bce69f8a # v21
+      - uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
+      - name: Evaluate Configuration (Dry-run)
+        run: nix build .#manafish-${{ matrix.pi }}-${{ matrix.camera }}.config.system.build.sdImage --dry-run
