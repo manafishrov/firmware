@@ -11,9 +11,7 @@
   "labels": [
     "dependencies"
   ],
-  "pep621": {
-    "enabled": false
-  },
+  "enabledManagers": ["nix", "regex"],
   "nix": {
     "enabled": true
   },
