@@ -11,10 +11,7 @@
   "labels": [
     "dependencies"
   ],
-  "enabledManagers": ["nix", "regex"],
-  "nix": {
-    "enabled": true
-  },
+  "enabledManagers": ["nix", "regex", "github-actions"],
   "postUpgradeTasks": {
     "commands": [
       "scripts/sync-python-deps.sh"
