@@ -8,7 +8,9 @@
     ":enablePreCommit",
     ":dependencyDashboard"
   ],
-  "labels": ["dependencies"],
+  "labels": [
+    "dependencies"
+  ],
   "pep621": {
     "enabled": false
   },
@@ -16,21 +18,35 @@
     "enabled": true
   },
   "postUpgradeTasks": {
-    "commands": ["scripts/sync-python-deps.sh"],
-    "fileFilters": ["pyproject.toml", "flake.lock", "configuration.nix"],
+    "commands": [
+      "scripts/sync-python-deps.sh"
+    ],
+    "fileFilters": [
+      "pyproject.toml",
+      "flake.lock",
+      "configuration.nix"
+    ],
     "executionMode": "update"
   },
   "packageRules": [
     {
-      "matchUpdateTypes": ["patch"],
+      "matchUpdateTypes": [
+        "patch"
+      ],
       "groupName": "patch updates"
     },
     {
-      "matchManagers": ["nix"],
+      "matchManagers": [
+        "nix"
+      ],
       "groupName": "nix dependencies"
     },
     {
-      "matchPackageNames": ["numpydantic", "CoRoLab-Berlin/bmi270_python", "bluerobotics/ms5837-python"],
+      "matchPackageNames": [
+        "numpydantic",
+        "CoRoLab-Berlin/bmi270_python",
+        "bluerobotics/ms5837-python"
+      ],
       "groupName": "custom python packages"
     }
   ],
@@ -38,7 +54,9 @@
     {
       "description": "Update version strings for custom python packages in configuration.nix",
       "customType": "regex",
-      "fileMatch": ["^configuration\\.nix$"],
+      "managerFilePatterns": [
+        "/^configuration\\.nix$/"
+      ],
       "matchStrings": [
         "pname = \"(?<depName>numpydantic)\";\\s+version = \"(?<currentValue>[0-9\\.]+)\";"
       ],
@@ -47,7 +65,9 @@
     {
       "description": "Update version strings for custom python packages in configuration.nix",
       "customType": "regex",
-      "fileMatch": ["^configuration\\.nix$"],
+      "managerFilePatterns": [
+        "/^configuration\\.nix$/"
+      ],
       "matchStrings": [
         "pname = \"bmi270\";\\s+version = \"(?<currentValue>[0-9\\.]+)\";"
       ],
@@ -57,7 +77,9 @@
     {
       "description": "Update version strings for custom python packages in configuration.nix",
       "customType": "regex",
-      "fileMatch": ["^configuration\\.nix$"],
+      "managerFilePatterns": [
+        "/^configuration\\.nix$/"
+      ],
       "matchStrings": [
         "pname = \"ms5837\";\\s+version = \"(?<currentValue>[0-9\\.]+)\";"
       ],
@@ -67,7 +89,9 @@
     {
       "description": "Sync python version from configuration.nix to pyproject.toml",
       "customType": "regex",
-      "fileMatch": ["^configuration\\.nix$"],
+      "managerFilePatterns": [
+        "/^configuration\\.nix$/"
+      ],
       "matchStrings": [
         "pkgs\\.python(?<currentValue>313)"
       ],
@@ -77,7 +101,9 @@
     {
       "description": "Update python version in pyproject.toml",
       "customType": "regex",
-      "fileMatch": ["^pyproject\\.toml$"],
+      "managerFilePatterns": [
+        "/^pyproject\\.toml$/"
+      ],
       "matchStrings": [
         "requires-python = \">=3\\.(?<currentValue>13)\""
       ],
