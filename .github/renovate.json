@@ -15,6 +15,11 @@
   "nix": {
     "enabled": true
   },
+  "postUpgradeTasks": {
+    "commands": ["scripts/sync-python-deps.sh"],
+    "fileFilters": ["pyproject.toml", "flake.lock", "configuration.nix"],
+    "executionMode": "update"
+  },
   "packageRules": [
     {
       "matchUpdateTypes": ["patch"],
@@ -25,53 +30,59 @@
       "groupName": "nix dependencies"
     },
     {
-      "matchDatasources": ["repology"],
-      "versioning": "loose"
+      "matchPackageNames": ["numpydantic", "CoRoLab-Berlin/bmi270_python", "bluerobotics/ms5837-python"],
+      "groupName": "custom python packages"
     }
   ],
   "customManagers": [
     {
-      "description": "Standard Python dependencies from Nixpkgs (via Repology)",
+      "description": "Update version strings for custom python packages in configuration.nix",
       "customType": "regex",
-      "managerFilePatterns": ["/^pyproject\\.toml$/"],
+      "fileMatch": ["^configuration\\.nix$"],
       "matchStrings": [
-        "\"(?<depName>(?:numpy|websockets|pydantic|smbus2|scipy|pyserial-asyncio(?:-fast)?))==(?<currentValue>[0-9\\.]+)\""
-      ],
-      "datasourceTemplate": "repology",
-      "depNameTemplate": "nix_stable_25_11/python3.13-{{depName}}"
-    },
-    {
-      "description": "Custom Python packages via PyPI (numpydantic, bmi270)",
-      "customType": "regex",
-      "managerFilePatterns": ["/^pyproject\\.toml$/", "/^configuration\\.nix$/"],
-      "matchStrings": [
-        "pname = \"(?<depName>numpydantic|bmi270)\";\\s+version = \"(?<currentValue>[0-9\\.]+)\";",
-        "\"(?<depName>numpydantic|bmi270)==(?<currentValue>[0-9\\.]+)\""
+        "pname = \"(?<depName>numpydantic)\";\\s+version = \"(?<currentValue>[0-9\\.]+)\";"
       ],
       "datasourceTemplate": "pypi"
     },
     {
-      "description": "GitHub-only Python packages via commits (ms5837)",
+      "description": "Update version strings for custom python packages in configuration.nix",
       "customType": "regex",
-      "managerFilePatterns": ["/^pyproject\\.toml$/", "/^configuration\\.nix$/"],
+      "fileMatch": ["^configuration\\.nix$"],
       "matchStrings": [
-        "pname = \"ms5837\";\\s+version = \"(?<currentValue>[0-9\\.]+)\";[\\s\\S]*?rev = \"(?<currentDigest>[a-f0-9]+)\";",
-        "ms5837 @ git\\+https://github\\.com/bluerobotics/ms5837-python\\.git@(?<currentDigest>[a-f0-9]+)"
+        "pname = \"bmi270\";\\s+version = \"(?<currentValue>[0-9\\.]+)\";"
+      ],
+      "datasourceTemplate": "pypi",
+      "depNameTemplate": "bmi270"
+    },
+    {
+      "description": "Update version strings for custom python packages in configuration.nix",
+      "customType": "regex",
+      "fileMatch": ["^configuration\\.nix$"],
+      "matchStrings": [
+        "pname = \"ms5837\";\\s+version = \"(?<currentValue>[0-9\\.]+)\";"
       ],
       "datasourceTemplate": "github-commits",
       "depNameTemplate": "bluerobotics/ms5837-python"
     },
     {
-      "description": "Python version sync between pyproject.toml and configuration.nix",
+      "description": "Sync python version from configuration.nix to pyproject.toml",
       "customType": "regex",
-      "managerFilePatterns": ["/^pyproject\\.toml$/", "/^configuration\\.nix$/"],
+      "fileMatch": ["^configuration\\.nix$"],
       "matchStrings": [
-        "requires-python = \">=(?<currentValue>3\\.[0-9]+)\"",
-        "pkgs\\.python(?<currentValue>3[0-9]+)\\.withPackages"
+        "pkgs\\.python(?<currentValue>313)"
       ],
-      "datasourceTemplate": "github-tags",
-      "depNameTemplate": "python/cpython",
-      "extractVersionTemplate": "^v(?<version>3\\.[0-9]+)$"
+      "depNameTemplate": "python",
+      "datasourceTemplate": "cpython-tags"
+    },
+    {
+      "description": "Update python version in pyproject.toml",
+      "customType": "regex",
+      "fileMatch": ["^pyproject\\.toml$"],
+      "matchStrings": [
+        "requires-python = \">=3\\.(?<currentValue>13)\""
+      ],
+      "depNameTemplate": "python",
+      "datasourceTemplate": "cpython-tags"
     }
   ]
 }
