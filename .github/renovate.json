@@ -8,36 +8,20 @@
     ":enablePreCommit",
     ":dependencyDashboard"
   ],
-  "labels": [
-    "dependencies"
-  ],
-  "enabledManagers": [
-    "nix",
-    "custom.regex",
-    "github-actions"
-  ],
+  "labels": ["dependencies"],
+  "enabledManagers": ["nix", "custom.regex", "github-actions"],
   "postUpgradeTasks": {
-    "commands": [
-      "scripts/sync-python-deps.sh"
-    ],
-    "fileFilters": [
-      "pyproject.toml",
-      "flake.lock",
-      "configuration.nix"
-    ],
+    "commands": ["sync-python-deps.sh"],
+    "fileFilters": ["pyproject.toml", "flake.lock", "configuration.nix"],
     "executionMode": "update"
   },
   "packageRules": [
     {
-      "matchUpdateTypes": [
-        "patch"
-      ],
+      "matchUpdateTypes": ["patch"],
       "groupName": "patch updates"
     },
     {
-      "matchManagers": [
-        "nix"
-      ],
+      "matchManagers": ["nix"],
       "groupName": "nix dependencies"
     },
     {
@@ -53,9 +37,7 @@
     {
       "description": "Update version strings for custom python packages in configuration.nix",
       "customType": "regex",
-      "managerFilePatterns": [
-        "^configuration\\.nix$"
-      ],
+      "managerFilePatterns": ["^configuration\\.nix$"],
       "matchStrings": [
         "pname = \"(?<depName>numpydantic|bmi270)\";\\s+version = \"(?<currentValue>[0-9\\.]+)\";"
       ],
@@ -64,12 +46,8 @@
     {
       "description": "Sync python version from configuration.nix to pyproject.toml",
       "customType": "regex",
-      "managerFilePatterns": [
-        "^configuration\\.nix$"
-      ],
-      "matchStrings": [
-        "pkgs\\.python(?<currentValue>3[0-9]+)"
-      ],
+      "managerFilePatterns": ["^configuration\\.nix$"],
+      "matchStrings": ["pkgs\\.python(?<currentValue>3[0-9]+)"],
       "depNameTemplate": "python",
       "datasourceTemplate": "python-version",
       "versioningTemplate": "regex:^3(?<minor>[0-9]+)$"
@@ -77,12 +55,8 @@
     {
       "description": "Update python version in pyproject.toml",
       "customType": "regex",
-      "managerFilePatterns": [
-        "^pyproject\\.toml$"
-      ],
-      "matchStrings": [
-        "requires-python = \">=(?<currentValue>3\\.[0-9]+)\""
-      ],
+      "managerFilePatterns": ["^pyproject\\.toml$"],
+      "matchStrings": ["requires-python = \">=(?<currentValue>3\\.[0-9]+)\""],
       "depNameTemplate": "python",
       "datasourceTemplate": "python-version",
       "versioningTemplate": "regex:^3\\.(?<minor>[0-9]+)$"
