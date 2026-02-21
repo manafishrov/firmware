@@ -11,7 +11,11 @@
   "labels": [
     "dependencies"
   ],
-  "enabledManagers": ["nix", "regex", "github-actions"],
+  "enabledManagers": [
+    "nix",
+    "custom.regex",
+    "github-actions"
+  ],
   "postUpgradeTasks": {
     "commands": [
       "scripts/sync-python-deps.sh"
@@ -60,7 +64,9 @@
     {
       "description": "Sync python version from configuration.nix to pyproject.toml",
       "customType": "regex",
-      "managerFilePatterns": ["^configuration\\.nix$"],
+      "managerFilePatterns": [
+        "^configuration\\.nix$"
+      ],
       "matchStrings": [
         "pkgs\\.python(?<currentValue>3[0-9]+)"
       ],
@@ -71,7 +77,9 @@
     {
       "description": "Update python version in pyproject.toml",
       "customType": "regex",
-      "managerFilePatterns": ["^pyproject\\.toml$"],
+      "managerFilePatterns": [
+        "^pyproject\\.toml$"
+      ],
       "matchStrings": [
         "requires-python = \">=(?<currentValue>3\\.[0-9]+)\""
       ],
