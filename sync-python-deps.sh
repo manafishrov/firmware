@@ -27,6 +27,15 @@ CUSTOM_GIT_PACKAGES=(
 	"ms5837:ms5837-src:https://github.com/bluerobotics/ms5837-python.git"
 )
 
+echo "  python..."
+python_version=$(nix eval --raw --inputs-from . "nixpkgs#python313.version" 2>/dev/null)
+if [ -n "$python_version" ]; then
+	echo "    $python_version"
+	sed -i -E "s/requires-python = \"==3\.[0-9]+(\.[0-9]+|(\.\*))?\"/requires-python = \"==$python_version\"/" pyproject.toml
+else
+	echo "    WARNING: Could not find Python version in nixpkgs"
+fi
+
 for pkg in "${PACKAGES[@]}"; do
 	echo "  $pkg..."
 	version=$(nix eval --raw --inputs-from . "nixpkgs#python313Packages.${pkg}.version" 2>/dev/null)

@@ -56,7 +56,7 @@
       "description": "Update python version in pyproject.toml",
       "customType": "regex",
       "managerFilePatterns": ["^pyproject\\.toml$"],
-      "matchStrings": ["requires-python = \">=(?<currentValue>3\\.[0-9]+)\""],
+      "matchStrings": ["requires-python = \"==(?<currentValue>3\\.[0-9]+)(\\.[0-9]+|(\\.\\*))?\""],
       "depNameTemplate": "python",
       "datasourceTemplate": "python-version",
       "versioningTemplate": "regex:^3\\.(?<minor>[0-9]+)$"
