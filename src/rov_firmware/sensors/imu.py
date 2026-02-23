@@ -1,6 +1,5 @@
 """IMU sensor interface for the ROV firmware."""
 
-from __future__ import annotations
 
 import asyncio
 

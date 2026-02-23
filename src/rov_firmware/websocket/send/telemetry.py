@@ -1,6 +1,5 @@
 """WebSocket telemetry send handlers for the ROV firmware."""
 
-from __future__ import annotations
 
 from websockets import ServerConnection
 

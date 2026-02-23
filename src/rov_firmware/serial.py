@@ -1,6 +1,5 @@
 """Serial communication manager for the ROV firmware."""
 
-from __future__ import annotations
 
 import asyncio
 from pathlib import Path

@@ -1,6 +1,5 @@
 """WebSocket message handler for the ROV firmware."""
 
-from __future__ import annotations
 
 from typing import cast
 

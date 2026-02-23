@@ -1,6 +1,5 @@
 """Central state management for the ROV firmware."""
 
-from __future__ import annotations
 
 from .models.config import RovConfig
 from .models.regulator import RegulatorData

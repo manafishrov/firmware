@@ -1,7 +1,5 @@
 """Thruster control logic for the ROV firmware."""
 
-from __future__ import annotations
-
 import asyncio
 from asyncio import StreamWriter
 import struct

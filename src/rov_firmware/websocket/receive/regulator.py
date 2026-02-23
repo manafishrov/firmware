@@ -1,6 +1,5 @@
 """WebSocket regulator handlers for the ROV firmware."""
 
-from __future__ import annotations
 
 import time
 

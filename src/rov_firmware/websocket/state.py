@@ -1,6 +1,5 @@
 """Shared state for WebSocket-related async utilities."""
 
-from __future__ import annotations
 
 import asyncio
 from typing import ClassVar
