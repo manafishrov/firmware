@@ -1,6 +1,5 @@
 """WebSocket action handlers for the ROV firmware."""
 
-
 import importlib
 import time
 

@@ -1,6 +1,5 @@
 """WebSocket server for the ROV firmware."""
 
-
 import asyncio
 import json
 from typing import cast

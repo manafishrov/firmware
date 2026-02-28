@@ -1,6 +1,5 @@
 """WebSocket microcontroller handlers for the ROV firmware."""
 
-
 from pathlib import Path
 import re
 import subprocess

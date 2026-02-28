@@ -1,6 +1,5 @@
 """Example custom action handler for the ROV firmware."""
 
-
 from ..log import log_info
 from ..rov_state import RovState
 from ..toast import toast_info

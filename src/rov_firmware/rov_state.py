@@ -1,6 +1,5 @@
 """Central state management for the ROV firmware."""
 
-
 from .models.config import RovConfig
 from .models.regulator import RegulatorData
 from .models.sensors import EscData, ImuData, PressureData

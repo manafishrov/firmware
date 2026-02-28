@@ -1,6 +1,5 @@
 """WebSocket telemetry send handlers for the ROV firmware."""
 
-
 from websockets import ServerConnection
 
 from ...constants import MAX_CURRENT_A, THRUSTER_POLES

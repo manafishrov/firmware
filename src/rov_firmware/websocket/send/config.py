@@ -1,6 +1,5 @@
 """WebSocket config send handlers for the ROV firmware."""
 
-
 from websockets import ServerConnection
 
 from ...constants import FIRMWARE_VERSION

@@ -1,6 +1,5 @@
 """WebSocket status send handlers for the ROV firmware."""
 
-
 from websockets import ServerConnection
 
 from ...constants import BATTERY_EMA_ALPHA

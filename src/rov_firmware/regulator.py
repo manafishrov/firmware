@@ -1,6 +1,5 @@
 """Regulator module for ROV control (NED convention)."""
 
-
 import time
 from typing import cast
 

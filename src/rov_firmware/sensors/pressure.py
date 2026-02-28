@@ -1,6 +1,5 @@
 """Pressure sensor interface for the ROV firmware."""
 
-
 import asyncio
 
 from ms5837 import DENSITY_FRESHWATER, DENSITY_SALTWATER, MS5837_30BA

@@ -1,6 +1,5 @@
 """IMU sensor interface for the ROV firmware."""
 
-
 import asyncio
 
 from bmi270.BMI270 import (

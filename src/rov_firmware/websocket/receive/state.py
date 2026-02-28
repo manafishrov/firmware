@@ -1,6 +1,5 @@
 """WebSocket state handlers for the ROV firmware."""
 
-
 from ...log import log_info
 from ...rov_state import RovState
 

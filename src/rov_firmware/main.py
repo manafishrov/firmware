@@ -1,6 +1,5 @@
 """Main entry point for the ROV firmware."""
 
-
 import asyncio
 
 from .regulator import Regulator

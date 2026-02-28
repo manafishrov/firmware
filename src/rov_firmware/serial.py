@@ -1,6 +1,5 @@
 """Serial communication manager for the ROV firmware."""
 
-
 import asyncio
 from pathlib import Path
 

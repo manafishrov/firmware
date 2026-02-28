@@ -1,6 +1,5 @@
 """WebSocket regulator handlers for the ROV firmware."""
 
-
 import time
 
 from ...constants import AUTO_TUNING_TOAST_ID, MAX_AUTO_TUNING_ROLL_PITCH_DEGREES

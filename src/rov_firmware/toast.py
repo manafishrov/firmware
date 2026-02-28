@@ -1,6 +1,5 @@
 """Toast notification utilities for the ROV firmware."""
 
-
 import asyncio
 
 from .models.toast import Toast, ToastCancel, ToastType

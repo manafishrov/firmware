@@ -1,6 +1,5 @@
 """ESC sensor interface for the ROV firmware."""
 
-
 import asyncio
 import struct
 

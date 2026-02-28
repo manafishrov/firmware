@@ -1,6 +1,5 @@
 """Logging utilities for the ROV firmware."""
 
-
 import asyncio
 import logging
 

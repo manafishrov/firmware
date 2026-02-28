@@ -1,6 +1,5 @@
 """WebSocket message handler for the ROV firmware."""
 
-
 from typing import cast
 
 from websockets import ServerConnection

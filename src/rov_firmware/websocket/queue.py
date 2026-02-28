@@ -1,6 +1,5 @@
 """WebSocket message queue for the ROV firmware."""
 
-
 import asyncio
 
 from .message import WebsocketMessage

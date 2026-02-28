@@ -1,6 +1,5 @@
 """WebSocket config handlers for the ROV firmware."""
 
-
 from websockets import ServerConnection
 
 from ...log import log_info

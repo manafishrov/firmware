@@ -1,6 +1,5 @@
 """Shared state for WebSocket-related async utilities."""
 
-
 import asyncio
 from typing import ClassVar
 
