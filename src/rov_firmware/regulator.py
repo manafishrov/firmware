@@ -310,7 +310,7 @@ class Regulator:
 
         Updates internal gyro rates used by the regulator, advances the Mahony AHRS using the IMU accelerometer and gyroscope with a clamped delta time, records timing used for future AHRS updates, and writes the estimated pitch and roll into state.regulator for UI/visualization.
         """
-        if not self.state.system_health.imu_ok:
+        if not self.state.system_health.imu_healthy:
             return
 
         imu_data = self.state.imu

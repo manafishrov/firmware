@@ -231,7 +231,7 @@ class Thrusters:
         thrust_vector = np.zeros(NUM_MOTORS, dtype=np.float32)
         last_send_time = time.time()
         while True:
-            if not self.state.system_health.microcontroller_ok:
+            if not self.state.system_health.microcontroller_healthy:
                 await asyncio.sleep(1)
                 continue
 
@@ -247,7 +247,7 @@ class Thrusters:
             thrust_values = self._compute_thrust_values(thrust_vector)
             success = await self._send_with_retries(writer, thrust_values)
             if not success:
-                self.state.system_health.microcontroller_ok = False
+                self.state.system_health.microcontroller_healthy = False
                 log_error("Thruster send failed 3 times, disabling microcontroller")
 
             await asyncio.sleep(1 / THRUSTER_SEND_FREQUENCY)

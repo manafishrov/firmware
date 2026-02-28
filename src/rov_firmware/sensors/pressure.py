@@ -33,10 +33,10 @@ class PressureSensor:
             _ = await asyncio.to_thread(sensor_instance.init)
             self.sensor = sensor_instance
             self._update_fluid_density()
-            self.state.system_health.pressure_sensor_ok = True
+            self.state.system_health.pressure_sensor_healthy = True
             log_info("MS5837 pressure sensor initialized successfully.")
         except Exception as e:
-            self.state.system_health.pressure_sensor_ok = False
+            self.state.system_health.pressure_sensor_healthy = False
             log_error(
                 f"Failed to initialize MS5837 pressure sensor. Is it connected? Error: {e}"
             )
@@ -89,7 +89,7 @@ class PressureSensor:
         while True:
             if self.state.rov_config.fluid_type != self.current_fluid_type:
                 self._update_fluid_density()
-            if not self.state.system_health.pressure_sensor_ok:
+            if not self.state.system_health.pressure_sensor_healthy:
                 await asyncio.sleep(1)
                 continue
             try:
@@ -103,7 +103,7 @@ class PressureSensor:
                 log_error(f"Pressure sensor read_loop error: {e}")
                 failure_count += 1
             if failure_count >= SYSTEM_FAILURE_THRESHOLD:
-                self.state.system_health.pressure_sensor_ok = False
+                self.state.system_health.pressure_sensor_healthy = False
                 failure_count = 0
                 log_error("Pressure sensor failed 3 times, disabling pressure sensor")
             await asyncio.sleep(1 / PRESSURE_SENSOR_READ_FREQUENCY)

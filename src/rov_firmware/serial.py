@@ -41,7 +41,7 @@ class SerialManager:
             log_info("Attempting to initialize serial connection to microcontroller...")
             serial_port = await self._find_microcontroller_port()
             if serial_port is None:
-                self.state.system_health.microcontroller_ok = False
+                self.state.system_health.microcontroller_healthy = False
                 log_error("Failed to find microcontroller serial port.")
                 toast_error(
                     toast_id=None,
@@ -53,10 +53,10 @@ class SerialManager:
             self.reader, self.writer = await open_serial_connection(
                 url=serial_port, baudrate=115200
             )
-            self.state.system_health.microcontroller_ok = True
+            self.state.system_health.microcontroller_healthy = True
             log_info("Serial connection to microcontroller initialized successfully.")
         except Exception as e:
-            self.state.system_health.microcontroller_ok = False
+            self.state.system_health.microcontroller_healthy = False
             log_error(
                 f"Failed to initialize serial connection to microcontroller. Error: {e}"
             )
@@ -86,4 +86,4 @@ class SerialManager:
         if self.writer:
             self.writer.close()
             await self.writer.wait_closed()
-        self.state.system_health.microcontroller_ok = False
+        self.state.system_health.microcontroller_healthy = False

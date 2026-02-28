@@ -36,7 +36,7 @@ class EscSensor:
         reader = self.serial_manager.get_reader()
         read_buffer = bytearray()
         while True:
-            if not self.state.system_health.microcontroller_ok:
+            if not self.state.system_health.microcontroller_healthy:
                 await asyncio.sleep(1)
                 continue
             data = await reader.read(1)

@@ -55,11 +55,11 @@ class Imu:
             await asyncio.to_thread(imu_instance.enable_gyr_filter_perf)
 
             self.imu = imu_instance
-            self.state.system_health.imu_ok = True
+            self.state.system_health.imu_healthy = True
             log_info("BMI270 IMU initialized successfully.")
 
         except Exception as e:
-            self.state.system_health.imu_ok = False
+            self.state.system_health.imu_healthy = False
             log_error(f"Failed to initialize BMI270 IMU. Is it connected? Error: {e}")
             toast_error(
                 toast_id=None,
@@ -104,7 +104,7 @@ class Imu:
         """Continuously read IMU data in a loop."""
         failure_count = 0
         while True:
-            if not self.state.system_health.imu_ok:
+            if not self.state.system_health.imu_healthy:
                 await asyncio.sleep(1)
                 continue
             try:
@@ -118,7 +118,7 @@ class Imu:
                 log_error(f"IMU read_loop error: {e}")
                 failure_count += 1
             if failure_count >= SYSTEM_FAILURE_THRESHOLD:
-                self.state.system_health.imu_ok = False
+                self.state.system_health.imu_healthy = False
                 failure_count = 0
                 log_error("IMU failed 3 times, disabling IMU")
             await asyncio.sleep(1 / IMU_READ_FREQUENCY)

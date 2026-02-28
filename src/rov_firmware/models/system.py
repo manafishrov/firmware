@@ -8,9 +8,9 @@ from .base import CamelCaseModel
 class SystemHealth(CamelCaseModel):
     """Model for system health."""
 
-    imu_ok: bool = False
-    pressure_sensor_ok: bool = False
-    microcontroller_ok: bool = False
+    imu_healthy: bool = False
+    pressure_sensor_healthy: bool = False
+    microcontroller_healthy: bool = False
 
 
 class SystemStatus(BaseModel):

@@ -19,7 +19,7 @@ async def handle_start_regulator_auto_tuning(
     """
     log_info("Starting regulator auto tuning")
 
-    if not state.system_health.imu_ok:
+    if not state.system_health.imu_healthy:
         log_error("IMU not healthy, cannot start auto tuning")
         toast_error(
             toast_id=AUTO_TUNING_TOAST_ID,
@@ -29,7 +29,7 @@ async def handle_start_regulator_auto_tuning(
         )
         return
 
-    if not state.system_health.pressure_sensor_ok:
+    if not state.system_health.pressure_sensor_healthy:
         log_error("Pressure sensor not healthy, cannot start auto tuning")
         toast_error(
             toast_id=AUTO_TUNING_TOAST_ID,
