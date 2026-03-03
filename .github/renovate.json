@@ -8,7 +8,6 @@
     ":enablePreCommit",
     ":dependencyDashboard"
   ],
-  "labels": ["dependencies"],
   "enabledManagers": ["nix", "custom.regex", "github-actions"],
   "postUpgradeTasks": {
     "commands": ["sync-python-deps.sh"],
