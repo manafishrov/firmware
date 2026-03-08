@@ -67,8 +67,8 @@ class MicrocontrollerFirmwareVariant(StrEnum):
 class FluidType(StrEnum):
     """Enum for fluid types."""
 
-    FRESHWATER = "freshWater"
-    SALTWATER = "saltWater"
+    FRESHWATER = "freshwater"
+    SALTWATER = "saltwater"
 
 
 class ThrusterPinSetup(CamelCaseModel):
