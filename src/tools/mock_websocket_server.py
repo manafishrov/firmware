@@ -45,7 +45,8 @@ MOCK_CONFIG = {
         "heave": 1.0,
     },
     "power": {
-        "userMaxPower": 30,
+        "userMaxPowerThrusters": 30,
+        "userMaxPowerActions": 50,
         "regulatorMaxPower": 30,
         "batteryMinVoltage": 14.0,
         "batteryMaxVoltage": 21.5,
