@@ -10,7 +10,6 @@ from ..models.actions import (
 )
 from ..models.base import CamelCaseModel
 from ..models.config import (
-    FirmwareVersion as FirmwareVersionPayload,
     MicrocontrollerFirmwareVariant,
     RegulatorSuggestions as RegulatorSuggestionsPayload,
     RovConfig,
@@ -101,13 +100,6 @@ class Telemetry(CamelCaseModel):
     payload: RovTelemetry
 
 
-class FirmwareVersion(CamelCaseModel):
-    """WebSocket message for firmware version."""
-
-    type: Literal[MessageType.FIRMWARE_VERSION] = MessageType.FIRMWARE_VERSION
-    payload: FirmwareVersionPayload
-
-
 class CustomAction(CamelCaseModel):
     """WebSocket message for custom actions."""
 
@@ -152,7 +144,6 @@ WebsocketMessage = Annotated[
     | LogMessage
     | StatusUpdate
     | Telemetry
-    | FirmwareVersion
     | CustomAction
     | ToggleAutoStabilization
     | ToggleDepthHold

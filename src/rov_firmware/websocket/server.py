@@ -9,13 +9,13 @@ import websockets
 from websockets import Server, ServerConnection
 from websockets.exceptions import ConnectionClosed
 
-from ..constants import FIRMWARE_VERSION, IP_ADDRESS, PORT
+from ..constants import IP_ADDRESS, PORT
 from ..log import log_error, log_info, log_warn
 from ..rov_state import RovState
 from .handler import handle_message
 from .message import WebsocketMessage
 from .queue import get_message_queue
-from .send.config import handle_send_config, handle_send_firmware_version
+from .send.config import handle_send_config
 from .send.status import handle_status_update
 from .send.telemetry import handle_telemetry
 from .state import websocket_state
@@ -57,25 +57,21 @@ class WebsocketServer:
             self._send_telemetry_periodically(websocket, self.state)
         )
 
-        async def send_firmware_version_on_connect() -> None:
+        async def send_config_on_connect() -> None:
             await asyncio.sleep(5)
             try:
-                await handle_send_firmware_version(websocket)
-                log_info(
-                    f"Sent firmware version '{FIRMWARE_VERSION}' to {cast(tuple[str, int] | None, websocket.remote_address)}"
-                )
                 await handle_send_config(websocket, self.state)
                 log_info(
                     f"Sent config to {cast(tuple[str, int] | None, websocket.remote_address)}"
                 )
             except ConnectionClosed:
                 log_warn(
-                    f"Client disconnected before firmware version and config could be sent to {cast(tuple[str, int] | None, websocket.remote_address)}"
+                    f"Client disconnected before config could be sent to {cast(tuple[str, int] | None, websocket.remote_address)}"
                 )
             except Exception as e:
                 log_error(f"Error sending initial data: {e}")
 
-        firmware_task = asyncio.create_task(send_firmware_version_on_connect())
+        config_task = asyncio.create_task(send_config_on_connect())
 
         try:
             async for message in websocket:
@@ -97,7 +93,7 @@ class WebsocketServer:
             _ = send_task.cancel()
             _ = status_task.cancel()
             _ = telemetry_task.cancel()
-            _ = firmware_task.cancel()
+            _ = config_task.cancel()
             self.client = None
             websocket_state.is_client_connected = False
             log_info("Client disconnected.")

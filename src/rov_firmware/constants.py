@@ -3,9 +3,6 @@
 from typing import Final
 
 
-# General
-FIRMWARE_VERSION: Final = "1.0.0"
-
 # Thruster
 THRUSTER_INPUT_START_BYTE: Final = 0x5A
 NUM_MOTORS: Final = 8

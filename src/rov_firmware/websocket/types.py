@@ -19,7 +19,6 @@ class MessageType(StrEnum):
     LOG_MESSAGE = "logMessage"
     STATUS_UPDATE = "statusUpdate"
     TELEMETRY = "telemetry"
-    FIRMWARE_VERSION = "firmwareVersion"
     CUSTOM_ACTION = "customAction"
     TOGGLE_AUTO_STABILIZATION = "toggleAutoStabilization"
     TOGGLE_DEPTH_HOLD = "toggleDepthHold"

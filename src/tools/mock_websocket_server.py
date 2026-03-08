@@ -13,8 +13,8 @@ from websockets import ServerConnection
 
 
 PORT = 9000
-FIRMWARE_VERSION = "1.0.0"
 MOCK_CONFIG = {
+    "firmwareVersion": "1.0.0",
     "microcontrollerFirmwareVariant": "dshot",
     "fluidType": "saltwater",
     "smoothingFactor": 0.0,
@@ -50,7 +50,6 @@ MOCK_CONFIG = {
         "batteryMinVoltage": 14.0,
         "batteryMaxVoltage": 21.5,
     },
-    "firmwareVersion": FIRMWARE_VERSION,
 }
 
 SYSTEM_STATUS = {
@@ -122,10 +121,9 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     "depthHold": SYSTEM_STATUS["depth_hold"],
                     "batteryPercentage": battery_percentage,
                     "health": {
-                        "microcontrollerOk": True,
-                        "imuOk": True,
-                        "pressureSensorOk": True,
-                        "escOk": True,
+                        "microcontrollerHealthy": True,
+                        "imuHealthy": True,
+                        "pressureSensorHealthy": True,
                     },
                 },
             }
@@ -140,8 +138,6 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
 
     try:
         await asyncio.sleep(5)
-        firmware_msg = {"type": "firmwareVersion", "payload": FIRMWARE_VERSION}
-        await websocket.send(json.dumps(firmware_msg))
         config_msg = {"type": "config", "payload": MOCK_CONFIG}
         await websocket.send(json.dumps(config_msg))
 

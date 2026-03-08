@@ -211,8 +211,6 @@ class RovConfig(CamelCaseModel):
 
 ThrusterTest = int
 
-FirmwareVersion = str
-
 
 class RegulatorSuggestions(CamelCaseModel):
     """Suggestions for regulator tuning."""
