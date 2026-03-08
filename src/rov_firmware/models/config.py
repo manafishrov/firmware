@@ -1,8 +1,10 @@
 """Configuration models for the ROV firmware."""
 
 from enum import StrEnum
+import json
 from pathlib import Path
-from typing import ClassVar
+import tomllib
+from typing import Any, ClassVar
 
 import numpy as np
 from numpy.typing import NDArray as NumpyNDArray
@@ -10,6 +12,49 @@ from numpydantic import NDArray, Shape
 from pydantic import field_validator
 
 from .base import CamelCaseModel
+
+
+_pyproject_path = Path(__file__).parents[3] / "pyproject.toml"
+with _pyproject_path.open("rb") as _f:
+    _pyproject = tomllib.load(_f)
+CURRENT_FIRMWARE_VERSION = _pyproject["project"]["version"]
+
+_MAJOR = 0
+_MINOR = 1
+_PATCH = 2
+
+
+def parse_semver(version: str) -> tuple[int, int, int]:
+    """Parse semver string into (major, minor, patch) tuple."""
+    parts = version.split(".")
+    major = int(parts[_MAJOR]) if len(parts) > _MAJOR and parts[_MAJOR].isdigit() else 0
+    minor = int(parts[_MINOR]) if len(parts) > _MINOR and parts[_MINOR].isdigit() else 0
+    patch = int(parts[_PATCH]) if len(parts) > _PATCH and parts[_PATCH].isdigit() else 0
+    return (major, minor, patch)
+
+
+def compare_semver(a: str, b: str) -> int:
+    """Compare two semver strings. Returns -1, 0, or 1."""
+    a_tuple = parse_semver(a)
+    b_tuple = parse_semver(b)
+    if a_tuple < b_tuple:
+        return -1
+    elif a_tuple > b_tuple:
+        return 1
+    return 0
+
+
+def apply_migrations(raw: dict[str, Any]) -> dict[str, Any]:
+    """Apply config migrations based on firmware version."""
+    firmware_version = raw.get("firmwareVersion", "0.0.0")
+
+    # Example: migrate config when firmware_version < "1.0.0"
+    # if compare_semver(firmware_version, "1.0.0") == -1:
+    #     # Add migration logic here
+    #     pass
+
+    _ = firmware_version  # Placeholder until migrations are needed
+    return raw
 
 
 class MicrocontrollerFirmwareVariant(StrEnum):
@@ -124,6 +169,7 @@ class RovConfig(CamelCaseModel):
         battery_min_voltage=14,
         battery_max_voltage=21.5,
     )
+    firmware_version: str = CURRENT_FIRMWARE_VERSION
 
     @field_validator("thruster_allocation", mode="before")
     @classmethod
@@ -137,15 +183,28 @@ class RovConfig(CamelCaseModel):
 
     @classmethod
     def load(cls) -> "RovConfig":
-        """Load config from file."""
+        """Load config from file with migration support."""
         if not cls._config_path.exists():
             default_config = cls()
             default_config.save()
+            return default_config
+
         with cls._config_path.open() as f:
-            return cls.model_validate_json(f.read())
+            raw = json.load(f)
+
+        stored_version = raw.get("firmwareVersion", "0.0.0")
+
+        if compare_semver(stored_version, CURRENT_FIRMWARE_VERSION) > 0:
+            return cls()
+
+        raw = apply_migrations(raw)
+        raw["firmwareVersion"] = CURRENT_FIRMWARE_VERSION
+
+        return cls.model_validate(raw)
 
     def save(self) -> None:
-        """Save config to file."""
+        """Save config to file with current firmware version."""
+        self.firmware_version = CURRENT_FIRMWARE_VERSION
         with self._config_path.open("w") as f:
             _ = f.write(self.model_dump_json(by_alias=True, indent=2))
 
