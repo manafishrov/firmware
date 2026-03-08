@@ -129,6 +129,7 @@ class Power(CamelCaseModel):
 class RovConfig(CamelCaseModel):
     """Main ROV configuration."""
 
+    firmware_version: str = CURRENT_FIRMWARE_VERSION
     microcontroller_firmware_variant: MicrocontrollerFirmwareVariant = (
         MicrocontrollerFirmwareVariant.DSHOT
     )
@@ -169,7 +170,6 @@ class RovConfig(CamelCaseModel):
         battery_min_voltage=14,
         battery_max_voltage=21.5,
     )
-    firmware_version: str = CURRENT_FIRMWARE_VERSION
 
     @field_validator("thruster_allocation", mode="before")
     @classmethod

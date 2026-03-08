@@ -17,6 +17,7 @@ FIRMWARE_VERSION = "1.0.0"
 MOCK_CONFIG = {
     "microcontrollerFirmwareVariant": "dshot",
     "fluidType": "saltWater",
+    "smoothingFactor": 0.0,
     "thrusterPinSetup": {
         "identifiers": [0, 1, 2, 3, 4, 5, 6, 7],
         "spinDirections": [1, 1, 1, 1, 1, 1, 1, 1],
@@ -32,26 +33,24 @@ MOCK_CONFIG = {
         [-1.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0],
     ],
     "regulator": {
-        "pitch": {"kp": 5, "ki": 0.5, "kd": 1, "rate": 1.0},
-        "roll": {"kp": 1.5, "ki": 0.1, "kd": 0.4, "rate": 1.0},
+        "pitch": {"kp": 2, "ki": 0, "kd": 0.1, "rate": 1.0},
+        "roll": {"kp": 1, "ki": 0, "kd": 0.1, "rate": 1.0},
         "yaw": {"kp": 3, "ki": 0, "kd": 0, "rate": 1.0},
-        "depth": {"kp": 0, "ki": 0.05, "kd": 0.1, "rate": 1.0},
+        "depth": {"kp": 0.5, "ki": 0, "kd": 0.1, "rate": 1.0},
         "fpvMode": False,
     },
     "directionCoefficients": {
-        "surge": 0.8,
-        "sway": 0.35,
-        "heave": 0.5,
-        "pitch": 0.4,
-        "yaw": 0.3,
-        "roll": 0.8,
+        "surge": 1.0,
+        "sway": 1.0,
+        "heave": 1.0,
     },
     "power": {
         "userMaxPower": 30,
         "regulatorMaxPower": 30,
-        "batteryMinVoltage": 9.6,
-        "batteryMaxVoltage": 12.6,
+        "batteryMinVoltage": 14.0,
+        "batteryMaxVoltage": 21.5,
     },
+    "firmwareVersion": FIRMWARE_VERSION,
 }
 
 SYSTEM_STATUS = {
@@ -74,9 +73,12 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             current_time = time.time()
             pitch = 20 * math.sin(current_time / 2)
             roll = 15 * math.cos(current_time / 3)
+            yaw = 30 * math.sin(current_time / 2.5)
             desired_pitch = 25 * math.sin(current_time / 2)
             desired_roll = 20 * math.cos(current_time / 3)
+            desired_yaw = 35 * math.sin(current_time / 2.5)
             depth = 10 + 5 * math.sin(current_time / 4)
+            desired_depth = 12 + 4 * math.sin(current_time / 4)
             water_temperature = 20 + 5 * math.cos(current_time / 5)
             electronics_temperature = 25 + 3 * math.sin(current_time / 6)
             thruster_rpms = [
@@ -89,9 +91,12 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                 "payload": {
                     "pitch": round(pitch, 2),
                     "roll": round(roll, 2),
+                    "yaw": round(yaw, 2),
+                    "depth": round(depth, 2),
                     "desiredPitch": round(desired_pitch, 2),
                     "desiredRoll": round(desired_roll, 2),
-                    "depth": round(depth, 2),
+                    "desiredYaw": round(desired_yaw, 2),
+                    "desiredDepth": round(desired_depth, 2),
                     "waterTemperature": round(water_temperature, 2),
                     "electronicsTemperature": round(electronics_temperature, 2),
                     "thrusterRpms": thruster_rpms,
