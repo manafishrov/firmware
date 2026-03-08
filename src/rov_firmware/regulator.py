@@ -545,15 +545,23 @@ class Regulator:
     def _scale_direction_vector_with_user_max_power(
         self, direction_vector: NDArray[np.float32]
     ) -> None:
-        """Apply the user-configured maximum power percentage to the provided direction vector in place.
+        """Apply the user-configured maximum power percentages to the provided direction vector in place.
 
-        Scales the given NumPy float32 direction_vector by state.rov_config.power.user_max_power / 100.0 and updates the array directly.
+        Scales thruster components (indices 0-5) by state.rov_config.power.user_max_power_thrusters / 100.0
+        and action components (indices 6-7) by state.rov_config.power.user_max_power_actions / 100.0.
 
         Parameters:
             direction_vector (numpy.ndarray): Mutable 1-D float32 array (expected length 8) representing the direction vector to be scaled in place.
         """
-        scale = float(self.state.rov_config.power.user_max_power) / 100.0
-        direction_vector *= np.float32(scale)
+        thruster_scale = np.float32(
+            float(self.state.rov_config.power.user_max_power_thrusters) / 100.0
+        )
+        direction_vector[0:6] *= thruster_scale
+
+        action_scale = np.float32(
+            float(self.state.rov_config.power.user_max_power_actions) / 100.0
+        )
+        direction_vector[6:8] *= action_scale
 
     def _scale_regulator_direction_vector(
         self, regulator_direction_vector: NDArray[np.float32]

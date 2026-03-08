@@ -120,7 +120,8 @@ class DirectionCoefficients(CamelCaseModel):
 class Power(CamelCaseModel):
     """Power configuration."""
 
-    user_max_power: int
+    user_max_power_thrusters: int
+    user_max_power_actions: int
     regulator_max_power: int
     battery_min_voltage: float
     battery_max_voltage: float
@@ -165,7 +166,8 @@ class RovConfig(CamelCaseModel):
         heave=1,
     )
     power: Power = Power(
-        user_max_power=30,
+        user_max_power_thrusters=30,
+        user_max_power_actions=30,
         regulator_max_power=30,
         battery_min_voltage=14,
         battery_max_voltage=21.5,
