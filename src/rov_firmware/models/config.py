@@ -126,6 +126,15 @@ class Power(CamelCaseModel):
     battery_min_voltage: float
     battery_max_voltage: float
 
+    @field_validator("battery_min_voltage", "battery_max_voltage", mode="after")
+    @classmethod
+    def validate_battery_voltage(cls, v: float) -> float:
+        """Validate that battery voltage is positive."""
+        if v <= 0:
+            msg = "Battery voltage must be positive"
+            raise ValueError(msg)
+        return v
+
 
 class RovConfig(CamelCaseModel):
     """Main ROV configuration."""
