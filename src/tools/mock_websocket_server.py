@@ -158,9 +158,9 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
     async def run_thruster_test(thruster_index: int) -> None:
         """Simulate thruster test with progress toast updates."""
         try:
-            SYSTEM_STATUS["thruster_test"]["active"] = True
-            SYSTEM_STATUS["thruster_test"]["thruster_index"] = thruster_index
-            SYSTEM_STATUS["thruster_test"]["start_time"] = time.time()
+            SYSTEM_STATUS["thrusterTest"]["active"] = True
+            SYSTEM_STATUS["thrusterTest"]["thrusterIndex"] = thruster_index
+            SYSTEM_STATUS["thrusterTest"]["startTime"] = time.time()
 
             start_time = time.time()
             last_remaining = THRUSTER_TEST_DURATION_SECONDS
@@ -180,13 +180,13 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             }
             await websocket.send(json.dumps(toast_msg))
 
-            while SYSTEM_STATUS["thruster_test"]["active"]:
+            while SYSTEM_STATUS["thrusterTest"]["active"]:
                 elapsed = time.time() - start_time
                 remaining = int(THRUSTER_TEST_DURATION_SECONDS - elapsed)
 
                 if elapsed >= THRUSTER_TEST_DURATION_SECONDS:
-                    SYSTEM_STATUS["thruster_test"]["active"] = False
-                    SYSTEM_STATUS["thruster_test"]["thruster_index"] = None
+                    SYSTEM_STATUS["thrusterTest"]["active"] = False
+                    SYSTEM_STATUS["thrusterTest"]["thrusterIndex"] = None
                     toast_msg = {
                         "type": "showToast",
                         "payload": {
@@ -220,14 +220,14 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
         except Exception:
             logger.exception("Error in thruster test")
         finally:
-            SYSTEM_STATUS["thruster_test"]["active"] = False
-            SYSTEM_STATUS["thruster_test"]["thruster_index"] = None
+            SYSTEM_STATUS["thrusterTest"]["active"] = False
+            SYSTEM_STATUS["thrusterTest"]["thrusterIndex"] = None
 
     async def run_auto_tuning() -> None:
         """Simulate regulator auto tuning with progress toast updates."""
         try:
-            SYSTEM_STATUS["auto_tuning"]["active"] = True
-            SYSTEM_STATUS["auto_tuning"]["start_time"] = time.time()
+            SYSTEM_STATUS["autoTuning"]["active"] = True
+            SYSTEM_STATUS["autoTuning"]["startTime"] = time.time()
 
             toast_msg = {
                 "type": "showToast",
@@ -366,7 +366,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     }
                     await websocket.send(json.dumps(toast_msg))
                 elif msg_type == "toggleAutoStabilization":
-                    SYSTEM_STATUS["auto_stabilization"] = not SYSTEM_STATUS[
+                    SYSTEM_STATUS["autoStabilization"] = not SYSTEM_STATUS[
                         "auto_stabilization"
                     ]
                     log_msg = {
@@ -374,18 +374,18 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         "payload": {
                             "origin": "firmware",
                             "level": "info",
-                            "message": f"Auto stabilization set to {SYSTEM_STATUS['auto_stabilization']}",
+                            "message": f"Auto stabilization set to {SYSTEM_STATUS['autoStabilization']}",
                         },
                     }
                     await websocket.send(json.dumps(log_msg))
                 elif msg_type == "toggleDepthHold":
-                    SYSTEM_STATUS["depth_hold"] = not SYSTEM_STATUS["depth_hold"]
+                    SYSTEM_STATUS["depthHold"] = not SYSTEM_STATUS["depthHold"]
                     log_msg = {
                         "type": "logMessage",
                         "payload": {
                             "origin": "firmware",
                             "level": "info",
-                            "message": f"Depth hold set to {SYSTEM_STATUS['depth_hold']}",
+                            "message": f"Depth hold set to {SYSTEM_STATUS['depthHold']}",
                         },
                     }
                     await websocket.send(json.dumps(log_msg))
@@ -398,7 +398,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         run_thruster_test(cast(int, payload))
                     )
                 elif msg_type == "cancelThrusterTest":
-                    SYSTEM_STATUS["thruster_test"]["active"] = False
+                    SYSTEM_STATUS["thrusterTest"]["active"] = False
                     if thruster_test_task is not None and not thruster_test_task.done():
                         _ = thruster_test_task.cancel()
                     toast_msg = {
@@ -417,7 +417,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         _ = auto_tuning_task.cancel()
                     auto_tuning_task = asyncio.create_task(run_auto_tuning())
                 elif msg_type == "cancelRegulatorAutoTuning":
-                    SYSTEM_STATUS["auto_tuning"]["active"] = False
+                    SYSTEM_STATUS["autoTuning"]["active"] = False
                     if auto_tuning_task is not None and not auto_tuning_task.done():
                         _ = auto_tuning_task.cancel()
                     toast_msg = {
