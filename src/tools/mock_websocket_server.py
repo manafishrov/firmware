@@ -13,7 +13,7 @@ from websockets import ServerConnection
 
 
 PORT = 9000
-MOCK_CONFIG = {
+MOCK_CONFIG: dict[str, Any] = {
     "firmwareVersion": "1.0.0",
     "microcontrollerFirmwareVariant": "dshot",
     "fluidType": "saltwater",
@@ -53,13 +53,29 @@ MOCK_CONFIG = {
     },
 }
 
-SYSTEM_STATUS = {
+SYSTEM_STATUS: dict[str, Any] = {
     "auto_stabilization": False,
     "depth_hold": False,
+    "thruster_test": {
+        "active": False,
+        "thruster_index": None,
+        "start_time": None,
+    },
+    "auto_tuning": {
+        "active": False,
+        "phase": None,
+        "step": None,
+        "start_time": None,
+    },
 }
 
+THRUSTER_TEST_TOAST_ID = "thruster-test"
+AUTO_TUNING_TOAST_ID = "regulator-auto-tuning"
+THRUSTER_TEST_DURATION_SECONDS = 10
+AUTO_TUNING_OSCILLATION_DURATION_SECONDS = 10
 
-async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR0915
+
+async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR0912,PLR0915
     """Handle a websocket client connection."""
     global MOCK_CONFIG  # noqa: PLW0603
     logger = logging.getLogger(__name__)
@@ -134,8 +150,188 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                 break
             await asyncio.sleep(0.5)
 
-    telemetry_task = asyncio.create_task(send_telemetry())
-    status_task = asyncio.create_task(send_status())
+    telemetry_task: asyncio.Task[None] = asyncio.create_task(send_telemetry())
+    status_task: asyncio.Task[None] = asyncio.create_task(send_status())
+    thruster_test_task: asyncio.Task[None] | None = None
+    auto_tuning_task: asyncio.Task[None] | None = None
+
+    async def run_thruster_test(thruster_index: int) -> None:
+        """Simulate thruster test with progress toast updates."""
+        try:
+            SYSTEM_STATUS["thruster_test"]["active"] = True
+            SYSTEM_STATUS["thruster_test"]["thruster_index"] = thruster_index
+            SYSTEM_STATUS["thruster_test"]["start_time"] = time.time()
+
+            start_time = time.time()
+            last_remaining = THRUSTER_TEST_DURATION_SECONDS
+
+            toast_msg = {
+                "type": "showToast",
+                "payload": {
+                    "toastId": THRUSTER_TEST_TOAST_ID,
+                    "toastType": "loading",
+                    "message": f"Testing thruster {thruster_index}",
+                    "description": f"{last_remaining} seconds remaining",
+                    "cancel": {
+                        "type": "cancelThrusterTest",
+                        "payload": thruster_index,
+                    },
+                },
+            }
+            await websocket.send(json.dumps(toast_msg))
+
+            while SYSTEM_STATUS["thruster_test"]["active"]:
+                elapsed = time.time() - start_time
+                remaining = int(THRUSTER_TEST_DURATION_SECONDS - elapsed)
+
+                if elapsed >= THRUSTER_TEST_DURATION_SECONDS:
+                    SYSTEM_STATUS["thruster_test"]["active"] = False
+                    SYSTEM_STATUS["thruster_test"]["thruster_index"] = None
+                    toast_msg = {
+                        "type": "showToast",
+                        "payload": {
+                            "toastId": THRUSTER_TEST_TOAST_ID,
+                            "toastType": "success",
+                            "message": "Thruster test completed",
+                            "description": None,
+                            "cancel": None,
+                        },
+                    }
+                    await websocket.send(json.dumps(toast_msg))
+                    break
+
+                if remaining != last_remaining:
+                    last_remaining = remaining
+                    toast_msg = {
+                        "type": "showToast",
+                        "payload": {
+                            "toastId": THRUSTER_TEST_TOAST_ID,
+                            "toastType": "loading",
+                            "message": f"Testing thruster {thruster_index}",
+                            "description": f"{remaining} seconds remaining",
+                            "cancel": None,
+                        },
+                    }
+                    await websocket.send(json.dumps(toast_msg))
+
+                await asyncio.sleep(0.1)
+        except asyncio.CancelledError:
+            logger.debug("Thruster test cancelled")
+        except Exception:
+            logger.exception("Error in thruster test")
+        finally:
+            SYSTEM_STATUS["thruster_test"]["active"] = False
+            SYSTEM_STATUS["thruster_test"]["thruster_index"] = None
+
+    async def run_auto_tuning() -> None:
+        """Simulate regulator auto tuning with progress toast updates."""
+        try:
+            SYSTEM_STATUS["auto_tuning"]["active"] = True
+            SYSTEM_STATUS["auto_tuning"]["start_time"] = time.time()
+
+            toast_msg = {
+                "type": "showToast",
+                "payload": {
+                    "toastId": AUTO_TUNING_TOAST_ID,
+                    "toastType": "loading",
+                    "message": "Starting regulator auto tuning",
+                    "description": "Preparing...",
+                    "cancel": {
+                        "type": "cancelRegulatorAutoTuning",
+                    },
+                },
+            }
+            await websocket.send(json.dumps(toast_msg))
+
+            for phase in ("pitch", "roll", "depth"):
+                if not SYSTEM_STATUS["auto_tuning"]["active"]:
+                    break
+                await _run_tuning_phase(phase)
+
+            if SYSTEM_STATUS["auto_tuning"]["active"]:
+                toast_msg = {
+                    "type": "showToast",
+                    "payload": {
+                        "toastId": AUTO_TUNING_TOAST_ID,
+                        "toastType": "success",
+                        "message": "Auto tuning completed",
+                        "description": "PID parameters updated",
+                        "cancel": None,
+                    },
+                }
+                await websocket.send(json.dumps(toast_msg))
+
+        except asyncio.CancelledError:
+            logger.debug("Auto tuning cancelled")
+        except Exception:
+            logger.exception("Error in auto tuning")
+        finally:
+            SYSTEM_STATUS["auto_tuning"]["active"] = False
+            SYSTEM_STATUS["auto_tuning"]["phase"] = None
+            SYSTEM_STATUS["auto_tuning"]["step"] = None
+
+    async def _run_tuning_phase(phase: str) -> None:
+        SYSTEM_STATUS["auto_tuning"]["phase"] = phase
+        SYSTEM_STATUS["auto_tuning"]["step"] = "find_zero"
+
+        toast_msg = {
+            "type": "showToast",
+            "payload": {
+                "toastId": AUTO_TUNING_TOAST_ID,
+                "toastType": "loading",
+                "message": f"Tuning {phase}",
+                "description": "Finding zero point...",
+                "cancel": None,
+            },
+        }
+        await websocket.send(json.dumps(toast_msg))
+        await asyncio.sleep(2)
+
+        if not SYSTEM_STATUS["auto_tuning"]["active"]:
+            return
+
+        SYSTEM_STATUS["auto_tuning"]["step"] = "find_amplitude"
+        toast_msg = {
+            "type": "showToast",
+            "payload": {
+                "toastId": AUTO_TUNING_TOAST_ID,
+                "toastType": "loading",
+                "message": f"Tuning {phase}",
+                "description": "Finding oscillation amplitude...",
+                "cancel": None,
+            },
+        }
+        await websocket.send(json.dumps(toast_msg))
+        await asyncio.sleep(2)
+
+        if not SYSTEM_STATUS["auto_tuning"]["active"]:
+            return
+
+        SYSTEM_STATUS["auto_tuning"]["step"] = "oscillate"
+        oscillation_start = time.time()
+        last_elapsed = -1
+
+        while SYSTEM_STATUS["auto_tuning"]["active"]:
+            elapsed = time.time() - oscillation_start
+            if elapsed >= AUTO_TUNING_OSCILLATION_DURATION_SECONDS:
+                break
+
+            elapsed_int = int(elapsed)
+            if elapsed_int != last_elapsed:
+                last_elapsed = elapsed_int
+                toast_msg = {
+                    "type": "showToast",
+                    "payload": {
+                        "toastId": AUTO_TUNING_TOAST_ID,
+                        "toastType": "loading",
+                        "message": f"Tuning {phase}",
+                        "description": f"Oscillating... {elapsed_int}s",
+                        "cancel": None,
+                    },
+                }
+                await websocket.send(json.dumps(toast_msg))
+
+            await asyncio.sleep(0.1)
 
     try:
         await asyncio.sleep(5)
@@ -157,11 +353,11 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     config_msg = {"type": "config", "payload": MOCK_CONFIG}
                     await websocket.send(json.dumps(config_msg))
                 elif msg_type == "setConfig":
-                    MOCK_CONFIG = payload
+                    MOCK_CONFIG = cast(dict[str, Any], payload)
                     toast_msg = {
                         "type": "showToast",
                         "payload": {
-                            "id": None,
+                            "toastId": None,
                             "toastType": "success",
                             "message": "ROV config set successfully",
                             "description": None,
@@ -195,6 +391,46 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     await websocket.send(json.dumps(log_msg))
                 elif msg_type == "customAction":
                     logger.info(f"Custom action: {payload}")
+                elif msg_type == "startThrusterTest":
+                    if thruster_test_task is not None and not thruster_test_task.done():
+                        _ = thruster_test_task.cancel()
+                    thruster_test_task = asyncio.create_task(
+                        run_thruster_test(cast(int, payload))
+                    )
+                elif msg_type == "cancelThrusterTest":
+                    SYSTEM_STATUS["thruster_test"]["active"] = False
+                    if thruster_test_task is not None and not thruster_test_task.done():
+                        _ = thruster_test_task.cancel()
+                    toast_msg = {
+                        "type": "showToast",
+                        "payload": {
+                            "toastId": THRUSTER_TEST_TOAST_ID,
+                            "toastType": "info",
+                            "message": "Thruster test cancelled",
+                            "description": None,
+                            "cancel": None,
+                        },
+                    }
+                    await websocket.send(json.dumps(toast_msg))
+                elif msg_type == "startRegulatorAutoTuning":
+                    if auto_tuning_task is not None and not auto_tuning_task.done():
+                        _ = auto_tuning_task.cancel()
+                    auto_tuning_task = asyncio.create_task(run_auto_tuning())
+                elif msg_type == "cancelRegulatorAutoTuning":
+                    SYSTEM_STATUS["auto_tuning"]["active"] = False
+                    if auto_tuning_task is not None and not auto_tuning_task.done():
+                        _ = auto_tuning_task.cancel()
+                    toast_msg = {
+                        "type": "showToast",
+                        "payload": {
+                            "toastId": AUTO_TUNING_TOAST_ID,
+                            "toastType": "info",
+                            "message": "Auto tuning cancelled",
+                            "description": None,
+                            "cancel": None,
+                        },
+                    }
+                    await websocket.send(json.dumps(toast_msg))
                 else:
                     logger.warning(f"Unhandled message type: {msg_type}")
                     logger.info(payload)
@@ -206,6 +442,10 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
     finally:
         _ = telemetry_task.cancel()
         _ = status_task.cancel()
+        if thruster_test_task is not None:
+            _ = thruster_test_task.cancel()
+        if auto_tuning_task is not None:
+            _ = auto_tuning_task.cancel()
 
 
 async def main() -> None:
