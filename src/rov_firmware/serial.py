@@ -44,7 +44,7 @@ class SerialManager:
                 self.state.system_health.microcontroller_healthy = False
                 log_error("Failed to find microcontroller serial port.")
                 toast_error(
-                    toast_id=None,
+                    identifier=None,
                     message="Microcontroller Connection Failed!",
                     description="Could not find microcontroller serial port.",
                     cancel=None,
@@ -61,7 +61,7 @@ class SerialManager:
                 f"Failed to initialize serial connection to microcontroller. Error: {e}"
             )
             toast_error(
-                toast_id=None,
+                identifier=None,
                 message="Microcontroller Init Failed!",
                 description="Failed to connect to microcontroller. Check connections.",
                 cancel=None,

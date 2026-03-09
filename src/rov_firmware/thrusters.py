@@ -150,7 +150,7 @@ class Thrusters:
         if elapsed >= THRUSTER_TEST_DURATION_SECONDS:
             self.state.thrusters.test_thruster = None
             toast_success(
-                toast_id=THRUSTER_TEST_TOAST_ID,
+                identifier=THRUSTER_TEST_TOAST_ID,
                 message="Thruster test completed",
                 description=None,
                 cancel=None,
@@ -163,7 +163,7 @@ class Thrusters:
             if remaining != self.state.thrusters.last_remaining:
                 self.state.thrusters.last_remaining = remaining
                 toast_loading(
-                    toast_id=THRUSTER_TEST_TOAST_ID,
+                    identifier=THRUSTER_TEST_TOAST_ID,
                     message=f"Testing thruster {test_thruster}",
                     description=f"{remaining} seconds remaining",
                     cancel=None,

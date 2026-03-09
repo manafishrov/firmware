@@ -665,7 +665,7 @@ class Regulator:
         else:
             self.state.regulator.auto_tuning_active = False
             toast_success(
-                toast_id=AUTO_TUNING_TOAST_ID,
+                identifier=AUTO_TUNING_TOAST_ID,
                 message="Auto tuning completed",
                 description="PID parameters updated",
                 cancel=None,
@@ -695,7 +695,7 @@ class Regulator:
 
         if self.auto_tuning_step == "find_zero":
             toast_loading(
-                toast_id=AUTO_TUNING_TOAST_ID,
+                identifier=AUTO_TUNING_TOAST_ID,
                 message="Tuning pitch",
                 description="Finding zero point...",
                 cancel=None,
@@ -714,7 +714,7 @@ class Regulator:
 
         elif self.auto_tuning_step == "find_amplitude":
             toast_loading(
-                toast_id=AUTO_TUNING_TOAST_ID,
+                identifier=AUTO_TUNING_TOAST_ID,
                 message="Tuning pitch",
                 description="Finding oscillation amplitude...",
                 cancel=None,
@@ -744,7 +744,7 @@ class Regulator:
             )
             self.auto_tuning_data.append((current_time, pitch))
             toast_loading(
-                toast_id=AUTO_TUNING_TOAST_ID,
+                identifier=AUTO_TUNING_TOAST_ID,
                 message="Tuning pitch",
                 description=f"Oscillating... {int(elapsed)}s",
                 cancel=None,
@@ -766,7 +766,7 @@ class Regulator:
 
         if self.auto_tuning_step == "find_zero":
             toast_loading(
-                toast_id=AUTO_TUNING_TOAST_ID,
+                identifier=AUTO_TUNING_TOAST_ID,
                 message="Tuning roll",
                 description="Finding zero point...",
                 cancel=None,
@@ -786,7 +786,7 @@ class Regulator:
 
         elif self.auto_tuning_step == "find_amplitude":
             toast_loading(
-                toast_id=AUTO_TUNING_TOAST_ID,
+                identifier=AUTO_TUNING_TOAST_ID,
                 message="Tuning roll",
                 description="Finding oscillation amplitude...",
                 cancel=None,
@@ -818,7 +818,7 @@ class Regulator:
             pitch_comp = -pitch * self.state.rov_config.regulator.pitch.kp * 0.5
             self.auto_tuning_data.append((current_time, roll))
             toast_loading(
-                toast_id=AUTO_TUNING_TOAST_ID,
+                identifier=AUTO_TUNING_TOAST_ID,
                 message="Tuning roll",
                 description=f"Oscillating... {int(elapsed)}s",
                 cancel=None,
@@ -841,7 +841,7 @@ class Regulator:
 
         if self.auto_tuning_step == "find_zero":
             toast_loading(
-                toast_id=AUTO_TUNING_TOAST_ID,
+                identifier=AUTO_TUNING_TOAST_ID,
                 message="Tuning depth",
                 description="Finding zero point...",
                 cancel=None,
@@ -865,7 +865,7 @@ class Regulator:
 
         elif self.auto_tuning_step == "find_amplitude":
             toast_loading(
-                toast_id=AUTO_TUNING_TOAST_ID,
+                identifier=AUTO_TUNING_TOAST_ID,
                 message="Tuning depth",
                 description="Finding oscillation amplitude...",
                 cancel=None,
@@ -898,7 +898,7 @@ class Regulator:
             )
             self.auto_tuning_data.append((current_time, depth))
             toast_loading(
-                toast_id=AUTO_TUNING_TOAST_ID,
+                identifier=AUTO_TUNING_TOAST_ID,
                 message="Tuning depth",
                 description=f"Oscillating... {int(elapsed)}s",
                 cancel=None,

@@ -23,7 +23,7 @@ def _process_flash_output(process: subprocess.Popen[str]) -> tuple[bool, int]:
     if process.stdout is None:
         log_warn("Could not capture process stdout.")
         toast_warn(
-            toast_id=None,
+            identifier=None,
             message="Unable to show firmware flashing progress",
             description=None,
             cancel=None,
@@ -48,7 +48,7 @@ def _process_flash_output(process: subprocess.Popen[str]) -> tuple[bool, int]:
             ):
                 bootsel_toast_shown = True
                 toast_info(
-                    toast_id=None,
+                    identifier=None,
                     message="Microcontroller was asked to reboot into BOOTSEL mode",
                     description=None,
                     cancel=None,
@@ -60,7 +60,7 @@ def _process_flash_output(process: subprocess.Popen[str]) -> tuple[bool, int]:
                     if new_percent != percent:
                         percent = new_percent
                         toast_loading(
-                            toast_id=FLASH_TOAST_ID,
+                            identifier=FLASH_TOAST_ID,
                             message=f"Flashing firmware... {percent}%",
                             description=None,
                             cancel=None,
@@ -100,14 +100,14 @@ async def handle_flash_microcontroller_firmware(
         flash_success, rc = _process_flash_output(process)
         if flash_success and rc == 0:
             toast_success(
-                toast_id=FLASH_TOAST_ID,
+                identifier=FLASH_TOAST_ID,
                 message="Firmware flashed successfully",
                 description=None,
                 cancel=None,
             )
         else:
             toast_error(
-                toast_id=FLASH_TOAST_ID,
+                identifier=FLASH_TOAST_ID,
                 message="Firmware flashing failed",
                 description=None,
                 cancel=None,
@@ -115,7 +115,7 @@ async def handle_flash_microcontroller_firmware(
             log_error(f"Firmware flashing failed with return code {rc}.")
     except Exception as ex:
         toast_error(
-            toast_id=FLASH_TOAST_ID,
+            identifier=FLASH_TOAST_ID,
             message="Firmware flashing encountered an unexpected error",
             description=None,
             cancel=None,

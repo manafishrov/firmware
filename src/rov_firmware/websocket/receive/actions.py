@@ -41,7 +41,7 @@ async def handle_start_thruster_test(
     state.thrusters.test_start_time = time.time()
     state.thrusters.last_remaining = 10
     toast_loading(
-        toast_id=THRUSTER_TEST_TOAST_ID,
+        identifier=THRUSTER_TEST_TOAST_ID,
         message=f"Testing thruster {payload}",
         description="10 seconds remaining",
         cancel=CancelThrusterTest(payload=payload),
@@ -61,7 +61,7 @@ async def handle_cancel_thruster_test(
     log_info(f"Cancelling thruster test: {payload}")
     state.thrusters.test_thruster = None
     toast_info(
-        toast_id=THRUSTER_TEST_TOAST_ID,
+        identifier=THRUSTER_TEST_TOAST_ID,
         message="Thruster test cancelled",
         description=None,
         cancel=None,

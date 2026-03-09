@@ -38,7 +38,7 @@ async def handle_set_config(
     state.rov_config.save()
     log_info("Received and applied new config.")
     toast_success(
-        toast_id=None,
+        identifier=None,
         message="ROV config set successfully",
         description=None,
         cancel=None,

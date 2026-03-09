@@ -22,7 +22,7 @@ ToastCancel = CancelRegulatorAutoTuning | CancelThrusterTest
 class Toast(CamelCaseModel):
     """Model for toast notifications."""
 
-    toast_id: str | None
+    identifier: str | None
     toast_type: ToastType | None
     message: str
     description: str | None

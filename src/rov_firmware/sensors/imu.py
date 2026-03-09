@@ -62,7 +62,7 @@ class Imu:
             self.state.system_health.imu_healthy = False
             log_error(f"Failed to initialize BMI270 IMU. Is it connected? Error: {e}")
             toast_error(
-                toast_id=None,
+                identifier=None,
                 message="IMU Init Failed!",
                 description="Failed to initialize IMU. Check connections.",
                 cancel=None,

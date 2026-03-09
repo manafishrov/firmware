@@ -41,7 +41,7 @@ class PressureSensor:
                 f"Failed to initialize MS5837 pressure sensor. Is it connected? Error: {e}"
             )
             toast_error(
-                toast_id=None,
+                identifier=None,
                 message="Pressure Sensor Init Failed!",
                 description="Failed to initialize pressure sensor. Check connections.",
                 cancel=None,
