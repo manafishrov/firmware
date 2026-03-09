@@ -54,18 +54,18 @@ MOCK_CONFIG: dict[str, Any] = {
 }
 
 SYSTEM_STATUS: dict[str, Any] = {
-    "auto_stabilization": False,
-    "depth_hold": False,
-    "thruster_test": {
+    "autoStabilization": False,
+    "depthHold": False,
+    "thrusterTest": {
         "active": False,
-        "thruster_index": None,
-        "start_time": None,
+        "thrusterIndex": None,
+        "startTime": None,
     },
-    "auto_tuning": {
+    "autoTuning": {
         "active": False,
         "phase": None,
         "step": None,
-        "start_time": None,
+        "startTime": None,
     },
 }
 
@@ -169,7 +169,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                 "type": "showToast",
                 "payload": {
                     "identifier": THRUSTER_TEST_TOAST_ID,
-                    "toast_type": "loading",
+                    "toastType": "loading",
                     "message": f"Testing thruster {thruster_index}",
                     "description": f"{last_remaining} seconds remaining",
                     "cancel": {
@@ -191,7 +191,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         "type": "showToast",
                         "payload": {
                             "identifier": THRUSTER_TEST_TOAST_ID,
-                            "toast_type": "success",
+                            "toastType": "success",
                             "message": "Thruster test completed",
                             "description": None,
                             "cancel": None,
@@ -206,7 +206,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         "type": "showToast",
                         "payload": {
                             "identifier": THRUSTER_TEST_TOAST_ID,
-                            "toast_type": "loading",
+                            "toastType": "loading",
                             "message": f"Testing thruster {thruster_index}",
                             "description": f"{remaining} seconds remaining",
                             "cancel": None,
@@ -233,7 +233,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                 "type": "showToast",
                 "payload": {
                     "identifier": AUTO_TUNING_TOAST_ID,
-                    "toast_type": "loading",
+                    "toastType": "loading",
                     "message": "Starting regulator auto tuning",
                     "description": "Preparing...",
                     "cancel": {
@@ -253,7 +253,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     "type": "showToast",
                     "payload": {
                         "identifier": AUTO_TUNING_TOAST_ID,
-                        "toast_type": "success",
+                        "toastType": "success",
                         "message": "Auto tuning completed",
                         "description": "PID parameters updated",
                         "cancel": None,
@@ -278,7 +278,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             "type": "showToast",
             "payload": {
                 "identifier": AUTO_TUNING_TOAST_ID,
-                "toast_type": "loading",
+                "toastType": "loading",
                 "message": f"Tuning {phase}",
                 "description": "Finding zero point...",
                 "cancel": None,
@@ -295,7 +295,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             "type": "showToast",
             "payload": {
                 "identifier": AUTO_TUNING_TOAST_ID,
-                "toast_type": "loading",
+                "toastType": "loading",
                 "message": f"Tuning {phase}",
                 "description": "Finding oscillation amplitude...",
                 "cancel": None,
@@ -323,7 +323,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     "type": "showToast",
                     "payload": {
                         "identifier": AUTO_TUNING_TOAST_ID,
-                        "toast_type": "loading",
+                        "toastType": "loading",
                         "message": f"Tuning {phase}",
                         "description": f"Oscillating... {elapsed_int}s",
                         "cancel": None,
@@ -358,7 +358,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         "type": "showToast",
                         "payload": {
                             "identifier": None,
-                            "toast_type": "success",
+                            "toastType": "success",
                             "message": "ROV config set successfully",
                             "description": None,
                             "cancel": None,
@@ -405,7 +405,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         "type": "showToast",
                         "payload": {
                             "identifier": THRUSTER_TEST_TOAST_ID,
-                            "toast_type": "info",
+                            "toastType": "info",
                             "message": "Thruster test cancelled",
                             "description": None,
                             "cancel": None,
@@ -424,7 +424,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         "type": "showToast",
                         "payload": {
                             "identifier": AUTO_TUNING_TOAST_ID,
-                            "toast_type": "info",
+                            "toastType": "info",
                             "message": "Auto tuning cancelled",
                             "description": None,
                             "cancel": None,
