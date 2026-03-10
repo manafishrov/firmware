@@ -9,7 +9,7 @@ from ..log import log_error, log_info
 from ..models.config import FluidType
 from ..models.sensors import PressureData
 from ..rov_state import RovState
-from ..toast import toast_error
+from ..toast import ToastContent, toast_error
 
 
 class PressureSensor:
@@ -42,9 +42,11 @@ class PressureSensor:
             )
             toast_error(
                 identifier=None,
-                message="Pressure Sensor Init Failed!",
-                description="Failed to initialize pressure sensor. Check connections.",
-                cancel=None,
+                content=ToastContent(
+                    message_key="toasts_pressure_sensor_init_failed",
+                    description_key="toasts_pressure_sensor_init_failed_description",
+                ),
+                action=None,
             )
 
     def _update_fluid_density(self) -> None:

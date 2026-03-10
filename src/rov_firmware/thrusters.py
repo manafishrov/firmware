@@ -21,10 +21,11 @@ from .constants import (
     THRUSTER_TIMEOUT_MS,
 )
 from .log import log_error
+from .models.toast import ToastVariant
 from .regulator import Regulator
 from .rov_state import RovState
 from .serial import SerialManager
-from .toast import toast_loading, toast_success
+from .toast import ToastContent, cancel_thruster_test_action, toast_content
 
 
 class Thrusters:
@@ -149,11 +150,13 @@ class Thrusters:
         elapsed = current_time - self.state.thrusters.test_start_time
         if elapsed >= THRUSTER_TEST_DURATION_SECONDS:
             self.state.thrusters.test_thruster = None
-            toast_success(
+            toast_content(
                 identifier=THRUSTER_TEST_TOAST_ID,
-                message="Thruster test completed",
-                description=None,
-                cancel=None,
+                variant=ToastVariant.SUCCESS,
+                content=ToastContent(
+                    message_key="toasts_thruster_test_completed",
+                ),
+                action=None,
             )
             return None
         else:
@@ -162,11 +165,16 @@ class Thrusters:
             remaining = int(THRUSTER_TEST_DURATION_SECONDS - elapsed)
             if remaining != self.state.thrusters.last_remaining:
                 self.state.thrusters.last_remaining = remaining
-                toast_loading(
+                toast_content(
                     identifier=THRUSTER_TEST_TOAST_ID,
-                    message=f"Testing thruster {test_thruster}",
-                    description=f"{remaining} seconds remaining",
-                    cancel=None,
+                    variant=ToastVariant.LOADING,
+                    content=ToastContent(
+                        message_key="toasts_thruster_test_title",
+                        message_args={"thruster": test_thruster},
+                        description_key="toasts_seconds_remaining",
+                        description_args={"seconds": remaining},
+                    ),
+                    action=cancel_thruster_test_action(test_thruster),
                 )
             return thrust_vector
 

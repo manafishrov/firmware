@@ -2,12 +2,11 @@
 
 from enum import StrEnum
 
-from ..websocket.cancel_messages import CancelRegulatorAutoTuning, CancelThrusterTest
 from .base import CamelCaseModel
 
 
-class ToastType(StrEnum):
-    """Enum for toast types."""
+class ToastVariant(StrEnum):
+    """Supported visual variants for toast notifications."""
 
     SUCCESS = "success"
     INFO = "info"
@@ -16,14 +15,31 @@ class ToastType(StrEnum):
     LOADING = "loading"
 
 
-ToastCancel = CancelRegulatorAutoTuning | CancelThrusterTest
+ToastArgs = dict[str, str | int | float | bool]
+
+
+class ToastAction(CamelCaseModel):
+    """Action metadata rendered as a toast action button."""
+
+    label_key: str | None = None
+    label_args: ToastArgs | None = None
+    message_type: str
+    payload: object | None = None
+
+
+class ToastContent(CamelCaseModel):
+    """Localized toast text payload and optional interpolation args."""
+
+    message_key: str
+    message_args: ToastArgs | None = None
+    description_key: str | None = None
+    description_args: ToastArgs | None = None
 
 
 class Toast(CamelCaseModel):
     """Model for toast notifications."""
 
     identifier: str | None
-    toast_type: ToastType | None
-    message: str
-    description: str | None
-    cancel: ToastCancel | None
+    variant: ToastVariant | None
+    content: ToastContent
+    action: ToastAction | None

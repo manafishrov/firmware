@@ -31,8 +31,9 @@ from .models.config import (
     AxisConfig,
     RegulatorSuggestions as RegulatorSuggestionsPayload,
 )
+from .models.toast import ToastVariant
 from .rov_state import RovState
-from .toast import toast_loading, toast_success
+from .toast import ToastContent, toast_content
 from .websocket.message import RegulatorSuggestions
 from .websocket.queue import get_message_queue
 
@@ -664,11 +665,14 @@ class Regulator:
             return self._handle_depth_tuning(current_time)
         else:
             self.state.regulator.auto_tuning_active = False
-            toast_success(
+            toast_content(
                 identifier=AUTO_TUNING_TOAST_ID,
-                message="Auto tuning completed",
-                description="PID parameters updated",
-                cancel=None,
+                variant=ToastVariant.SUCCESS,
+                content=ToastContent(
+                    message_key="toasts_auto_tuning_completed",
+                    description_key="toasts_auto_tuning_pid_updated",
+                ),
+                action=None,
             )
             log_info("Regulator auto tuning completed")
             suggestions = RegulatorSuggestions(
@@ -694,11 +698,15 @@ class Regulator:
         pitch = self.state.regulator.pitch
 
         if self.auto_tuning_step == "find_zero":
-            toast_loading(
+            toast_content(
                 identifier=AUTO_TUNING_TOAST_ID,
-                message="Tuning pitch",
-                description="Finding zero point...",
-                cancel=None,
+                variant=ToastVariant.LOADING,
+                content=ToastContent(
+                    message_key="toasts_auto_tuning_tuning_phase",
+                    message_args={"phase": "pitch"},
+                    description_key="toasts_auto_tuning_finding_zero",
+                ),
+                action=None,
             )
             if abs(pitch) < AUTO_TUNING_ZERO_THRESHOLD_DEGREES:
                 self.auto_tuning_step = "find_amplitude"
@@ -713,11 +721,15 @@ class Regulator:
                 )
 
         elif self.auto_tuning_step == "find_amplitude":
-            toast_loading(
+            toast_content(
                 identifier=AUTO_TUNING_TOAST_ID,
-                message="Tuning pitch",
-                description="Finding oscillation amplitude...",
-                cancel=None,
+                variant=ToastVariant.LOADING,
+                content=ToastContent(
+                    message_key="toasts_auto_tuning_tuning_phase",
+                    message_args={"phase": "pitch"},
+                    description_key="toasts_auto_tuning_finding_oscillation",
+                ),
+                action=None,
             )
             self.auto_tuning_amplitude += 0.002
             actuation = (
@@ -743,11 +755,16 @@ class Regulator:
                 else self.auto_tuning_zero_actuation - self.auto_tuning_amplitude
             )
             self.auto_tuning_data.append((current_time, pitch))
-            toast_loading(
+            toast_content(
                 identifier=AUTO_TUNING_TOAST_ID,
-                message="Tuning pitch",
-                description=f"Oscillating... {int(elapsed)}s",
-                cancel=None,
+                variant=ToastVariant.LOADING,
+                content=ToastContent(
+                    message_key="toasts_auto_tuning_tuning_phase",
+                    message_args={"phase": "pitch"},
+                    description_key="toasts_auto_tuning_oscillating",
+                    description_args={"seconds": int(elapsed)},
+                ),
+                action=None,
             )
             return np.array([0, 0, 0, actuation, 0, 0, 0, 0], dtype=np.float32)
 
@@ -765,11 +782,15 @@ class Regulator:
         pitch = self.state.regulator.pitch
 
         if self.auto_tuning_step == "find_zero":
-            toast_loading(
+            toast_content(
                 identifier=AUTO_TUNING_TOAST_ID,
-                message="Tuning roll",
-                description="Finding zero point...",
-                cancel=None,
+                variant=ToastVariant.LOADING,
+                content=ToastContent(
+                    message_key="toasts_auto_tuning_tuning_phase",
+                    message_args={"phase": "roll"},
+                    description_key="toasts_auto_tuning_finding_zero",
+                ),
+                action=None,
             )
             if abs(roll) < AUTO_TUNING_ZERO_THRESHOLD_DEGREES:
                 self.auto_tuning_step = "find_amplitude"
@@ -785,11 +806,15 @@ class Regulator:
                 )
 
         elif self.auto_tuning_step == "find_amplitude":
-            toast_loading(
+            toast_content(
                 identifier=AUTO_TUNING_TOAST_ID,
-                message="Tuning roll",
-                description="Finding oscillation amplitude...",
-                cancel=None,
+                variant=ToastVariant.LOADING,
+                content=ToastContent(
+                    message_key="toasts_auto_tuning_tuning_phase",
+                    message_args={"phase": "roll"},
+                    description_key="toasts_auto_tuning_finding_oscillation",
+                ),
+                action=None,
             )
             self.auto_tuning_amplitude += 0.002
             actuation = (
@@ -817,11 +842,16 @@ class Regulator:
             )
             pitch_comp = -pitch * self.state.rov_config.regulator.pitch.kp * 0.5
             self.auto_tuning_data.append((current_time, roll))
-            toast_loading(
+            toast_content(
                 identifier=AUTO_TUNING_TOAST_ID,
-                message="Tuning roll",
-                description=f"Oscillating... {int(elapsed)}s",
-                cancel=None,
+                variant=ToastVariant.LOADING,
+                content=ToastContent(
+                    message_key="toasts_auto_tuning_tuning_phase",
+                    message_args={"phase": "roll"},
+                    description_key="toasts_auto_tuning_oscillating",
+                    description_args={"seconds": int(elapsed)},
+                ),
+                action=None,
             )
             return np.array([0, 0, 0, pitch_comp, 0, actuation, 0, 0], dtype=np.float32)
 
@@ -840,11 +870,15 @@ class Regulator:
         depth = self.state.pressure.depth
 
         if self.auto_tuning_step == "find_zero":
-            toast_loading(
+            toast_content(
                 identifier=AUTO_TUNING_TOAST_ID,
-                message="Tuning depth",
-                description="Finding zero point...",
-                cancel=None,
+                variant=ToastVariant.LOADING,
+                content=ToastContent(
+                    message_key="toasts_auto_tuning_tuning_phase",
+                    message_args={"phase": "depth"},
+                    description_key="toasts_auto_tuning_finding_zero",
+                ),
+                action=None,
             )
             if (
                 abs(depth - self.state.regulator.desired_depth)
@@ -864,11 +898,15 @@ class Regulator:
                 )
 
         elif self.auto_tuning_step == "find_amplitude":
-            toast_loading(
+            toast_content(
                 identifier=AUTO_TUNING_TOAST_ID,
-                message="Tuning depth",
-                description="Finding oscillation amplitude...",
-                cancel=None,
+                variant=ToastVariant.LOADING,
+                content=ToastContent(
+                    message_key="toasts_auto_tuning_tuning_phase",
+                    message_args={"phase": "depth"},
+                    description_key="toasts_auto_tuning_finding_oscillation",
+                ),
+                action=None,
             )
             self.auto_tuning_amplitude += 0.002
             actuation = (
@@ -897,11 +935,16 @@ class Regulator:
                 else self.auto_tuning_zero_actuation - self.auto_tuning_amplitude
             )
             self.auto_tuning_data.append((current_time, depth))
-            toast_loading(
+            toast_content(
                 identifier=AUTO_TUNING_TOAST_ID,
-                message="Tuning depth",
-                description=f"Oscillating... {int(elapsed)}s",
-                cancel=None,
+                variant=ToastVariant.LOADING,
+                content=ToastContent(
+                    message_key="toasts_auto_tuning_tuning_phase",
+                    message_args={"phase": "depth"},
+                    description_key="toasts_auto_tuning_oscillating",
+                    description_args={"seconds": int(elapsed)},
+                ),
+                action=None,
             )
             return np.array([0, 0, actuation, 0, 0, 0, 0, 0], dtype=np.float32)
 

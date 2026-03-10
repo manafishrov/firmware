@@ -2,7 +2,7 @@
 
 from ..log import log_info
 from ..rov_state import RovState
-from ..toast import toast_info
+from ..toast import ToastContent, toast_info
 
 
 async def execute(state: RovState) -> None:  # noqa: ARG001
@@ -10,7 +10,9 @@ async def execute(state: RovState) -> None:  # noqa: ARG001
     log_info("Executing example custom action")
     toast_info(
         identifier=None,
-        message="Example action triggered",
-        description="This is a sample custom action",
-        cancel=None,
+        content=ToastContent(
+            message_key="toasts_example_action_triggered",
+            description_key="toasts_example_action_description",
+        ),
+        action=None,
     )

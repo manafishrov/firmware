@@ -8,7 +8,14 @@ from typing import cast
 from ...constants import FLASH_TOAST_ID
 from ...log import log_error, log_info, log_warn
 from ...models.config import MicrocontrollerFirmwareVariant
-from ...toast import toast_error, toast_info, toast_loading, toast_success, toast_warn
+from ...toast import (
+    ToastContent,
+    toast_error,
+    toast_info,
+    toast_loading,
+    toast_success,
+    toast_warn,
+)
 
 
 def _process_flash_output(process: subprocess.Popen[str]) -> tuple[bool, int]:
@@ -24,9 +31,10 @@ def _process_flash_output(process: subprocess.Popen[str]) -> tuple[bool, int]:
         log_warn("Could not capture process stdout.")
         toast_warn(
             identifier=None,
-            message="Unable to show firmware flashing progress",
-            description=None,
-            cancel=None,
+            content=ToastContent(
+                message_key="toasts_flash_progress_unavailable",
+            ),
+            action=None,
         )
         return False, -1
 
@@ -49,9 +57,10 @@ def _process_flash_output(process: subprocess.Popen[str]) -> tuple[bool, int]:
                 bootsel_toast_shown = True
                 toast_info(
                     identifier=None,
-                    message="Microcontroller was asked to reboot into BOOTSEL mode",
-                    description=None,
-                    cancel=None,
+                    content=ToastContent(
+                        message_key="toasts_flash_bootsel_requested",
+                    ),
+                    action=None,
                 )
             if "Loading into Flash:" in line:
                 match = re.search(r"(\d+)%", line)
@@ -61,9 +70,11 @@ def _process_flash_output(process: subprocess.Popen[str]) -> tuple[bool, int]:
                         percent = new_percent
                         toast_loading(
                             identifier=FLASH_TOAST_ID,
-                            message=f"Flashing firmware... {percent}%",
-                            description=None,
-                            cancel=None,
+                            content=ToastContent(
+                                message_key="toasts_flash_in_progress",
+                                message_args={"percent": percent},
+                            ),
+                            action=None,
                         )
             if "Firmware flashed successfully." in line:
                 flash_success = True
@@ -101,23 +112,26 @@ async def handle_flash_microcontroller_firmware(
         if flash_success and rc == 0:
             toast_success(
                 identifier=FLASH_TOAST_ID,
-                message="Firmware flashed successfully",
-                description=None,
-                cancel=None,
+                content=ToastContent(
+                    message_key="toasts_flash_success",
+                ),
+                action=None,
             )
         else:
             toast_error(
                 identifier=FLASH_TOAST_ID,
-                message="Firmware flashing failed",
-                description=None,
-                cancel=None,
+                content=ToastContent(
+                    message_key="toasts_flash_failed",
+                ),
+                action=None,
             )
             log_error(f"Firmware flashing failed with return code {rc}.")
     except Exception as ex:
         toast_error(
             identifier=FLASH_TOAST_ID,
-            message="Firmware flashing encountered an unexpected error",
-            description=None,
-            cancel=None,
+            content=ToastContent(
+                message_key="toasts_flash_unexpected_error",
+            ),
+            action=None,
         )
         log_error(f"Unexpected error: {ex}")

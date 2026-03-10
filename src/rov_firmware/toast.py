@@ -2,149 +2,124 @@
 
 import asyncio
 
-from .models.toast import Toast, ToastCancel, ToastType
-from .websocket.cancel_messages import (
-    CancelRegulatorAutoTuning,
-    CancelThrusterTest,
-)
-from .websocket.message import (
-    ShowToast,
-)
+from .models.toast import Toast, ToastAction, ToastArgs, ToastContent, ToastVariant
+from .websocket.message import ShowToast
 from .websocket.queue import get_message_queue
 from .websocket.state import websocket_state
 
 
-async def _toast_message_async(
-    identifier: str | None,
-    toast_type: ToastType | None,
-    message: str,
-    description: str | None,
-    cancel: ToastCancel | None,
-) -> None:
-    toast_type_enum = toast_type
-
-    payload = Toast(
-        identifier=identifier,
-        toast_type=toast_type_enum,
-        message=message,
-        description=description,
-        cancel=cancel,
+def toast_action(
+    message_type: str,
+    payload: object | None = None,
+    *,
+    label_key: str | None = None,
+    label_args: ToastArgs | None = None,
+) -> ToastAction:
+    """Create a toast action payload."""
+    return ToastAction(
+        message_type=message_type,
+        payload=payload,
+        label_key=label_key,
+        label_args=label_args,
     )
+
+
+def cancel_thruster_test_action(thruster_index: int) -> ToastAction:
+    """Create action metadata for cancelling a thruster test."""
+    return toast_action(
+        "cancelThrusterTest",
+        thruster_index,
+        label_key="common_cancel",
+    )
+
+
+def cancel_regulator_auto_tuning_action() -> ToastAction:
+    """Create action metadata for cancelling regulator auto tuning."""
+    return toast_action(
+        "cancelRegulatorAutoTuning",
+        label_key="common_cancel",
+    )
+
+
+async def _toast_message_async(payload: Toast) -> None:
     message_model = ShowToast(payload=payload)
     await get_message_queue().put(message_model)
 
 
-def _toast_message(
-    identifier: str | None,
-    toast_type: ToastType | None,
-    message: str,
-    description: str | None,
-    cancel: ToastCancel | None,
-) -> None:
+def _toast_message(payload: Toast) -> None:
     if websocket_state.main_event_loop and websocket_state.main_event_loop.is_running():
         _ = asyncio.run_coroutine_threadsafe(
-            _toast_message_async(identifier, toast_type, message, description, cancel),
+            _toast_message_async(payload),
             websocket_state.main_event_loop,
         )
 
 
+def toast_content(
+    identifier: str | None,
+    variant: ToastVariant | None,
+    content: ToastContent,
+    action: ToastAction | None,
+) -> None:
+    """Send a toast payload over websocket."""
+    _toast_message(
+        Toast(
+            identifier=identifier,
+            variant=variant,
+            content=content,
+            action=action,
+        )
+    )
+
+
 def toast(
     identifier: str | None,
-    message: str,
-    description: str | None,
-    cancel: ToastCancel | None,
+    content: ToastContent,
+    action: ToastAction | None,
 ) -> None:
-    """Send a toast notification.
-
-    Args:
-        identifier: The toast identifier.
-        message: The message.
-        description: The description.
-        cancel: The cancel action.
-    """
-    _toast_message(identifier, None, message, description, cancel)
+    """Send a toast without explicitly setting variant."""
+    toast_content(identifier, None, content, action)
 
 
 def toast_success(
     identifier: str | None,
-    message: str,
-    description: str | None,
-    cancel: ToastCancel | None,
+    content: ToastContent,
+    action: ToastAction | None,
 ) -> None:
-    """Send a success toast notification.
-
-    Args:
-        identifier: The toast identifier.
-        message: The message.
-        description: The description.
-        cancel: The cancel action.
-    """
-    _toast_message(identifier, ToastType.SUCCESS, message, description, cancel)
+    """Send a success toast."""
+    toast_content(identifier, ToastVariant.SUCCESS, content, action)
 
 
 def toast_info(
     identifier: str | None,
-    message: str,
-    description: str | None,
-    cancel: ToastCancel | None,
+    content: ToastContent,
+    action: ToastAction | None,
 ) -> None:
-    """Send an info toast notification.
-
-    Args:
-        identifier: The toast identifier.
-        message: The message.
-        description: The description.
-        cancel: The cancel action.
-    """
-    _toast_message(identifier, ToastType.INFO, message, description, cancel)
+    """Send an info toast."""
+    toast_content(identifier, ToastVariant.INFO, content, action)
 
 
 def toast_warn(
     identifier: str | None,
-    message: str,
-    description: str | None,
-    cancel: ToastCancel | None,
+    content: ToastContent,
+    action: ToastAction | None,
 ) -> None:
-    """Send a warning toast notification.
-
-    Args:
-        identifier: The toast identifier.
-        message: The message.
-        description: The description.
-        cancel: The cancel action.
-    """
-    _toast_message(identifier, ToastType.WARN, message, description, cancel)
+    """Send a warning toast."""
+    toast_content(identifier, ToastVariant.WARN, content, action)
 
 
 def toast_error(
     identifier: str | None,
-    message: str,
-    description: str | None,
-    cancel: CancelRegulatorAutoTuning | CancelThrusterTest | None,
+    content: ToastContent,
+    action: ToastAction | None,
 ) -> None:
-    """Send an error toast notification.
-
-    Args:
-        identifier: The toast identifier.
-        message: The message.
-        description: The description.
-        cancel: The cancel action.
-    """
-    _toast_message(identifier, ToastType.ERROR, message, description, cancel)
+    """Send an error toast."""
+    toast_content(identifier, ToastVariant.ERROR, content, action)
 
 
 def toast_loading(
     identifier: str | None,
-    message: str,
-    description: str | None,
-    cancel: CancelRegulatorAutoTuning | CancelThrusterTest | None,
+    content: ToastContent,
+    action: ToastAction | None,
 ) -> None:
-    """Send a loading toast notification.
-
-    Args:
-        identifier: The toast identifier.
-        message: The message.
-        description: The description.
-        cancel: The cancel action.
-    """
-    _toast_message(identifier, ToastType.LOADING, message, description, cancel)
+    """Send a loading toast."""
+    toast_content(identifier, ToastVariant.LOADING, content, action)

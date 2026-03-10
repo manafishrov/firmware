@@ -19,7 +19,7 @@ from ..constants import IMU_READ_FREQUENCY, SYSTEM_FAILURE_THRESHOLD
 from ..log import log_error, log_info
 from ..models.sensors import ImuData
 from ..rov_state import RovState
-from ..toast import toast_error
+from ..toast import ToastContent, toast_error
 
 
 class Imu:
@@ -63,9 +63,11 @@ class Imu:
             log_error(f"Failed to initialize BMI270 IMU. Is it connected? Error: {e}")
             toast_error(
                 identifier=None,
-                message="IMU Init Failed!",
-                description="Failed to initialize IMU. Check connections.",
-                cancel=None,
+                content=ToastContent(
+                    message_key="toasts_imu_init_failed",
+                    description_key="toasts_imu_init_failed_description",
+                ),
+                action=None,
             )
 
     def read_data(self) -> ImuData | None:

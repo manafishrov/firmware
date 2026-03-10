@@ -5,7 +5,7 @@ from websockets import ServerConnection
 from ...log import log_info
 from ...models.config import RovConfig
 from ...rov_state import RovState
-from ...toast import toast_success
+from ...toast import ToastContent, toast_success
 from ..message import Config
 
 
@@ -39,7 +39,8 @@ async def handle_set_config(
     log_info("Received and applied new config.")
     toast_success(
         identifier=None,
-        message="ROV config set successfully",
-        description=None,
-        cancel=None,
+        content=ToastContent(
+            message_key="toasts_rov_config_set_successfully",
+        ),
+        action=None,
     )

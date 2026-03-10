@@ -169,11 +169,16 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                 "type": "showToast",
                 "payload": {
                     "identifier": THRUSTER_TEST_TOAST_ID,
-                    "toastType": "loading",
-                    "message": f"Testing thruster {thruster_index}",
-                    "description": f"{last_remaining} seconds remaining",
-                    "cancel": {
-                        "type": "cancelThrusterTest",
+                    "variant": "loading",
+                    "content": {
+                        "messageKey": "toasts_thruster_test_title",
+                        "messageArgs": {"thruster": thruster_index},
+                        "descriptionKey": "toasts_seconds_remaining",
+                        "descriptionArgs": {"seconds": last_remaining},
+                    },
+                    "action": {
+                        "labelKey": "common_cancel",
+                        "messageType": "cancelThrusterTest",
                         "payload": thruster_index,
                     },
                 },
@@ -191,10 +196,13 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         "type": "showToast",
                         "payload": {
                             "identifier": THRUSTER_TEST_TOAST_ID,
-                            "toastType": "success",
-                            "message": "Thruster test completed",
-                            "description": None,
-                            "cancel": None,
+                            "variant": "success",
+                            "content": {
+                                "messageKey": "toasts_thruster_test_completed",
+                                "descriptionKey": None,
+                                "descriptionArgs": None,
+                            },
+                            "action": None,
                         },
                     }
                     await websocket.send(json.dumps(toast_msg))
@@ -206,10 +214,18 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         "type": "showToast",
                         "payload": {
                             "identifier": THRUSTER_TEST_TOAST_ID,
-                            "toastType": "loading",
-                            "message": f"Testing thruster {thruster_index}",
-                            "description": f"{remaining} seconds remaining",
-                            "cancel": None,
+                            "variant": "loading",
+                            "content": {
+                                "messageKey": "toasts_thruster_test_title",
+                                "messageArgs": {"thruster": thruster_index},
+                                "descriptionKey": "toasts_seconds_remaining",
+                                "descriptionArgs": {"seconds": remaining},
+                            },
+                            "action": {
+                                "labelKey": "common_cancel",
+                                "messageType": "cancelThrusterTest",
+                                "payload": thruster_index,
+                            },
                         },
                     }
                     await websocket.send(json.dumps(toast_msg))
@@ -233,11 +249,14 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                 "type": "showToast",
                 "payload": {
                     "identifier": AUTO_TUNING_TOAST_ID,
-                    "toastType": "loading",
-                    "message": "Starting regulator auto tuning",
-                    "description": "Preparing...",
-                    "cancel": {
-                        "type": "cancelRegulatorAutoTuning",
+                    "variant": "loading",
+                    "content": {
+                        "messageKey": "toasts_auto_tuning_starting",
+                        "descriptionKey": "toasts_auto_tuning_finding_zero",
+                    },
+                    "action": {
+                        "labelKey": "common_cancel",
+                        "messageType": "cancelRegulatorAutoTuning",
                     },
                 },
             }
@@ -253,10 +272,13 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     "type": "showToast",
                     "payload": {
                         "identifier": AUTO_TUNING_TOAST_ID,
-                        "toastType": "success",
-                        "message": "Auto tuning completed",
-                        "description": "PID parameters updated",
-                        "cancel": None,
+                        "variant": "success",
+                        "content": {
+                            "messageKey": "toasts_auto_tuning_completed",
+                            "descriptionKey": None,
+                            "descriptionArgs": None,
+                        },
+                        "action": None,
                     },
                 }
                 await websocket.send(json.dumps(toast_msg))
@@ -278,10 +300,16 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             "type": "showToast",
             "payload": {
                 "identifier": AUTO_TUNING_TOAST_ID,
-                "toastType": "loading",
-                "message": f"Tuning {phase}",
-                "description": "Finding zero point...",
-                "cancel": None,
+                "variant": "loading",
+                "content": {
+                    "messageKey": "toasts_auto_tuning_tuning_phase",
+                    "messageArgs": {"phase": phase},
+                    "descriptionKey": "toasts_auto_tuning_finding_zero",
+                },
+                "action": {
+                    "labelKey": "common_cancel",
+                    "messageType": "cancelRegulatorAutoTuning",
+                },
             },
         }
         await websocket.send(json.dumps(toast_msg))
@@ -295,10 +323,16 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             "type": "showToast",
             "payload": {
                 "identifier": AUTO_TUNING_TOAST_ID,
-                "toastType": "loading",
-                "message": f"Tuning {phase}",
-                "description": "Finding oscillation amplitude...",
-                "cancel": None,
+                "variant": "loading",
+                "content": {
+                    "messageKey": "toasts_auto_tuning_tuning_phase",
+                    "messageArgs": {"phase": phase},
+                    "descriptionKey": "toasts_auto_tuning_finding_oscillation",
+                },
+                "action": {
+                    "labelKey": "common_cancel",
+                    "messageType": "cancelRegulatorAutoTuning",
+                },
             },
         }
         await websocket.send(json.dumps(toast_msg))
@@ -323,10 +357,17 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     "type": "showToast",
                     "payload": {
                         "identifier": AUTO_TUNING_TOAST_ID,
-                        "toastType": "loading",
-                        "message": f"Tuning {phase}",
-                        "description": f"Oscillating... {elapsed_int}s",
-                        "cancel": None,
+                        "variant": "loading",
+                        "content": {
+                            "messageKey": "toasts_auto_tuning_tuning_phase",
+                            "messageArgs": {"phase": phase},
+                            "descriptionKey": "toasts_auto_tuning_oscillating",
+                            "descriptionArgs": {"seconds": elapsed_int},
+                        },
+                        "action": {
+                            "labelKey": "common_cancel",
+                            "messageType": "cancelRegulatorAutoTuning",
+                        },
                     },
                 }
                 await websocket.send(json.dumps(toast_msg))
@@ -358,10 +399,13 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         "type": "showToast",
                         "payload": {
                             "identifier": None,
-                            "toastType": "success",
-                            "message": "ROV config set successfully",
-                            "description": None,
-                            "cancel": None,
+                            "variant": "success",
+                            "content": {
+                                "messageKey": "toasts_rov_config_set_successfully",
+                                "descriptionKey": None,
+                                "descriptionArgs": None,
+                            },
+                            "action": None,
                         },
                     }
                     await websocket.send(json.dumps(toast_msg))
@@ -405,10 +449,11 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         "type": "showToast",
                         "payload": {
                             "identifier": THRUSTER_TEST_TOAST_ID,
-                            "toastType": "info",
-                            "message": "Thruster test cancelled",
-                            "description": None,
-                            "cancel": None,
+                            "variant": "info",
+                            "content": {
+                                "messageKey": "toasts_thruster_test_cancelled",
+                            },
+                            "action": None,
                         },
                     }
                     await websocket.send(json.dumps(toast_msg))
@@ -424,10 +469,11 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         "type": "showToast",
                         "payload": {
                             "identifier": AUTO_TUNING_TOAST_ID,
-                            "toastType": "info",
-                            "message": "Auto tuning cancelled",
-                            "description": None,
-                            "cancel": None,
+                            "variant": "info",
+                            "content": {
+                                "messageKey": "toasts_auto_tuning_cancelled",
+                            },
+                            "action": None,
                         },
                     }
                     await websocket.send(json.dumps(toast_msg))

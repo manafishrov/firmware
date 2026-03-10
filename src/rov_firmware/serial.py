@@ -7,7 +7,7 @@ from serial_asyncio_fast import open_serial_connection
 
 from .log import log_error, log_info
 from .rov_state import RovState
-from .toast import toast_error
+from .toast import ToastContent, toast_error
 
 
 class SerialManager:
@@ -45,9 +45,11 @@ class SerialManager:
                 log_error("Failed to find microcontroller serial port.")
                 toast_error(
                     identifier=None,
-                    message="Microcontroller Connection Failed!",
-                    description="Could not find microcontroller serial port.",
-                    cancel=None,
+                    content=ToastContent(
+                        message_key="toasts_microcontroller_connection_failed",
+                        description_key="toasts_microcontroller_connection_not_found_description",
+                    ),
+                    action=None,
                 )
                 return
             self.reader, self.writer = await open_serial_connection(
@@ -62,9 +64,11 @@ class SerialManager:
             )
             toast_error(
                 identifier=None,
-                message="Microcontroller Init Failed!",
-                description="Failed to connect to microcontroller. Check connections.",
-                cancel=None,
+                content=ToastContent(
+                    message_key="toasts_microcontroller_init_failed",
+                    description_key="toasts_microcontroller_init_failed_description",
+                ),
+                action=None,
             )
 
     def get_reader(self) -> asyncio.StreamReader:
