@@ -134,8 +134,8 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             status_msg = {
                 "type": "statusUpdate",
                 "payload": {
-                    "autoStabilization": SYSTEM_STATUS["auto_stabilization"],
-                    "depthHold": SYSTEM_STATUS["depth_hold"],
+                    "autoStabilization": SYSTEM_STATUS["autoStabilization"],
+                    "depthHold": SYSTEM_STATUS["depthHold"],
                     "batteryPercentage": battery_percentage,
                     "health": {
                         "microcontrollerHealthy": True,
@@ -263,11 +263,11 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             await websocket.send(json.dumps(toast_msg))
 
             for phase in ("pitch", "roll", "depth"):
-                if not SYSTEM_STATUS["auto_tuning"]["active"]:
+                if not SYSTEM_STATUS["autoTuning"]["active"]:
                     break
                 await _run_tuning_phase(phase)
 
-            if SYSTEM_STATUS["auto_tuning"]["active"]:
+            if SYSTEM_STATUS["autoTuning"]["active"]:
                 toast_msg = {
                     "type": "showToast",
                     "payload": {
@@ -288,13 +288,13 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
         except Exception:
             logger.exception("Error in auto tuning")
         finally:
-            SYSTEM_STATUS["auto_tuning"]["active"] = False
-            SYSTEM_STATUS["auto_tuning"]["phase"] = None
-            SYSTEM_STATUS["auto_tuning"]["step"] = None
+            SYSTEM_STATUS["autoTuning"]["active"] = False
+            SYSTEM_STATUS["autoTuning"]["phase"] = None
+            SYSTEM_STATUS["autoTuning"]["step"] = None
 
     async def _run_tuning_phase(phase: str) -> None:
-        SYSTEM_STATUS["auto_tuning"]["phase"] = phase
-        SYSTEM_STATUS["auto_tuning"]["step"] = "find_zero"
+        SYSTEM_STATUS["autoTuning"]["phase"] = phase
+        SYSTEM_STATUS["autoTuning"]["step"] = "find_zero"
 
         toast_msg = {
             "type": "showToast",
@@ -315,10 +315,10 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
         await websocket.send(json.dumps(toast_msg))
         await asyncio.sleep(2)
 
-        if not SYSTEM_STATUS["auto_tuning"]["active"]:
+        if not SYSTEM_STATUS["autoTuning"]["active"]:
             return
 
-        SYSTEM_STATUS["auto_tuning"]["step"] = "find_amplitude"
+        SYSTEM_STATUS["autoTuning"]["step"] = "find_amplitude"
         toast_msg = {
             "type": "showToast",
             "payload": {
@@ -338,14 +338,14 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
         await websocket.send(json.dumps(toast_msg))
         await asyncio.sleep(2)
 
-        if not SYSTEM_STATUS["auto_tuning"]["active"]:
+        if not SYSTEM_STATUS["autoTuning"]["active"]:
             return
 
-        SYSTEM_STATUS["auto_tuning"]["step"] = "oscillate"
+        SYSTEM_STATUS["autoTuning"]["step"] = "oscillate"
         oscillation_start = time.time()
         last_elapsed = -1
 
-        while SYSTEM_STATUS["auto_tuning"]["active"]:
+        while SYSTEM_STATUS["autoTuning"]["active"]:
             elapsed = time.time() - oscillation_start
             if elapsed >= AUTO_TUNING_OSCILLATION_DURATION_SECONDS:
                 break
@@ -411,7 +411,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     await websocket.send(json.dumps(toast_msg))
                 elif msg_type == "toggleAutoStabilization":
                     SYSTEM_STATUS["autoStabilization"] = not SYSTEM_STATUS[
-                        "auto_stabilization"
+                        "autoStabilization"
                     ]
                     log_msg = {
                         "type": "logMessage",
