@@ -548,19 +548,19 @@ class Regulator:
     ) -> None:
         """Apply the user-configured maximum power percentages to the provided direction vector in place.
 
-        Scales thruster components (indices 0-5) by state.rov_config.power.user_max_power_thrusters / 100.0
-        and action components (indices 6-7) by state.rov_config.power.user_max_power_actions / 100.0.
+        Scales thruster components (indices 0-5) by state.rov_config.power.thrusters_limit / 100.0
+        and action components (indices 6-7) by state.rov_config.power.actions_limit / 100.0.
 
         Parameters:
             direction_vector (numpy.ndarray): Mutable 1-D float32 array (expected length 8) representing the direction vector to be scaled in place.
         """
         thruster_scale = np.float32(
-            float(self.state.rov_config.power.user_max_power_thrusters) / 100.0
+            float(self.state.rov_config.power.thrusters_limit) / 100.0
         )
         direction_vector[0:6] *= thruster_scale
 
         action_scale = np.float32(
-            float(self.state.rov_config.power.user_max_power_actions) / 100.0
+            float(self.state.rov_config.power.actions_limit) / 100.0
         )
         direction_vector[6:8] *= action_scale
 
@@ -570,9 +570,9 @@ class Regulator:
         """Clip the regulator direction vector in-place to the configured per-axis maximum regulator power.
 
         Parameters:
-            regulator_direction_vector (NDArray[np.float32]): Array of regulator outputs (modified in-place). Each element is clamped to the range [-p, p], where p = state.rov_config.power.regulator_max_power / 100.0.
+            regulator_direction_vector (NDArray[np.float32]): Array of regulator outputs (modified in-place). Each element is clamped to the range [-p, p], where p = state.rov_config.power.regulator_limit / 100.0.
         """
-        power = float(self.state.rov_config.power.regulator_max_power) / 100.0
+        power = float(self.state.rov_config.power.regulator_limit) / 100.0
         _ = np.clip(
             regulator_direction_vector,
             -power,

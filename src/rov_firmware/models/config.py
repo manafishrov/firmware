@@ -120,13 +120,13 @@ class DirectionCoefficients(CamelCaseModel):
 class Power(CamelCaseModel):
     """Power configuration."""
 
-    user_max_power_thrusters: int
-    user_max_power_actions: int
-    regulator_max_power: int
-    battery_min_voltage: float
-    battery_max_voltage: float
+    thrusters_limit: int
+    actions_limit: int
+    regulator_limit: int
+    min_battery_voltage: float
+    max_battery_voltage: float
 
-    @field_validator("battery_min_voltage", "battery_max_voltage", mode="after")
+    @field_validator("min_battery_voltage", "max_battery_voltage", mode="after")
     @classmethod
     def validate_battery_voltage(cls, v: float) -> float:
         """Validate that battery voltage is positive."""
@@ -175,11 +175,11 @@ class RovConfig(CamelCaseModel):
         heave=1,
     )
     power: Power = Power(
-        user_max_power_thrusters=30,
-        user_max_power_actions=30,
-        regulator_max_power=30,
-        battery_min_voltage=14,
-        battery_max_voltage=21.5,
+        thrusters_limit=30,
+        actions_limit=30,
+        regulator_limit=30,
+        min_battery_voltage=14,
+        max_battery_voltage=21.5,
     )
 
     @field_validator("thruster_allocation", mode="before")

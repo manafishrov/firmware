@@ -20,8 +20,8 @@ async def handle_status_update(
     """
     voltages_v = [v for v in state.esc.voltage if v > 0]
     average_voltage_v = sum(voltages_v) / len(voltages_v) if voltages_v else 0
-    min_v = state.rov_config.power.battery_min_voltage
-    max_v = state.rov_config.power.battery_max_voltage
+    min_v = state.rov_config.power.min_battery_voltage
+    max_v = state.rov_config.power.max_battery_voltage
     current_percentage = (
         max(0, min(100, ((average_voltage_v - min_v) / (max_v - min_v)) * 100))
         if average_voltage_v

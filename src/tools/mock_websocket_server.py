@@ -45,11 +45,11 @@ MOCK_CONFIG: dict[str, Any] = {
         "heave": 1.0,
     },
     "power": {
-        "userMaxPowerThrusters": 30,
-        "userMaxPowerActions": 50,
-        "regulatorMaxPower": 30,
-        "batteryMinVoltage": 14.0,
-        "batteryMaxVoltage": 21.5,
+        "thrustersLimit": 30,
+        "actionsLimit": 50,
+        "regulatorLimit": 30,
+        "minBatteryVoltage": 14.0,
+        "maxBatteryVoltage": 21.5,
     },
 }
 
