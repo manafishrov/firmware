@@ -163,10 +163,10 @@ class RovConfig(CamelCaseModel):
         dtype=np.float32,
     )
     regulator: Regulator = Regulator(
-        pitch=AxisConfig(kp=2, ki=0, kd=0.1, rate=1.0),
-        roll=AxisConfig(kp=1, ki=0, kd=0.1, rate=1.0),
-        yaw=AxisConfig(kp=3, ki=0, kd=0, rate=1.0),
-        depth=AxisConfig(kp=0.5, ki=0, kd=0.1, rate=1.0),
+        pitch=AxisConfig(kp=2, ki=0, kd=0.1, rate=5.0),
+        roll=AxisConfig(kp=1, ki=0, kd=0.1, rate=5.0),
+        yaw=AxisConfig(kp=3, ki=0, kd=0, rate=5.0),
+        depth=AxisConfig(kp=0.5, ki=0, kd=0.1, rate=5.0),
         fpv_mode=False,
     )
     direction_coefficients: DirectionCoefficients = DirectionCoefficients(
