@@ -1,13 +1,10 @@
 {
-  config,
-  lib,
   pkgs,
   home-manager,
+  camera,
   inputs,
   ...
 }: let
-  isPi3 = config.boot.loader.raspberryPi.variant == "3";
-
   pico-sdk-with-submodules = pkgs.pico-sdk.override {
     withSubmodules = true;
   };
@@ -110,7 +107,6 @@ in {
   # Networking configuration
   networking = {
     hostName = "manafish";
-    usePredictableInterfaceNames = false;
     interfaces.eth0.ipv4.addresses = [
       {
         address = "10.10.10.10";
@@ -128,28 +124,21 @@ in {
     };
   };
 
-  boot = {
-    initrd.availableKernelModules = lib.mkAfter (lib.optionals isPi3 [
-      "lan78xx"
-      "usbnet"
-    ]);
-    kernelModules = lib.mkAfter (lib.optionals isPi3 [
-      "lan78xx"
-      "usbnet"
-    ]);
-  };
-
   # Enable camera and I2C with a high baud rate
   hardware = {
     i2c.enable = true;
     raspberry-pi.config.all = {
-      options = {
-        camera_auto_detect = {
+      dt-overlays = {
+        ${camera} = {
           enable = true;
-          value = true;
+          params = {};
         };
       };
       base-dt-params = {
+        camera_auto_detect = {
+          enable = true;
+          value = false;
+        };
         i2c_arm = {
           enable = true;
           value = "on";

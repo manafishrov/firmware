@@ -40,6 +40,12 @@
     home-manager,
     ...
   } @ inputs: let
+    cameras = [
+      "ov5647"
+      "imx219"
+      "imx477"
+    ];
+
     piVersions = [
       {
         name = "pi3";
@@ -57,11 +63,12 @@
       "aarch64-darwin"
     ];
 
-    mkBase = {
+    mkCamera = camera: {
       specialArgs = {
         inherit inputs;
         inherit nixos-raspberrypi;
         inherit home-manager;
+        inherit camera;
       };
       modules = [
         nixos-raspberrypi.nixosModules.sd-image
@@ -71,23 +78,31 @@
     };
 
     mkConfigurations = let
-      mkConfig = pi: {
-        name = "manafish-${pi.name}";
-        value = nixos-raspberrypi.lib.nixosSystem (mkBase
+      mkConfig = pi: camera: {
+        name = "manafish-${pi.name}-${camera}";
+        value = nixos-raspberrypi.lib.nixosSystem (mkCamera camera
           // {
-            modules = [pi.module] ++ mkBase.modules;
+            modules = [pi.module] ++ (mkCamera camera).modules;
           });
       };
     in
-      builtins.listToAttrs (map mkConfig piVersions);
+      builtins.listToAttrs (
+        builtins.concatMap
+        (pi: map (camera: mkConfig pi camera) cameras)
+        piVersions
+      );
 
     mkPackages = _: let
-      mkPackage = pi: {
-        name = pi.name;
-        value = self.nixosConfigurations."manafish-${pi.name}".config.system.build.sdImage;
+      mkPackage = pi: camera: {
+        name = "${pi.name}-${camera}";
+        value = self.nixosConfigurations."manafish-${pi.name}-${camera}".config.system.build.sdImage;
       };
     in
-      builtins.listToAttrs (map mkPackage piVersions);
+      builtins.listToAttrs (
+        builtins.concatMap
+        (pi: map (camera: mkPackage pi camera) cameras)
+        piVersions
+      );
 
     mkFormatter = system: nixpkgs.legacyPackages.${system}.alejandra;
   in {
