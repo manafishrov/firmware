@@ -140,6 +140,7 @@ class RovConfig(CamelCaseModel):
     """Main ROV configuration."""
 
     firmware_version: str = CURRENT_FIRMWARE_VERSION
+    rov_name: str = "Manafish Nomad"
     microcontroller_firmware_variant: MicrocontrollerFirmwareVariant = (
         MicrocontrollerFirmwareVariant.DSHOT
     )
