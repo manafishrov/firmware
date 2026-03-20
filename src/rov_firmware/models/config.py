@@ -190,6 +190,8 @@ class RovConfig(CamelCaseModel):
         min_battery_voltage=14,
         max_battery_voltage=21.5,
     )
+    ip_address: str = "10.10.10.10"
+    websocket_port: int = 9000
 
     @field_validator("thruster_allocation", mode="before")
     @classmethod

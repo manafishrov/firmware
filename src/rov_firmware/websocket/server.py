@@ -9,7 +9,6 @@ import websockets
 from websockets import Server, ServerConnection
 from websockets.exceptions import ConnectionClosed
 
-from ..constants import IP_ADDRESS, PORT
 from ..log import log_error, log_info, log_warn
 from ..rov_state import RovState
 from .handler import handle_message
@@ -100,9 +99,9 @@ class WebsocketServer:
 
     async def initialize(self) -> None:
         """Initialize the WebSocket server."""
-        self.server = await websockets.serve(self.handler, IP_ADDRESS, PORT)
+        self.server = await websockets.serve(self.handler, self.state.rov_config.ip_address, self.state.rov_config.websocket_port)
         websocket_state.main_event_loop = asyncio.get_running_loop()
-        log_info(f"Websocket server started on {IP_ADDRESS}:{PORT}")
+        log_info(f"Websocket server started on {self.state.rov_config.ip_address}:{self.state.rov_config.websocket_port}")
 
     async def _send_from_queue(self, websocket: ServerConnection) -> None:
         try:

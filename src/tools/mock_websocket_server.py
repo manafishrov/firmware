@@ -12,7 +12,7 @@ import websockets
 from websockets import ServerConnection
 
 
-PORT = 9000
+WEBSOCKET_PORT = 9000
 MOCK_CONFIG: dict[str, Any] = {
     "firmwareVersion": "1.0.0",
     "rovName": "Manafish-m0ck",
@@ -52,6 +52,8 @@ MOCK_CONFIG: dict[str, Any] = {
         "minBatteryVoltage": 14.0,
         "maxBatteryVoltage": 21.5,
     },
+    "ipAddress": "10.10.10.10",
+    "websocketPort": 9000,
 }
 
 SYSTEM_STATUS: dict[str, Any] = {
@@ -510,8 +512,8 @@ async def main() -> None:
 
     server = None
     try:
-        server = await websockets.serve(_handle_client, host, PORT)
-        logger.info(f"Mock websocket server running on {host}:{PORT}")
+        server = await websockets.serve(_handle_client, host, WEBSOCKET_PORT)
+        logger.info(f"Mock websocket server running on {host}:{WEBSOCKET_PORT}")
         await server.wait_closed()
     except (KeyboardInterrupt, asyncio.CancelledError):
         logger.info("Server stopped")

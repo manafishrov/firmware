@@ -56,8 +56,3 @@ FLASH_TOAST_ID: Final = "flash-microcontroller-firmware"
 
 # General
 SYSTEM_FAILURE_THRESHOLD: Final = 3
-
-
-# Websocket
-IP_ADDRESS: Final = "10.10.10.10"
-PORT: Final = 9000
