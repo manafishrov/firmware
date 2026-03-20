@@ -1,45 +1,24 @@
 """Configuration models for the ROV firmware."""
 
-from enum import StrEnum
 import json
+import secrets
+from enum import StrEnum
 from pathlib import Path
-import random
-import tomllib
 from typing import Any, ClassVar
 
 import numpy as np
+import tomllib
 from numpy.typing import NDArray as NumpyNDArray
 from numpydantic import NDArray, Shape
 from pydantic import Field, field_validator
 
 from .base import CamelCaseModel
 
-_ROV_NAME_SUFFIXES = [
-    "Nomad",
-    "Voyager",
-    "Drifter",
-    "Mariner",
-    "Pioneer",
-    "Surveyor",
-    "Wanderer",
-    "Pathfinder",
-    "Corsair",
-    "Triton",
-    "Nereid",
-    "Kraken",
-    "Leviathan",
-    "Nautilus",
-    "Poseidon",
-    "Abyss",
-    "Riptide",
-    "Tempest",
-    "Typhoon",
-    "Maelstrom",
-]
+_ROV_NAME_HEX_LENGTH = 4
 
 
 def _generate_rov_name() -> str:
-    return f"Manafish {random.choice(_ROV_NAME_SUFFIXES)}"  # noqa: S311
+    return f"Manafish-{secrets.token_hex(_ROV_NAME_HEX_LENGTH)}"
 
 
 _pyproject_path = Path(__file__).parents[3] / "pyproject.toml"

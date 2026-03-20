@@ -15,6 +15,7 @@ from websockets import ServerConnection
 PORT = 9000
 MOCK_CONFIG: dict[str, Any] = {
     "firmwareVersion": "1.0.0",
+    "rovName": "Manafish-m0ck",
     "microcontrollerFirmwareVariant": "dshot",
     "fluidType": "saltwater",
     "smoothingFactor": 0.0,
