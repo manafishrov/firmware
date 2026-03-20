@@ -1,18 +1,19 @@
 """Configuration models for the ROV firmware."""
 
-import json
-import secrets
 from enum import StrEnum
+import json
 from pathlib import Path
+import secrets
+import tomllib
 from typing import Any, ClassVar
 
 import numpy as np
-import tomllib
 from numpy.typing import NDArray as NumpyNDArray
 from numpydantic import NDArray, Shape
 from pydantic import Field, field_validator
 
 from .base import CamelCaseModel
+
 
 _ROV_NAME_HEX_LENGTH = 4
 
