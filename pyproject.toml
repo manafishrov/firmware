@@ -23,6 +23,11 @@ tools = "tools:cli"
 [tool.uv]
 package = true
 
+[dependency-groups]
+dev = [
+  "pre-commit==4.5.1",
+]
+
 [tool.ruff]
 target-version = "py313"
 line-length = 88

@@ -205,6 +205,28 @@ Here are the common commands to manage it:
   journalctl -u manafish-firmware -f
   ```
 
+## Development Hooks
+
+Install the development dependencies and Git hook once per clone:
+
+```sh
+uv sync
+uv run pre-commit install
+```
+
+The pre-commit hook runs Ruff on committed Python files before each commit. To
+run the same checks across the repository manually:
+
+```sh
+uv run pre-commit run --all-files
+```
+
+To update hook versions later:
+
+```sh
+uv run pre-commit autoupdate
+```
+
 ## License
 
 This project is licensed under the GNU Affero General Public License v3.0 or
