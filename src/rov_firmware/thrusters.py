@@ -235,13 +235,13 @@ class Thrusters:
 
     async def send_loop(self) -> None:
         """Send thruster commands in a continuous loop."""
-        writer = self.serial_manager.get_writer()
         thrust_vector = np.zeros(NUM_MOTORS, dtype=np.float32)
         last_send_time = time.time()
         while True:
-            if not self.state.system_health.microcontroller_healthy:
+            if not await self.serial_manager.ensure_connection():
                 await asyncio.sleep(1)
                 continue
+            writer = self.serial_manager.get_writer()
 
             current_time = time.time()
             self.regulator.update_regulator_data_from_imu()
@@ -255,7 +255,8 @@ class Thrusters:
             thrust_values = self._compute_thrust_values(thrust_vector)
             success = await self._send_with_retries(writer, thrust_values)
             if not success:
-                self.state.system_health.microcontroller_healthy = False
-                log_error("Thruster send failed 3 times, disabling microcontroller")
+                await self.serial_manager.handle_connection_lost(
+                    "Thruster send failed 3 times, disabling microcontroller"
+                )
 
             await asyncio.sleep(1 / THRUSTER_SEND_FREQUENCY)

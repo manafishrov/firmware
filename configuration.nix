@@ -60,6 +60,8 @@
   startScript = pkgs.writeShellScriptBin "start" ''
     cd $HOME/firmware
     export PYTHONPATH=src
+    export PICOTOOL_PATH="${pkgs.lib.getExe pkgs.picotool}"
+    export PATH="${pkgs.lib.makeBinPath [pkgs.picotool]}:$PATH"
     exec ${python-env}/bin/python3 -c "from rov_firmware import start; start()"
   '';
 
@@ -67,6 +69,8 @@
   toolsScript = pkgs.writeShellScriptBin "tools" ''
     cd $HOME/firmware
     export PYTHONPATH=src
+    export PICOTOOL_PATH="${pkgs.lib.getExe pkgs.picotool}"
+    export PATH="${pkgs.lib.makeBinPath [pkgs.picotool]}:$PATH"
     exec ${python-env}/bin/python3 -c "from tools import cli; cli()"
   '';
 in {

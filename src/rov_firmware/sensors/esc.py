@@ -33,32 +33,52 @@ class EscSensor:
 
     async def read_loop(self) -> None:
         """Read telemetry data from the ESC sensor in a loop."""
-        reader = self.serial_manager.get_reader()
         read_buffer = bytearray()
         while True:
-            if not self.state.system_health.microcontroller_healthy:
+            data = await self._read_byte()
+            if data is None:
                 await asyncio.sleep(1)
                 continue
+            self._consume_read_buffer(read_buffer, data)
+
+    async def _read_byte(self) -> bytes | None:
+        if not await self.serial_manager.ensure_connection():
+            return None
+
+        reader = self.serial_manager.get_reader()
+        try:
             data = await reader.read(1)
-            if data:
-                read_buffer.extend(data)
-                while len(read_buffer) >= ESC_TELEMETRY_PACKET_SIZE:
-                    start_idx = read_buffer.find(
-                        ESC_TELEMETRY_START_BYTE.to_bytes(1, "big")
-                    )
-                    if start_idx == -1:
-                        if len(read_buffer) > ESC_MAX_READ_BUFFER_SIZE:
-                            read_buffer = bytearray()
-                        break
-                    if start_idx > 0:
-                        read_buffer = read_buffer[start_idx:]
-                    if len(read_buffer) >= ESC_TELEMETRY_PACKET_SIZE:
-                        packet = read_buffer[:ESC_TELEMETRY_PACKET_SIZE]
-                        if self._validate_telemetry_packet(packet):
-                            self._update_telemetry(packet)
-                        read_buffer = read_buffer[ESC_TELEMETRY_PACKET_SIZE:]
-                    else:
-                        break
+        except Exception as e:
+            await self.serial_manager.handle_connection_lost(
+                f"ESC telemetry read failed, disabling microcontroller. Error: {e}"
+            )
+            return None
+
+        if not data:
+            await self.serial_manager.handle_connection_lost(
+                "ESC telemetry stream closed, disabling microcontroller"
+            )
+            return None
+
+        return data
+
+    def _consume_read_buffer(self, read_buffer: bytearray, data: bytes) -> None:
+        read_buffer.extend(data)
+        while len(read_buffer) >= ESC_TELEMETRY_PACKET_SIZE:
+            start_idx = read_buffer.find(ESC_TELEMETRY_START_BYTE.to_bytes(1, "big"))
+            if start_idx == -1:
+                if len(read_buffer) > ESC_MAX_READ_BUFFER_SIZE:
+                    read_buffer.clear()
+                return
+            if start_idx > 0:
+                del read_buffer[:start_idx]
+            if len(read_buffer) < ESC_TELEMETRY_PACKET_SIZE:
+                return
+
+            packet = read_buffer[:ESC_TELEMETRY_PACKET_SIZE]
+            if self._validate_telemetry_packet(packet):
+                self._update_telemetry(packet)
+            del read_buffer[:ESC_TELEMETRY_PACKET_SIZE]
 
     def _validate_telemetry_packet(self, packet: bytearray) -> bool:
         if (
