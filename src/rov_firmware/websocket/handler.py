@@ -29,7 +29,35 @@ from .receive.state import (
 from .types import MessageType
 
 
-async def handle_message(  # noqa: C901
+async def _handle_payload_message(
+    state: RovState,
+    payload: object,
+    message: WebsocketMessage,
+) -> bool:
+    match message.type:
+        case MessageType.SET_CONFIG:
+            await handle_set_config(state, cast(RovConfig, payload))
+        case MessageType.FLASH_MICROCONTROLLER_FIRMWARE:
+            await handle_flash_microcontroller_firmware(
+                cast(MicrocontrollerFirmwareVariant, payload)
+            )
+        case MessageType.DIRECTION_VECTOR:
+            await handle_direction_vector(state, cast(DirectionVector, payload))
+        case MessageType.START_THRUSTER_TEST:
+            await handle_start_thruster_test(state, cast(ThrusterTest, payload))
+        case MessageType.CANCEL_THRUSTER_TEST:
+            await handle_cancel_thruster_test(state, cast(ThrusterTest, payload))
+        case MessageType.CUSTOM_ACTION:
+            await handle_custom_action(state, cast(CustomAction, payload))
+        case MessageType.SET_DESIRED_DEPTH:
+            await handle_set_desired_depth(state, cast(float, payload))
+        case _:
+            return False
+
+    return True
+
+
+async def handle_message(
     state: RovState,
     websocket: ServerConnection,
     message: WebsocketMessage,
@@ -45,29 +73,14 @@ async def handle_message(  # noqa: C901
     match message.type:
         case MessageType.GET_CONFIG:
             await handle_get_config(state, websocket)
-        case MessageType.SET_CONFIG:
-            await handle_set_config(state, cast(RovConfig, payload))
-        case MessageType.FLASH_MICROCONTROLLER_FIRMWARE:
-            await handle_flash_microcontroller_firmware(
-                cast(MicrocontrollerFirmwareVariant, payload)
-            )
-        case MessageType.DIRECTION_VECTOR:
-            await handle_direction_vector(state, cast(DirectionVector, payload))
-        case MessageType.START_THRUSTER_TEST:
-            await handle_start_thruster_test(state, cast(ThrusterTest, payload))
-        case MessageType.CANCEL_THRUSTER_TEST:
-            await handle_cancel_thruster_test(state, cast(ThrusterTest, payload))
         case MessageType.START_REGULATOR_AUTO_TUNING:
             await handle_start_regulator_auto_tuning(state)
         case MessageType.CANCEL_REGULATOR_AUTO_TUNING:
             await handle_cancel_regulator_auto_tuning(state)
-        case MessageType.CUSTOM_ACTION:
-            await handle_custom_action(state, cast(CustomAction, payload))
         case MessageType.TOGGLE_AUTO_STABILIZATION:
             await handle_toggle_auto_stabilization(state)
         case MessageType.TOGGLE_DEPTH_HOLD:
             await handle_toggle_depth_hold(state)
-        case MessageType.SET_DESIRED_DEPTH:
-            await handle_set_desired_depth(state, cast(float, payload))
         case _:
-            log_warn(f"Received unhandled message type: {message.type}")
+            if not await _handle_payload_message(state, payload, message):
+                log_warn(f"Received unhandled message type: {message.type}")

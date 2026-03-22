@@ -122,6 +122,8 @@ class ToggleDepthHold(CamelCaseModel):
 
 
 class SetDesiredDepth(CamelCaseModel):
+    """WebSocket message for setting the desired depth."""
+
     type: Literal[MessageType.SET_DESIRED_DEPTH] = MessageType.SET_DESIRED_DEPTH
     payload: float
 
