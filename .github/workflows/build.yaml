@@ -62,7 +62,7 @@ jobs:
           diagnostic-endpoint: ""
 
       - name: Build SD image
-        run: nix build .#${{ matrix.pi }}-${{ matrix.camera }}
+        run: nix build --accept-flake-config .#${{ matrix.pi }}-${{ matrix.camera }}
 
       - name: Check if release exists
         if: startsWith(github.ref, 'refs/tags/')
