@@ -19,6 +19,7 @@ from .receive.config import handle_get_config, handle_set_config
 from .receive.microcontroller import handle_flash_microcontroller_firmware
 from .receive.regulator import (
     handle_cancel_regulator_auto_tuning,
+    handle_set_desired_depth,
     handle_start_regulator_auto_tuning,
 )
 from .receive.state import (
@@ -66,5 +67,7 @@ async def handle_message(  # noqa: C901
             await handle_toggle_auto_stabilization(state)
         case MessageType.TOGGLE_DEPTH_HOLD:
             await handle_toggle_depth_hold(state)
+        case MessageType.SET_DESIRED_DEPTH:
+            await handle_set_desired_depth(state, cast(float, payload))
         case _:
             log_warn(f"Received unhandled message type: {message.type}")

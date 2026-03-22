@@ -28,6 +28,4 @@ async def handle_toggle_depth_hold(
         state: The ROV state.
     """
     state.system_status.depth_hold = not state.system_status.depth_hold
-    if not state.system_status.depth_hold:
-        state.regulator.desired_depth = state.pressure.depth
     log_info(f"Toggled depth hold to {state.system_status.depth_hold}")

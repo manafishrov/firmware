@@ -59,6 +59,8 @@ MOCK_CONFIG: dict[str, Any] = {
 SYSTEM_STATUS: dict[str, Any] = {
     "autoStabilization": False,
     "depthHold": False,
+    "desiredDepth": 12.0,
+    "desiredDepthInitialized": False,
     "thrusterTest": {
         "active": False,
         "thrusterIndex": None,
@@ -97,7 +99,11 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             desired_roll = 20 * math.cos(current_time / 3)
             desired_yaw = 35 * math.sin(current_time / 2.5)
             depth = 10 + 5 * math.sin(current_time / 4)
-            desired_depth = 12 + 4 * math.sin(current_time / 4)
+            desired_depth = (
+                cast(float, SYSTEM_STATUS["desiredDepth"])
+                if cast(bool, SYSTEM_STATUS["desiredDepthInitialized"])
+                else depth
+            )
             water_temperature = 20 + 5 * math.cos(current_time / 5)
             electronics_temperature = 25 + 3 * math.sin(current_time / 6)
             thruster_rpms = [
@@ -427,12 +433,32 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     await websocket.send(json.dumps(log_msg))
                 elif msg_type == "toggleDepthHold":
                     SYSTEM_STATUS["depthHold"] = not SYSTEM_STATUS["depthHold"]
+                    if SYSTEM_STATUS["depthHold"] and not SYSTEM_STATUS["desiredDepthInitialized"]:
+                        current_time = time.time()
+                        SYSTEM_STATUS["desiredDepth"] = 10 + 5 * math.sin(current_time / 4)
+                        SYSTEM_STATUS["desiredDepthInitialized"] = True
                     log_msg = {
                         "type": "logMessage",
                         "payload": {
                             "origin": "firmware",
                             "level": "info",
                             "message": f"Depth hold set to {SYSTEM_STATUS['depthHold']}",
+                        },
+                    }
+                    await websocket.send(json.dumps(log_msg))
+                elif msg_type == "setDesiredDepth":
+                    desired_depth = cast(float, payload)
+                    if not math.isfinite(desired_depth):
+                        logger.warning(f"Invalid desired depth payload: {payload}")
+                        continue
+                    SYSTEM_STATUS["desiredDepth"] = max(0.0, desired_depth)
+                    SYSTEM_STATUS["desiredDepthInitialized"] = True
+                    log_msg = {
+                        "type": "logMessage",
+                        "payload": {
+                            "origin": "firmware",
+                            "level": "info",
+                            "message": f"Desired depth set to {SYSTEM_STATUS['desiredDepth']}",
                         },
                     }
                     await websocket.send(json.dumps(log_msg))

@@ -28,6 +28,11 @@ async def handle_telemetry(
     work_indicator_percentage = min(
         100, max(0, (total_current_a / MAX_CURRENT_A) * 100)
     )
+    desired_depth = (
+        state.regulator.desired_depth
+        if state.regulator.desired_depth_initialized
+        else state.pressure.depth
+    )
     payload = RovTelemetry(
         pitch=state.regulator.pitch,
         roll=state.regulator.roll,
@@ -36,7 +41,7 @@ async def handle_telemetry(
         desired_pitch=state.regulator.desired_pitch,
         desired_roll=state.regulator.desired_roll,
         desired_yaw=state.regulator.desired_yaw,
-        desired_depth=state.regulator.desired_depth,
+        desired_depth=desired_depth,
         water_temperature=state.pressure.temperature,
         electronics_temperature=electronics_temperature,
         thruster_rpms=[int(erpm / (THRUSTER_POLES // 2)) for erpm in state.esc.erpm],

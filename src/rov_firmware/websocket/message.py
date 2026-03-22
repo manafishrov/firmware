@@ -121,6 +121,11 @@ class ToggleDepthHold(CamelCaseModel):
     type: Literal[MessageType.TOGGLE_DEPTH_HOLD] = MessageType.TOGGLE_DEPTH_HOLD
 
 
+class SetDesiredDepth(CamelCaseModel):
+    type: Literal[MessageType.SET_DESIRED_DEPTH] = MessageType.SET_DESIRED_DEPTH
+    payload: float
+
+
 class FlashMicrocontrollerFirmware(CamelCaseModel):
     """WebSocket message for flashing microcontroller firmware."""
 
@@ -147,6 +152,7 @@ WebsocketMessage = Annotated[
     | CustomAction
     | ToggleAutoStabilization
     | ToggleDepthHold
+    | SetDesiredDepth
     | FlashMicrocontrollerFirmware,
     Field(discriminator="type"),
 ]

@@ -1,13 +1,13 @@
 """WebSocket regulator handlers for the ROV firmware."""
 
+import math
 import time
 
 from ...constants import AUTO_TUNING_TOAST_ID, MAX_AUTO_TUNING_ROLL_PITCH_DEGREES
 from ...log import log_error, log_info
-from ...models.toast import ToastVariant
+from ...models.toast import ToastContent, ToastVariant
 from ...rov_state import RovState
 from ...toast import (
-    ToastContent,
     cancel_regulator_auto_tuning_action,
     toast_content,
     toast_error,
@@ -110,3 +110,18 @@ async def handle_cancel_regulator_auto_tuning(
         ),
         action=None,
     )
+
+
+async def handle_set_desired_depth(
+    state: RovState,
+    depth: float,
+) -> None:
+    """Update the regulator target depth from a websocket command."""
+    if not math.isfinite(depth):
+        log_error(f"Invalid desired depth received: {depth}")
+        return
+
+    desired_depth = max(0.0, depth)
+    state.regulator.desired_depth = desired_depth
+    state.regulator.desired_depth_initialized = True
+    log_info(f"Set desired depth to {desired_depth}")
