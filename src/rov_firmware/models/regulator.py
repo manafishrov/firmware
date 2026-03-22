@@ -13,6 +13,6 @@ class RegulatorData(BaseModel):
     desired_roll: float = 0.0
     desired_yaw: float = 0.0
     desired_depth: float = 0.0
-    desired_depth_initialized: bool = False
+    pending_desired_depth: float | None = None
     auto_tuning_active: bool = False
     auto_tuning_start_time: float = 0.0

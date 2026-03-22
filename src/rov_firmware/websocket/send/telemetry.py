@@ -28,11 +28,12 @@ async def handle_telemetry(
     work_indicator_percentage = min(
         100, max(0, (total_current_a / MAX_CURRENT_A) * 100)
     )
-    desired_depth = (
-        state.regulator.desired_depth
-        if state.regulator.desired_depth_initialized
-        else state.pressure.depth
-    )
+    if state.system_status.depth_hold:
+        desired_depth = state.regulator.desired_depth
+    elif state.regulator.pending_desired_depth is not None:
+        desired_depth = state.regulator.pending_desired_depth
+    else:
+        desired_depth = state.pressure.depth
     payload = RovTelemetry(
         pitch=state.regulator.pitch,
         roll=state.regulator.roll,

@@ -122,6 +122,7 @@ async def handle_set_desired_depth(
         return
 
     desired_depth = max(0.0, depth)
-    state.regulator.desired_depth = desired_depth
-    state.regulator.desired_depth_initialized = True
+    state.regulator.pending_desired_depth = desired_depth
+    if state.system_status.depth_hold:
+        state.regulator.desired_depth = desired_depth
     log_info(f"Set desired depth to {desired_depth}")

@@ -60,7 +60,7 @@ SYSTEM_STATUS: dict[str, Any] = {
     "autoStabilization": False,
     "depthHold": False,
     "desiredDepth": 12.0,
-    "desiredDepthInitialized": False,
+    "pendingDesiredDepth": None,
     "thrusterTest": {
         "active": False,
         "thrusterIndex": None,
@@ -99,11 +99,12 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             desired_roll = 20 * math.cos(current_time / 3)
             desired_yaw = 35 * math.sin(current_time / 2.5)
             depth = 10 + 5 * math.sin(current_time / 4)
-            desired_depth = (
-                cast(float, SYSTEM_STATUS["desiredDepth"])
-                if cast(bool, SYSTEM_STATUS["desiredDepthInitialized"])
-                else depth
-            )
+            if cast(bool, SYSTEM_STATUS["depthHold"]):
+                desired_depth = cast(float, SYSTEM_STATUS["desiredDepth"])
+            elif SYSTEM_STATUS["pendingDesiredDepth"] is not None:
+                desired_depth = cast(float, SYSTEM_STATUS["pendingDesiredDepth"])
+            else:
+                desired_depth = depth
             water_temperature = 20 + 5 * math.cos(current_time / 5)
             electronics_temperature = 25 + 3 * math.sin(current_time / 6)
             thruster_rpms = [
@@ -433,15 +434,17 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     await websocket.send(json.dumps(log_msg))
                 elif msg_type == "toggleDepthHold":
                     SYSTEM_STATUS["depthHold"] = not SYSTEM_STATUS["depthHold"]
-                    if (
-                        SYSTEM_STATUS["depthHold"]
-                        and not SYSTEM_STATUS["desiredDepthInitialized"]
-                    ):
-                        current_time = time.time()
-                        SYSTEM_STATUS["desiredDepth"] = 10 + 5 * math.sin(
-                            current_time / 4
-                        )
-                        SYSTEM_STATUS["desiredDepthInitialized"] = True
+                    if SYSTEM_STATUS["depthHold"]:
+                        pending = SYSTEM_STATUS["pendingDesiredDepth"]
+                        if pending is not None:
+                            SYSTEM_STATUS["desiredDepth"] = pending
+                        else:
+                            current_time = time.time()
+                            SYSTEM_STATUS["desiredDepth"] = 10 + 5 * math.sin(
+                                current_time / 4
+                            )
+                    else:
+                        SYSTEM_STATUS["pendingDesiredDepth"] = None
                     log_msg = {
                         "type": "logMessage",
                         "payload": {
@@ -456,8 +459,10 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     if not math.isfinite(desired_depth):
                         logger.warning(f"Invalid desired depth payload: {payload}")
                         continue
-                    SYSTEM_STATUS["desiredDepth"] = max(0.0, desired_depth)
-                    SYSTEM_STATUS["desiredDepthInitialized"] = True
+                    clamped = max(0.0, desired_depth)
+                    SYSTEM_STATUS["pendingDesiredDepth"] = clamped
+                    if SYSTEM_STATUS["depthHold"]:
+                        SYSTEM_STATUS["desiredDepth"] = clamped
                     log_msg = {
                         "type": "logMessage",
                         "payload": {

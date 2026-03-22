@@ -362,9 +362,6 @@ class Regulator:
         self,
     ) -> None:  # Note to Michael: I know this is done in another script too, but it is better to do here because we have to change the integral terms which are only in this class, and in future we might need to have more complex behaviour on edges.
         current_depth = self.state.pressure.depth
-        if not self.state.regulator.desired_depth_initialized:
-            self.state.regulator.desired_depth = current_depth
-            self.state.regulator.desired_depth_initialized = True
         self.integral_depth = 0.0
         self.current_dt_depth = 0.0
         self.previous_depth = current_depth
