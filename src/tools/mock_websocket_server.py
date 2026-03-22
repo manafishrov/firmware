@@ -433,9 +433,14 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     await websocket.send(json.dumps(log_msg))
                 elif msg_type == "toggleDepthHold":
                     SYSTEM_STATUS["depthHold"] = not SYSTEM_STATUS["depthHold"]
-                    if SYSTEM_STATUS["depthHold"] and not SYSTEM_STATUS["desiredDepthInitialized"]:
+                    if (
+                        SYSTEM_STATUS["depthHold"]
+                        and not SYSTEM_STATUS["desiredDepthInitialized"]
+                    ):
                         current_time = time.time()
-                        SYSTEM_STATUS["desiredDepth"] = 10 + 5 * math.sin(current_time / 4)
+                        SYSTEM_STATUS["desiredDepth"] = 10 + 5 * math.sin(
+                            current_time / 4
+                        )
                         SYSTEM_STATUS["desiredDepthInitialized"] = True
                     log_msg = {
                         "type": "logMessage",
