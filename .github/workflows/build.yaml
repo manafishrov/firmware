@@ -52,12 +52,12 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@main
+        uses: DeterminateSystems/nix-installer-action@430608d219b9321ec0c98eb6c37245a39aa6756e # main
         with:
           diagnostic-endpoint: ""
 
       - name: Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@main
+        uses: DeterminateSystems/magic-nix-cache-action@1828eb4e5414b8dfe36daae53ea3e4b8c3fdec7a # main
         with:
           diagnostic-endpoint: ""
 
