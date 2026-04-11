@@ -6,7 +6,11 @@ from websockets import ServerConnection
 
 from ..log import log_warn
 from ..models.actions import CustomAction, DirectionVector
-from ..models.config import MicrocontrollerFirmwareVariant, RovConfig, ThrusterTest
+from ..models.config import (
+    MicrocontrollerFirmwareVariant,
+    PartialRovConfig,
+    ThrusterTest,
+)
 from ..rov_state import RovState
 from .message import WebsocketMessage
 from .receive.actions import (
@@ -36,7 +40,7 @@ async def _handle_payload_message(
 ) -> bool:
     match message.type:
         case MessageType.SET_CONFIG:
-            await handle_set_config(state, cast(RovConfig, payload))
+            await handle_set_config(state, cast(PartialRovConfig, payload))
         case MessageType.FLASH_MICROCONTROLLER_FIRMWARE:
             await handle_flash_microcontroller_firmware(
                 cast(MicrocontrollerFirmwareVariant, payload)

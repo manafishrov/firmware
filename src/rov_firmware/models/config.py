@@ -231,6 +231,33 @@ class RovConfig(CamelCaseModel):
             _ = f.write(self.model_dump_json(by_alias=True, indent=2))
 
 
+class PartialRovConfig(CamelCaseModel):
+    """Partial ROV configuration for updates."""
+
+    firmware_version: str | None = None
+    rov_name: str | None = None
+    microcontroller_firmware_variant: MicrocontrollerFirmwareVariant | None = None
+    fluid_type: FluidType | None = None
+    smoothing_factor: float | None = None
+    thruster_pin_setup: ThrusterPinSetup | None = None
+    thruster_allocation: NDArray[Shape["8, 8"], np.float32] | None = None  # ty: ignore[invalid-type-form]
+    regulator: Regulator | None = None
+    direction_coefficients: DirectionCoefficients | None = None
+    power: Power | None = None
+    ip_address: str | None = None
+    websocket_port: int | None = None
+
+    @field_validator("thruster_allocation", mode="before")
+    @classmethod
+    def validate_thruster_allocation(
+        cls, v: list[list[float]] | None
+    ) -> NumpyNDArray[np.float32] | None:
+        """Validate and convert thruster allocation to numpy array if present."""
+        if v is None:
+            return None
+        return np.array(v, dtype=np.float32)
+
+
 ThrusterTest = int
 
 

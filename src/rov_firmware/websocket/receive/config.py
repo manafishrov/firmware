@@ -3,7 +3,7 @@
 from websockets import ServerConnection
 
 from ...log import log_info
-from ...models.config import RovConfig
+from ...models.config import PartialRovConfig
 from ...rov_state import RovState
 from ...toast import ToastContent, toast_success
 from ..message import Config
@@ -26,17 +26,18 @@ async def handle_get_config(
 
 async def handle_set_config(
     state: RovState,
-    payload: RovConfig,
+    payload: PartialRovConfig,
 ) -> None:
     """Handle set config message.
 
     Args:
         state: The ROV state.
-        payload: The new ROV configuration.
+        payload: Partial ROV configuration update.
     """
-    state.rov_config = payload
+    update_data = payload.model_dump(exclude_none=True, by_alias=False)
+    state.rov_config = state.rov_config.model_copy(update=update_data)
     state.rov_config.save()
-    log_info("Received and applied new config.")
+    log_info("Received and applied partial config update.")
     toast_success(
         identifier=None,
         content=ToastContent(

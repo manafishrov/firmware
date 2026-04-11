@@ -11,6 +11,7 @@ from ..models.actions import (
 from ..models.base import CamelCaseModel
 from ..models.config import (
     MicrocontrollerFirmwareVariant,
+    PartialRovConfig,
     RegulatorSuggestions as RegulatorSuggestionsPayload,
     RovConfig,
     ThrusterTest,
@@ -40,7 +41,7 @@ class SetConfig(CamelCaseModel):
     """WebSocket message for setting config."""
 
     type: Literal[MessageType.SET_CONFIG] = MessageType.SET_CONFIG
-    payload: RovConfig
+    payload: PartialRovConfig
 
 
 class Config(CamelCaseModel):

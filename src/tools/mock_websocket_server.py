@@ -82,7 +82,6 @@ AUTO_TUNING_OSCILLATION_DURATION_SECONDS = 10
 
 async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR0912,PLR0915
     """Handle a websocket client connection."""
-    global MOCK_CONFIG  # noqa: PLW0603
     logger = logging.getLogger(__name__)
     logger.info(
         f"Client connected: {cast(tuple[str, int] | None, websocket.remote_address)}"
@@ -404,7 +403,8 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     config_msg = {"type": "config", "payload": MOCK_CONFIG}
                     await websocket.send(json.dumps(config_msg))
                 elif msg_type == "setConfig":
-                    MOCK_CONFIG = cast(dict[str, Any], payload)
+                    if isinstance(payload, dict):
+                        MOCK_CONFIG.update(cast(dict[str, Any], payload))
                     toast_msg = {
                         "type": "showToast",
                         "payload": {
