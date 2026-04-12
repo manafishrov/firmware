@@ -1,6 +1,9 @@
 """Main entry point for the ROV firmware."""
 
 import asyncio
+from typing import Any
+
+from serial import SerialException
 
 from .regulator import Regulator
 from .rov_state import RovState
@@ -12,8 +15,19 @@ from .thrusters import Thrusters
 from .websocket.server import WebsocketServer
 
 
+def _exception_handler(
+    loop: asyncio.AbstractEventLoop, context: dict[str, Any]
+) -> None:
+    exception = context.get("exception")
+    if isinstance(exception, SerialException):
+        return
+    loop.default_exception_handler(context)
+
+
 async def main() -> None:
     """Run the main ROV firmware loop."""
+    asyncio.get_running_loop().set_exception_handler(_exception_handler)
+
     state: RovState = RovState()
     ws_server: WebsocketServer = WebsocketServer(state)
     serial_manager: SerialManager = SerialManager(state)

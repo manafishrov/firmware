@@ -178,7 +178,9 @@ class Thrusters:
                 )
             return thrust_vector
 
-    def _send_packet(self, writer: StreamWriter, thrust_values: list[int]) -> None:
+    async def _send_packet(
+        self, writer: StreamWriter, thrust_values: list[int]
+    ) -> None:
         data_payload = struct.pack(f"<{NUM_MOTORS}H", *thrust_values)
         packet = bytearray([THRUSTER_INPUT_START_BYTE]) + data_payload
         checksum = 0
@@ -186,6 +188,7 @@ class Thrusters:
             checksum ^= b
         packet.append(checksum)
         writer.write(packet)
+        await writer.drain()
 
     def _determine_thrust_vector(
         self, current_time: float, last_send_time: float
@@ -226,7 +229,7 @@ class Thrusters:
     ) -> bool:
         for attempt in range(3):
             try:
-                self._send_packet(writer, thrust_values)
+                await self._send_packet(writer, thrust_values)
                 return True
             except Exception as e:
                 log_error(f"Thruster send_packet failed (attempt {attempt + 1}): {e}")
