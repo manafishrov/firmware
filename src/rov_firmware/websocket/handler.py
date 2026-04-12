@@ -43,7 +43,7 @@ async def _handle_payload_message(
             await handle_set_config(state, cast(PartialRovConfig, payload))
         case MessageType.FLASH_MICROCONTROLLER_FIRMWARE:
             await handle_flash_microcontroller_firmware(
-                cast(MicrocontrollerFirmwareVariant, payload)
+                state, cast(MicrocontrollerFirmwareVariant, payload)
             )
         case MessageType.DIRECTION_VECTOR:
             await handle_direction_vector(state, cast(DirectionVector, payload))

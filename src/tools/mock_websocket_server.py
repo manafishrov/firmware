@@ -76,8 +76,11 @@ SYSTEM_STATUS: dict[str, Any] = {
 
 THRUSTER_TEST_TOAST_ID = "thruster-test"
 AUTO_TUNING_TOAST_ID = "regulator-auto-tuning"
+FLASH_TOAST_ID = "flash-microcontroller-firmware"
 THRUSTER_TEST_DURATION_SECONDS = 10
 AUTO_TUNING_OSCILLATION_DURATION_SECONDS = 10
+FLASH_DURATION_SECONDS = 3
+PERCENT_COMPLETE = 100
 
 
 async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR0912,PLR0915
@@ -98,10 +101,10 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             desired_roll = 20 * math.cos(current_time / 3)
             desired_yaw = 35 * math.sin(current_time / 2.5)
             depth = 10 + 5 * math.sin(current_time / 4)
-            if cast(bool, SYSTEM_STATUS["depthHold"]):
-                desired_depth = cast(float, SYSTEM_STATUS["desiredDepth"])
+            if SYSTEM_STATUS["depthHold"]:
+                desired_depth = SYSTEM_STATUS["desiredDepth"]
             elif SYSTEM_STATUS["pendingDesiredDepth"] is not None:
-                desired_depth = cast(float, SYSTEM_STATUS["pendingDesiredDepth"])
+                desired_depth = SYSTEM_STATUS["pendingDesiredDepth"]
             else:
                 desired_depth = depth
             water_temperature = 20 + 5 * math.cos(current_time / 5)
@@ -383,6 +386,59 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
 
             await asyncio.sleep(0.1)
 
+    async def run_flash_firmware(variant: str) -> None:
+        """Simulate firmware flashing with progress toast updates."""
+        try:
+            start_time = time.time()
+            last_percent = -1
+
+            while True:
+                elapsed = time.time() - start_time
+                percent = min(
+                    PERCENT_COMPLETE,
+                    int((elapsed / FLASH_DURATION_SECONDS) * PERCENT_COMPLETE),
+                )
+
+                if percent != last_percent:
+                    last_percent = percent
+                    toast_msg = {
+                        "type": "showToast",
+                        "payload": {
+                            "identifier": FLASH_TOAST_ID,
+                            "variant": "loading",
+                            "content": {
+                                "messageKey": "toasts_flash_in_progress",
+                                "messageArgs": {"percent": percent},
+                            },
+                            "action": None,
+                        },
+                    }
+                    await websocket.send(json.dumps(toast_msg))
+
+                if percent >= PERCENT_COMPLETE:
+                    break
+                await asyncio.sleep(0.05)
+
+            toast_msg = {
+                "type": "showToast",
+                "payload": {
+                    "identifier": FLASH_TOAST_ID,
+                    "variant": "success",
+                    "content": {
+                        "messageKey": "toasts_flash_success",
+                    },
+                    "action": None,
+                },
+            }
+            await websocket.send(json.dumps(toast_msg))
+            logger.info(f"Mock flash complete: {variant}")
+        except asyncio.CancelledError:
+            logger.debug("Flash cancelled")
+        except Exception:
+            logger.exception("Error in mock flash")
+
+    flash_task: asyncio.Task[None] | None = None
+
     try:
         await asyncio.sleep(5)
         config_msg = {"type": "config", "payload": MOCK_CONFIG}
@@ -472,6 +528,12 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         },
                     }
                     await websocket.send(json.dumps(log_msg))
+                elif msg_type == "flashMicrocontrollerFirmware":
+                    if flash_task is not None and not flash_task.done():
+                        _ = flash_task.cancel()
+                    flash_task = asyncio.create_task(
+                        run_flash_firmware(cast(str, payload))
+                    )
                 elif msg_type == "customAction":
                     logger.info(f"Custom action: {payload}")
                 elif msg_type == "startThrusterTest":
@@ -531,6 +593,8 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             _ = thruster_test_task.cancel()
         if auto_tuning_task is not None:
             _ = auto_tuning_task.cancel()
+        if flash_task is not None:
+            _ = flash_task.cancel()
 
 
 async def main() -> None:

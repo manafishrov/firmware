@@ -59,19 +59,19 @@ class SerialManager:
 
             try:
                 if notify:
-                    log_info(
-                        "Attempting to initialize serial connection to microcontroller..."
-                    )
+                    log_info("Attempting to initialize microcontroller...")
                 serial_port = await self._find_microcontroller_port(log_missing=notify)
                 if serial_port is None:
                     await self._clear_connection_unlocked()
                     if notify:
-                        log_error("Failed to find microcontroller serial port.")
+                        log_error(
+                            "Failed to initialize microcontroller. Is it connected?"
+                        )
                         toast_error(
                             identifier=None,
                             content=ToastContent(
-                                message_key="toasts_microcontroller_connection_failed",
-                                description_key="toasts_microcontroller_connection_not_found_description",
+                                message_key="toasts_microcontroller_init_failed",
+                                description_key="toasts_microcontroller_init_failed_description",
                             ),
                             action=None,
                         )
@@ -80,14 +80,12 @@ class SerialManager:
                     url=serial_port, baudrate=115200
                 )
                 self.state.system_health.microcontroller_healthy = True
-                log_info(
-                    "Serial connection to microcontroller initialized successfully."
-                )
+                log_info("Microcontroller initialized successfully.")
                 return True
             except Exception as e:
                 await self._clear_connection_unlocked()
                 log_error(
-                    f"Failed to initialize serial connection to microcontroller. Error: {e}"
+                    f"Failed to initialize microcontroller. Is it connected? Error: {e}"
                 )
                 if notify:
                     toast_error(
@@ -102,6 +100,8 @@ class SerialManager:
 
     async def ensure_connection(self) -> bool:
         """Return whether the microcontroller serial connection is ready for use."""
+        if self.state.microcontroller_flashing:
+            return False
         if self.reader is not None and self.writer is not None:
             self.state.system_health.microcontroller_healthy = True
             return True
@@ -113,7 +113,8 @@ class SerialManager:
             if self.reader is None and self.writer is None:
                 self.state.system_health.microcontroller_healthy = False
                 return
-            log_error(reason)
+            if not self.state.microcontroller_flashing:
+                log_error(reason)
             await self._clear_connection_unlocked()
 
     def get_reader(self) -> asyncio.StreamReader:

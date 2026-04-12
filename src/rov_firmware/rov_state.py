@@ -20,3 +20,4 @@ class RovState:
         self.esc: EscData = EscData()
         self.regulator: RegulatorData = RegulatorData()
         self.thrusters: ThrusterData = ThrusterData()
+        self.microcontroller_flashing: bool = False
