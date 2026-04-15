@@ -238,11 +238,19 @@ in {
           };
         };
         activation.setupFirmware = home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
-          if [ ! -f "$HOME/.firmware_setup" ]; then
+          if [ "$CURRENT_VERSION" != "$INSTALLED_VERSION" ]; then
             mkdir -p $HOME/firmware
+            CONFIG="$HOME/firmware/src/rov_firmware/config.json"
+            BACKUP="$HOME/firmware/src/rov_firmware/config-backup.json"
+            # Backup config
+            [ -f "$CONFIG" ] && cp "$CONFIG" "$BACKUP"
+            # Update files
             cp -r ${./.}/* $HOME/firmware/
             chmod -R u+w $HOME/firmware
-            touch "$HOME/.firmware_setup"
+            # Restore config
+            [ -f "$BACKUP" ] && mv "$BACKUP" "$CONFIG"
+            # Mark version
+            echo "$CURRENT_VERSION" > "$HOME/.firmware_version"
           fi
         '';
       };
