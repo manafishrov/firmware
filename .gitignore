@@ -12,6 +12,7 @@ dist
 
 # config
 config.json
+config-backup.json
 
 # nix
 keys
