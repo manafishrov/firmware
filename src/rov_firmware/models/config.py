@@ -4,6 +4,7 @@ from enum import StrEnum
 import json
 from pathlib import Path
 import secrets
+import tempfile
 import tomllib
 from typing import Any, ClassVar
 
@@ -211,8 +212,13 @@ class RovConfig(CamelCaseModel):
             default_config.save()
             return default_config
 
-        with cls._config_path.open() as f:
-            raw = json.load(f)
+        try:
+            with cls._config_path.open() as f:
+                raw = json.load(f)
+        except (json.JSONDecodeError, ValueError):
+            default_config = cls()
+            default_config.save()
+            return default_config
 
         stored_version = raw.get("firmwareVersion", "0.0.0")
 
@@ -227,8 +233,15 @@ class RovConfig(CamelCaseModel):
     def save(self) -> None:
         """Save config to file with current firmware version."""
         self.firmware_version = CURRENT_FIRMWARE_VERSION
-        with self._config_path.open("w") as f:
-            _ = f.write(self.model_dump_json(by_alias=True, indent=2))
+        dir_path = self._config_path.parent
+        tmp = Path(tempfile.mkstemp(dir=dir_path, suffix=".tmp")[1])
+        try:
+            with tmp.open("w") as f:
+                _ = f.write(self.model_dump_json(by_alias=True, indent=2))
+            tmp.replace(self._config_path)
+        except BaseException:
+            tmp.unlink(missing_ok=True)
+            raise
 
 
 class PartialRovConfig(CamelCaseModel):
