@@ -39,7 +39,7 @@ async def handle_set_config(
     current_data.update(update_data)
     state.rov_config = RovConfig.model_validate(current_data)
     state.rov_config.save()
-    log_info("Received and applied partial config update.")
+    log_info("Received and applied config update.")
     toast_success(
         identifier=None,
         content=ToastContent(
