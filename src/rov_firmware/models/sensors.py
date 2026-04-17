@@ -10,9 +10,9 @@ class EscData(BaseModel):
 
     erpm: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
     current: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
-    voltage: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
+    voltage: list[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     temperature: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
-    stress: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
+    signal_quality: list[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 
 class ImuData(BaseModel):

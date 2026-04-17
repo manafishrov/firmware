@@ -7,7 +7,7 @@ from ..constants import (
     ESC_MAX_READ_BUFFER_SIZE,
     ESC_PACKET_TYPE_CURRENT,
     ESC_PACKET_TYPE_ERPM,
-    ESC_PACKET_TYPE_STRESS,
+    ESC_PACKET_TYPE_SIGNAL_QUALITY,
     ESC_PACKET_TYPE_TEMPERATURE,
     ESC_PACKET_TYPE_VOLTAGE,
     ESC_TELEMETRY_PACKET_SIZE,
@@ -95,8 +95,8 @@ class EscSensor:
         """Update ESC telemetry data from a validated packet.
 
         Parses the packet and updates the corresponding motor's telemetry in state.
-        Assumed units (BLHeli standard): erpm in ERPM, voltage in 0.01V, current in 0.01A,
-        temperature in °C, stress in raw units (possibly % or internal metric).
+        Units: erpm in eRPM/100, voltage in raw EDT byte (0.25V/LSB),
+        current in 1A, temperature in °C, signal_quality in 0.01% invalid.
         """
         global_id = packet[1]
         packet_type = packet[2]
@@ -105,10 +105,10 @@ class EscSensor:
             if packet_type == ESC_PACKET_TYPE_ERPM:
                 self.state.esc.erpm[global_id] = value  # ERPM
             elif packet_type == ESC_PACKET_TYPE_VOLTAGE:
-                self.state.esc.voltage[global_id] = value  # 1V
+                self.state.esc.voltage[global_id] = value * 0.25  # raw EDT byte to volts
             elif packet_type == ESC_PACKET_TYPE_TEMPERATURE:
                 self.state.esc.temperature[global_id] = value  # °C
             elif packet_type == ESC_PACKET_TYPE_CURRENT:
                 self.state.esc.current[global_id] = value  # 1A
-            elif packet_type == ESC_PACKET_TYPE_STRESS:
-                self.state.esc.stress[global_id] = value  # raw units
+            elif packet_type == ESC_PACKET_TYPE_SIGNAL_QUALITY:
+                self.state.esc.signal_quality[global_id] = value / 100  # 0.01% to %

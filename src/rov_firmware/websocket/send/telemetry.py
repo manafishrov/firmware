@@ -46,6 +46,7 @@ async def handle_telemetry(
         water_temperature=state.pressure.temperature,
         electronics_temperature=electronics_temperature,
         thruster_rpms=[int(erpm / (THRUSTER_POLES // 2)) for erpm in state.esc.erpm],
+        thruster_signal_qualities=list(state.esc.signal_quality),
         work_indicator_percentage=int(work_indicator_percentage),
     )
     message = Telemetry(payload=payload).model_dump_json(by_alias=True)
