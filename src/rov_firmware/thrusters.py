@@ -104,15 +104,15 @@ class Thrusters:
     ) -> int:
         clipped_thrust_vector = np.clip(thrust_vector, -1.0, 1.0)
         total_thrust = float(np.sum(np.abs(clipped_thrust_vector)))
-        work_indicator_percentage = min(
-            100, max(0, (total_thrust / NUM_MOTORS) * 100)
-        )
+        work_indicator_percentage = min(100, max(0, (total_thrust / NUM_MOTORS) * 100))
         return int(work_indicator_percentage)
 
     def _calculate_work_indicator_percentage_from_direction_vector(
         self, direction_vector: NDArray[np.float32]
     ) -> int:
-        thrust_vector = self._create_thrust_vector_from_direction_vector(direction_vector)
+        thrust_vector = self._create_thrust_vector_from_direction_vector(
+            direction_vector
+        )
         return self._calculate_work_indicator_percentage_from_thrust_vector(
             thrust_vector
         )
@@ -132,8 +132,8 @@ class Thrusters:
         self._smooth_direction_vector(direction_vector, self.previous_direction_vector)
         self.previous_direction_vector = direction_vector.copy()
 
-        work_indicator_direction_vector = self.regulator.apply_regulator_to_direction_vector(
-            direction_vector
+        work_indicator_direction_vector = (
+            self.regulator.apply_regulator_to_direction_vector(direction_vector)
         )
         self.state.thrusters.work_indicator_percentage = (
             self._calculate_work_indicator_percentage_from_direction_vector(

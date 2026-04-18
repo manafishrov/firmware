@@ -5,7 +5,7 @@ from ..rov_state import RovState
 from ..toast import ToastContent, toast_info
 
 
-async def execute(state: RovState) -> None:  # noqa: ARG001
+async def execute(_state: RovState) -> None:
     """This is an example of a custom action handler. You can create your own custom action by creating a new file in the `custom_actions`. They all have access to the `RovState` which is where all interactions with the firmware happen and where all the raw and processed data is stored."""
     log_info("Executing example custom action")
     toast_info(
