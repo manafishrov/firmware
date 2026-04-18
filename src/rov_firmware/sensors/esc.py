@@ -171,7 +171,7 @@ class EscSensor:
         """Update ESC telemetry data from a validated packet.
 
         Parses the packet and updates the corresponding motor's telemetry in state.
-        Units: erpm in eRPM/100, voltage in raw EDT byte (0.25V/LSB),
+        Units: erpm in full eRPM, voltage in raw EDT byte (0.25V/LSB),
         current in 1A, temperature in °C, signal_quality in 0.01% valid.
         """
         global_id = packet[1]
@@ -179,7 +179,7 @@ class EscSensor:
         value = struct.unpack("<i", packet[3:7])[0]
         if 0 <= global_id < NUM_MOTORS:
             if packet_type == ESC_PACKET_TYPE_ERPM:
-                self.state.esc.erpm[global_id] = value  # ERPM
+                self.state.esc.erpm[global_id] = value * 100  # eRPM/100 to eRPM
             elif packet_type == ESC_PACKET_TYPE_VOLTAGE:
                 self.state.esc.voltage[global_id] = (
                     value * 0.25
