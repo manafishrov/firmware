@@ -172,7 +172,7 @@ class EscSensor:
 
         Parses the packet and updates the corresponding motor's telemetry in state.
         Units: erpm in eRPM/100, voltage in raw EDT byte (0.25V/LSB),
-        current in 1A, temperature in °C, signal_quality in 0.01% invalid.
+        current in 1A, temperature in °C, signal_quality in 0.01% valid.
         """
         global_id = packet[1]
         packet_type = packet[2]

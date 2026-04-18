@@ -2,7 +2,9 @@
 
 from websockets import ServerConnection
 
-from ...constants import MAX_CURRENT_A, THRUSTER_POLES
+import numpy as np
+
+from ...constants import NUM_MOTORS, THRUSTER_POLES
 from ...models.rov_telemetry import RovTelemetry
 from ...rov_state import RovState
 from ..message import Telemetry
@@ -24,9 +26,9 @@ async def handle_telemetry(
     temps.extend(t for t in state.esc.temperature if t > 0)
     electronics_temperature = sum(temps) / len(temps) if temps else 0
 
-    total_current_a = sum(state.esc.current)
+    total_thrust = float(np.sum(np.abs(state.thrusters.thrust_vector)))
     work_indicator_percentage = min(
-        100, max(0, (total_current_a / MAX_CURRENT_A) * 100)
+        100, max(0, (total_thrust / NUM_MOTORS) * 100)
     )
     if state.system_status.depth_hold:
         desired_depth = state.regulator.desired_depth

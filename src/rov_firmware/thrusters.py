@@ -255,6 +255,8 @@ class Thrusters:
                 thrust_vector = new_thrust_vector
                 last_send_time = updated_last_send_time
 
+            self.state.thrusters.thrust_vector = thrust_vector
+
             thrust_values = self._compute_thrust_values(thrust_vector)
             success = await self._send_with_retries(writer, thrust_values)
             if not success:
