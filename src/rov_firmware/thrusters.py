@@ -99,6 +99,24 @@ class Thrusters:
     def _clip_thrust_vector(self, thrust_vector: NDArray[np.float32]) -> None:
         thrust_vector[:] = np.clip(thrust_vector, -1.0, 1.0)
 
+    def _calculate_work_indicator_percentage_from_thrust_vector(
+        self, thrust_vector: NDArray[np.float32]
+    ) -> int:
+        clipped_thrust_vector = np.clip(thrust_vector, -1.0, 1.0)
+        total_thrust = float(np.sum(np.abs(clipped_thrust_vector)))
+        work_indicator_percentage = min(
+            100, max(0, (total_thrust / NUM_MOTORS) * 100)
+        )
+        return int(work_indicator_percentage)
+
+    def _calculate_work_indicator_percentage_from_direction_vector(
+        self, direction_vector: NDArray[np.float32]
+    ) -> int:
+        thrust_vector = self._create_thrust_vector_from_direction_vector(direction_vector)
+        return self._calculate_work_indicator_percentage_from_thrust_vector(
+            thrust_vector
+        )
+
     def _create_thrust_vector(self) -> NDArray[np.float32]:
         """Create the final thrust vector for the microcontroller from the current thruster direction vector.
 
@@ -114,7 +132,14 @@ class Thrusters:
         self._smooth_direction_vector(direction_vector, self.previous_direction_vector)
         self.previous_direction_vector = direction_vector.copy()
 
-        self.regulator.apply_regulator_to_direction_vector(direction_vector)
+        work_indicator_direction_vector = self.regulator.apply_regulator_to_direction_vector(
+            direction_vector
+        )
+        self.state.thrusters.work_indicator_percentage = (
+            self._calculate_work_indicator_percentage_from_direction_vector(
+                work_indicator_direction_vector
+            )
+        )
 
         thrust_vector = self._create_thrust_vector_from_direction_vector(
             direction_vector
@@ -203,6 +228,7 @@ class Thrusters:
                 self._correct_thrust_vector_spin_directions(thrust_vector)
                 self._reorder_thrust_vector(thrust_vector)
                 self._clip_thrust_vector(thrust_vector)
+                self.state.thrusters.work_indicator_percentage = 0
                 return thrust_vector, last_send_time
 
         if self.state.thrusters.test_thruster is not None:
@@ -210,6 +236,7 @@ class Thrusters:
                 current_time, self.state.thrusters.test_thruster
             )
             if test_vector is not None:
+                self.state.thrusters.work_indicator_percentage = 0
                 return test_vector, last_send_time
 
         if (
@@ -220,6 +247,7 @@ class Thrusters:
             return self._create_thrust_vector(), current_time
 
         if current_time - last_send_time > THRUSTER_TIMEOUT_MS / 1000:
+            self.state.thrusters.work_indicator_percentage = 0
             return np.zeros(NUM_MOTORS, dtype=np.float32), last_send_time
 
         return None, last_send_time
@@ -254,8 +282,6 @@ class Thrusters:
             if new_thrust_vector is not None:
                 thrust_vector = new_thrust_vector
                 last_send_time = updated_last_send_time
-
-            self.state.thrusters.thrust_vector = thrust_vector
 
             thrust_values = self._compute_thrust_values(thrust_vector)
             success = await self._send_with_retries(writer, thrust_values)

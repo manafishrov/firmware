@@ -578,10 +578,10 @@ class Regulator:
 
     def apply_regulator_to_direction_vector(
         self, direction_vector: NDArray[np.float32]
-    ) -> None:
-        """Apply active regulator outputs to the provided 8-element direction vector in place.
+    ) -> NDArray[np.float32]:
+        """Apply regulator outputs to the provided direction vector and return the pre-limit combined vector.
 
-        This updates internal timing, refreshes regulator targets from user input and edge transitions, computes depth-hold and attitude-stabilization contributions when enabled, scales both user and regulator components according to configuration, and adds the regulator vector into the provided direction_vector.
+        This updates internal timing, refreshes regulator targets from user input and edge transitions, computes depth-hold and attitude-stabilization contributions when enabled, captures the combined direction vector before power limits are applied, then scales user and regulator components according to configuration and adds the limited regulator output into the provided direction_vector in place.
 
         Parameters:
             direction_vector (NDArray[np.float32]): Mutable 8-element NED-format command vector arranged as
@@ -589,6 +589,9 @@ class Regulator:
                 - depth hold replaces heave (index 2) with regulator-modified motion and zeroes user heave,
                 - attitude stabilization zeroes user pitch/yaw/roll (indices 3:6) and adds regulator corrections,
                 - final result is the elementwise sum of the (possibly scaled) user vector and the scaled regulator contributions.
+
+        Returns:
+            NDArray[np.float32]: Combined direction vector before user/regulator power limits are applied.
         """
         regulator_direction_vector = np.zeros(8, dtype=np.float32)
 
@@ -622,10 +625,15 @@ class Regulator:
             )
             direction_vector[3:6] = 0.0
 
+        unlimited_direction_vector = direction_vector.copy()
+        unlimited_direction_vector += regulator_direction_vector
+
         self._scale_regulator_direction_vector(regulator_direction_vector)
         self._scale_direction_vector_with_user_max_power(direction_vector)
 
         direction_vector += regulator_direction_vector
+
+        return unlimited_direction_vector
 
     def handle_auto_tuning(self, current_time: float) -> NDArray[np.float32] | None:
         """Progresses the regulator auto-tuning state machine and produces the actuation vector to apply for the current tuning step.
