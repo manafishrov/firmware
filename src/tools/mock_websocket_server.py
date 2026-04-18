@@ -113,8 +113,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                 int(1000 + 500 * math.sin(current_time + i)) for i in range(8)
             ]
             thruster_signal_qualities = [
-                round(abs(2 * math.sin(current_time / 3 + i)), 2)
-                for i in range(8)
+                round(abs(2 * math.sin(current_time / 3 + i)), 2) for i in range(8)
             ]
             work_indicator_percentage = 50 + 30 * math.sin(current_time / 10)
 

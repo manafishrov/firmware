@@ -23,6 +23,7 @@ _pending_logs: list[LogMessage] = []
 
 
 async def flush_pending_logs() -> None:
+    """Flush pre-connection logs to the websocket message queue."""
     queue = get_message_queue()
     for msg in _pending_logs:
         await queue.put(msg)

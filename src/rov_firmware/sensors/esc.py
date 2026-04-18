@@ -23,6 +23,7 @@ from ..models.log import LogLevel, LogOrigin
 from ..rov_state import RovState
 from ..serial import SerialManager
 
+
 _MAX_READ_BUFFER_SIZE = 512
 
 _LOG_LEVEL_MAP: dict[int, LogLevel] = {
@@ -94,27 +95,36 @@ class EscSensor:
                 del read_buffer[:start_idx]
 
             if read_buffer[0] == ESC_TELEMETRY_START_BYTE:
-                if len(read_buffer) < ESC_TELEMETRY_PACKET_SIZE:
+                if not self._try_consume_telemetry(read_buffer):
                     return
-                packet = read_buffer[:ESC_TELEMETRY_PACKET_SIZE]
-                if self._validate_telemetry_packet(packet):
-                    self._update_telemetry(packet)
-                del read_buffer[:ESC_TELEMETRY_PACKET_SIZE]
-
             elif read_buffer[0] == LOG_PACKET_START_BYTE:
-                if len(read_buffer) < LOG_PACKET_HEADER_SIZE:
+                if not self._try_consume_log(read_buffer):
                     return
-                msg_len = read_buffer[2]
-                total_len = LOG_PACKET_HEADER_SIZE + msg_len + 1
-                if len(read_buffer) < total_len:
-                    return
-                packet = read_buffer[:total_len]
-                if self._validate_log_packet(packet):
-                    self._handle_log_packet(packet)
-                del read_buffer[:total_len]
-
             else:
                 del read_buffer[:1]
+
+    def _try_consume_telemetry(self, read_buffer: bytearray) -> bool:
+        if len(read_buffer) < ESC_TELEMETRY_PACKET_SIZE:
+            return False
+        packet = read_buffer[:ESC_TELEMETRY_PACKET_SIZE]
+        if self._validate_telemetry_packet(packet):
+            self._update_telemetry(packet)
+        del read_buffer[:ESC_TELEMETRY_PACKET_SIZE]
+        return True
+
+    @staticmethod
+    def _try_consume_log(read_buffer: bytearray) -> bool:
+        if len(read_buffer) < LOG_PACKET_HEADER_SIZE:
+            return False
+        msg_len = read_buffer[2]
+        total_len = LOG_PACKET_HEADER_SIZE + msg_len + 1
+        if len(read_buffer) < total_len:
+            return False
+        packet = read_buffer[:total_len]
+        if EscSensor._validate_log_packet(packet):
+            EscSensor._handle_log_packet(packet)
+        del read_buffer[:total_len]
+        return True
 
     @staticmethod
     def _find_start_byte(buf: bytearray) -> int:
@@ -137,7 +147,10 @@ class EscSensor:
 
     @staticmethod
     def _validate_log_packet(packet: bytearray) -> bool:
-        if len(packet) < LOG_PACKET_HEADER_SIZE + 1 or packet[0] != LOG_PACKET_START_BYTE:
+        if (
+            len(packet) < LOG_PACKET_HEADER_SIZE + 1
+            or packet[0] != LOG_PACKET_START_BYTE
+        ):
             return False
         calculated_checksum = 0
         for b in packet[:-1]:
@@ -168,7 +181,9 @@ class EscSensor:
             if packet_type == ESC_PACKET_TYPE_ERPM:
                 self.state.esc.erpm[global_id] = value  # ERPM
             elif packet_type == ESC_PACKET_TYPE_VOLTAGE:
-                self.state.esc.voltage[global_id] = value * 0.25  # raw EDT byte to volts
+                self.state.esc.voltage[global_id] = (
+                    value * 0.25
+                )  # raw EDT byte to volts
             elif packet_type == ESC_PACKET_TYPE_TEMPERATURE:
                 self.state.esc.temperature[global_id] = value  # °C
             elif packet_type == ESC_PACKET_TYPE_CURRENT:
