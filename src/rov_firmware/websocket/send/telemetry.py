@@ -2,6 +2,8 @@
 
 from websockets import ServerConnection
 
+from rov_firmware.log import log_info
+
 from ...constants import MAX_CURRENT_A, THRUSTER_POLES
 from ...models.rov_telemetry import RovTelemetry
 from ...rov_state import RovState

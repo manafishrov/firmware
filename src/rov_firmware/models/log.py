@@ -19,6 +19,7 @@ class LogOrigin(StrEnum):
     FIRMWARE = "firmware"
     BACKEND = "backend"
     FRONTEND = "frontend"
+    MICROCONTROLLER = "microcontroller"
 
 
 class LogEntry(CamelCaseModel):

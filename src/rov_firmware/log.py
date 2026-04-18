@@ -18,21 +18,38 @@ if not _logger.handlers:
     _logger.addHandler(_handler)
 
 
-async def _log_message_async(level: LogLevel, message: str) -> None:
+_MAX_PENDING_LOGS = 100
+_pending_logs: list[LogMessage] = []
+
+
+async def flush_pending_logs() -> None:
+    queue = get_message_queue()
+    for msg in _pending_logs:
+        await queue.put(msg)
+    _pending_logs.clear()
+
+
+async def _log_message_async(
+    level: LogLevel, message: str, origin: LogOrigin = LogOrigin.FIRMWARE
+) -> None:
+    payload = LogEntry(origin=origin, level=LogLevel(level), message=message)
+    message_model = LogMessage(payload=payload)
+
     if websocket_state.is_client_connected:
-        payload = LogEntry(
-            origin=LogOrigin.FIRMWARE, level=LogLevel(level), message=message
-        )
-        message_model = LogMessage(payload=payload)
         await get_message_queue().put(message_model)
     else:
+        if len(_pending_logs) < _MAX_PENDING_LOGS:
+            _pending_logs.append(message_model)
         _logger.log(_map_log_level(level), message)
 
 
-def _log_message(level: LogLevel, message: str) -> None:
+def _log_message(
+    level: LogLevel, message: str, origin: LogOrigin = LogOrigin.FIRMWARE
+) -> None:
     if websocket_state.main_event_loop and websocket_state.main_event_loop.is_running():
         _ = asyncio.run_coroutine_threadsafe(
-            _log_message_async(level, message), websocket_state.main_event_loop
+            _log_message_async(level, message, origin),
+            websocket_state.main_event_loop,
         )
     else:
         _logger.log(_map_log_level(level), message)
@@ -47,28 +64,31 @@ def _map_log_level(level: LogLevel) -> int:
     return mapping.get(level, logging.INFO)
 
 
-def log_info(message: str) -> None:
+def log_info(message: str, origin: LogOrigin = LogOrigin.FIRMWARE) -> None:
     """Log an info message.
 
     Args:
         message: The message to log.
+        origin: The origin of the log message.
     """
-    _log_message(LogLevel.INFO, message)
+    _log_message(LogLevel.INFO, message, origin)
 
 
-def log_warn(message: str) -> None:
+def log_warn(message: str, origin: LogOrigin = LogOrigin.FIRMWARE) -> None:
     """Log a warning message.
 
     Args:
         message: The message to log.
+        origin: The origin of the log message.
     """
-    _log_message(LogLevel.WARN, message)
+    _log_message(LogLevel.WARN, message, origin)
 
 
-def log_error(message: str) -> None:
+def log_error(message: str, origin: LogOrigin = LogOrigin.FIRMWARE) -> None:
     """Log an error message.
 
     Args:
         message: The message to log.
+        origin: The origin of the log message.
     """
-    _log_message(LogLevel.ERROR, message)
+    _log_message(LogLevel.ERROR, message, origin)

@@ -4,7 +4,6 @@ import asyncio
 import struct
 
 from ..constants import (
-    ESC_MAX_READ_BUFFER_SIZE,
     ESC_PACKET_TYPE_CURRENT,
     ESC_PACKET_TYPE_ERPM,
     ESC_PACKET_TYPE_SIGNAL_QUALITY,
@@ -12,10 +11,31 @@ from ..constants import (
     ESC_PACKET_TYPE_VOLTAGE,
     ESC_TELEMETRY_PACKET_SIZE,
     ESC_TELEMETRY_START_BYTE,
+    LOG_LEVEL_ERROR,
+    LOG_LEVEL_INFO,
+    LOG_LEVEL_WARN,
+    LOG_PACKET_HEADER_SIZE,
+    LOG_PACKET_START_BYTE,
     NUM_MOTORS,
 )
+from ..log import log_error, log_info, log_warn
+from ..models.log import LogLevel, LogOrigin
 from ..rov_state import RovState
 from ..serial import SerialManager
+
+_MAX_READ_BUFFER_SIZE = 512
+
+_LOG_LEVEL_MAP: dict[int, LogLevel] = {
+    LOG_LEVEL_INFO: LogLevel.INFO,
+    LOG_LEVEL_WARN: LogLevel.WARN,
+    LOG_LEVEL_ERROR: LogLevel.ERROR,
+}
+
+_LOG_FN_MAP = {
+    LogLevel.INFO: log_info,
+    LogLevel.WARN: log_warn,
+    LogLevel.ERROR: log_error,
+}
 
 
 class EscSensor:
@@ -64,23 +84,47 @@ class EscSensor:
 
     def _consume_read_buffer(self, read_buffer: bytearray, data: bytes) -> None:
         read_buffer.extend(data)
-        while len(read_buffer) >= ESC_TELEMETRY_PACKET_SIZE:
-            start_idx = read_buffer.find(ESC_TELEMETRY_START_BYTE.to_bytes(1, "big"))
+        while True:
+            start_idx = self._find_start_byte(read_buffer)
             if start_idx == -1:
-                if len(read_buffer) > ESC_MAX_READ_BUFFER_SIZE:
+                if len(read_buffer) > _MAX_READ_BUFFER_SIZE:
                     read_buffer.clear()
                 return
             if start_idx > 0:
                 del read_buffer[:start_idx]
-            if len(read_buffer) < ESC_TELEMETRY_PACKET_SIZE:
-                return
 
-            packet = read_buffer[:ESC_TELEMETRY_PACKET_SIZE]
-            if self._validate_telemetry_packet(packet):
-                self._update_telemetry(packet)
-            del read_buffer[:ESC_TELEMETRY_PACKET_SIZE]
+            if read_buffer[0] == ESC_TELEMETRY_START_BYTE:
+                if len(read_buffer) < ESC_TELEMETRY_PACKET_SIZE:
+                    return
+                packet = read_buffer[:ESC_TELEMETRY_PACKET_SIZE]
+                if self._validate_telemetry_packet(packet):
+                    self._update_telemetry(packet)
+                del read_buffer[:ESC_TELEMETRY_PACKET_SIZE]
 
-    def _validate_telemetry_packet(self, packet: bytearray) -> bool:
+            elif read_buffer[0] == LOG_PACKET_START_BYTE:
+                if len(read_buffer) < LOG_PACKET_HEADER_SIZE:
+                    return
+                msg_len = read_buffer[2]
+                total_len = LOG_PACKET_HEADER_SIZE + msg_len + 1
+                if len(read_buffer) < total_len:
+                    return
+                packet = read_buffer[:total_len]
+                if self._validate_log_packet(packet):
+                    self._handle_log_packet(packet)
+                del read_buffer[:total_len]
+
+            else:
+                del read_buffer[:1]
+
+    @staticmethod
+    def _find_start_byte(buf: bytearray) -> int:
+        for i, b in enumerate(buf):
+            if b in (ESC_TELEMETRY_START_BYTE, LOG_PACKET_START_BYTE):
+                return i
+        return -1
+
+    @staticmethod
+    def _validate_telemetry_packet(packet: bytearray) -> bool:
         if (
             len(packet) != ESC_TELEMETRY_PACKET_SIZE
             or packet[0] != ESC_TELEMETRY_START_BYTE
@@ -90,6 +134,25 @@ class EscSensor:
         for b in packet[:7]:
             calculated_checksum ^= b
         return calculated_checksum == packet[7]
+
+    @staticmethod
+    def _validate_log_packet(packet: bytearray) -> bool:
+        if len(packet) < LOG_PACKET_HEADER_SIZE + 1 or packet[0] != LOG_PACKET_START_BYTE:
+            return False
+        calculated_checksum = 0
+        for b in packet[:-1]:
+            calculated_checksum ^= b
+        return calculated_checksum == packet[-1]
+
+    @staticmethod
+    def _handle_log_packet(packet: bytearray) -> None:
+        level_byte = packet[1]
+        msg_len = packet[2]
+        message = packet[3 : 3 + msg_len].decode("utf-8", errors="replace")
+
+        level = _LOG_LEVEL_MAP.get(level_byte, LogLevel.INFO)
+        log_fn = _LOG_FN_MAP[level]
+        log_fn(message, origin=LogOrigin.MICROCONTROLLER)
 
     def _update_telemetry(self, packet: bytearray) -> None:
         """Update ESC telemetry data from a validated packet.

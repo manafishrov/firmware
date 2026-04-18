@@ -9,7 +9,7 @@ import websockets
 from websockets import Server, ServerConnection
 from websockets.exceptions import ConnectionClosed
 
-from ..log import log_error, log_info, log_warn
+from ..log import flush_pending_logs, log_error, log_info, log_warn
 from ..rov_state import RovState
 from .handler import handle_message
 from .message import WebsocketMessage
@@ -49,6 +49,7 @@ class WebsocketServer:
         )
 
         send_task = asyncio.create_task(self._send_from_queue(websocket))
+        await flush_pending_logs()
         status_task = asyncio.create_task(
             self._send_status_periodically(websocket, self.state)
         )
