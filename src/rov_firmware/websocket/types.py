@@ -23,4 +23,4 @@ class MessageType(StrEnum):
     TOGGLE_AUTO_STABILIZATION = "toggleAutoStabilization"
     TOGGLE_DEPTH_HOLD = "toggleDepthHold"
     SET_DESIRED_DEPTH = "setDesiredDepth"
-    FLASH_MICROCONTROLLER_FIRMWARE = "flashMicrocontrollerFirmware"
+    FLASH_MCU_FIRMWARE = "flashMcuFirmware"

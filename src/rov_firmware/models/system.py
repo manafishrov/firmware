@@ -10,7 +10,7 @@ class SystemHealth(CamelCaseModel):
 
     imu_healthy: bool = False
     pressure_sensor_healthy: bool = False
-    microcontroller_healthy: bool = False
+    mcu_healthy: bool = False
 
 
 class SystemStatus(BaseModel):
