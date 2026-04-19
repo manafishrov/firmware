@@ -7,8 +7,8 @@ from serial import SerialException
 
 from .regulator import Regulator
 from .rov_state import RovState
-from .sensors.esc import EscSensor
 from .sensors.imu import Imu
+from .sensors.mcu import McuSensor
 from .sensors.pressure import PressureSensor
 from .serial import SerialManager
 from .thrusters import Thrusters
@@ -34,7 +34,7 @@ async def main() -> None:
     imu: Imu = Imu(state)
     pressure: PressureSensor = PressureSensor(state)
     regulator: Regulator = Regulator(state)
-    esc: EscSensor = EscSensor(state, serial_manager)
+    mcu: McuSensor = McuSensor(state, serial_manager)
     thrusters: Thrusters = Thrusters(state, serial_manager, regulator)
 
     await ws_server.initialize()
@@ -45,7 +45,7 @@ async def main() -> None:
     tasks = [
         imu.read_loop(),
         pressure.read_loop(),
-        esc.read_loop(),
+        mcu.read_loop(),
         thrusters.send_loop(),
         ws_server.wait_closed(),
     ]
