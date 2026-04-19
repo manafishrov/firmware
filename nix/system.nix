@@ -43,16 +43,13 @@ in {
           "mcu-firmware/pico2.uf2".source = inputs.mcu-firmware-pico2;
         };
         activation.setupFirmware = inputs.home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
-          if [ "$CURRENT_VERSION" != "$INSTALLED_VERSION" ]; then
-            mkdir -p $HOME/firmware
-            CONFIG="$HOME/firmware/src/rov_firmware/config.json"
-            BACKUP="$HOME/firmware/src/rov_firmware/config-backup.json"
-            [ -f "$CONFIG" ] && cp "$CONFIG" "$BACKUP"
-            cp -r ${./..}/* $HOME/firmware/
-            chmod -R u+w $HOME/firmware
-            [ -f "$BACKUP" ] && mv "$BACKUP" "$CONFIG"
-            echo "$CURRENT_VERSION" > "$HOME/.firmware_version"
-          fi
+          mkdir -p $HOME/firmware
+          CONFIG="$HOME/firmware/src/rov_firmware/config.json"
+          BACKUP="$HOME/firmware/src/rov_firmware/config-backup.json"
+          [ -f "$CONFIG" ] && cp "$CONFIG" "$BACKUP"
+          cp -r ${./..}/* $HOME/firmware/
+          chmod -R u+w $HOME/firmware
+          [ -f "$BACKUP" ] && mv "$BACKUP" "$CONFIG"
         '';
       };
     };
