@@ -77,7 +77,7 @@
         impermanence.nixosModules.impermanence
         {
           system.stateVersion = "25.11";
-          sdImage.imageName = "pi3-imx477-${version}.img";
+          image.fileName = "pi3-imx477-${version}.img";
           documentation = {
             enable = false;
             doc.enable = false;
