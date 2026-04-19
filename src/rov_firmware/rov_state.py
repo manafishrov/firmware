@@ -2,7 +2,7 @@
 
 from .models.config import RovConfig
 from .models.regulator import RegulatorData
-from .models.sensors import EscData, ImuData, PressureData
+from .models.sensors import ImuData, McuData, PressureData
 from .models.system import SystemHealth, SystemStatus
 from .models.thruster import ThrusterData
 
@@ -17,7 +17,7 @@ class RovState:
         self.system_status: SystemStatus = SystemStatus()
         self.imu: ImuData = ImuData()
         self.pressure: PressureData = PressureData()
-        self.esc: EscData = EscData()
+        self.mcu_telemetry: McuData = McuData()
         self.regulator: RegulatorData = RegulatorData()
         self.thrusters: ThrusterData = ThrusterData()
-        self.microcontroller_flashing: bool = False
+        self.mcu_flashing: bool = False

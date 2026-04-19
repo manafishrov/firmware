@@ -5,8 +5,8 @@ from numpydantic import NDArray, Shape
 from pydantic import BaseModel
 
 
-class EscData(BaseModel):
-    """Model for ESC data."""
+class McuData(BaseModel):
+    """Model for MCU telemetry data."""
 
     erpm: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
     current: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
