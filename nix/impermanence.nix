@@ -26,11 +26,16 @@
       "/var/lib/systemd"
       "/var/lib/NetworkManager"
       "/var/lib/iwd"
-      "/etc/ssh"
-      "/etc/NetworkManager/system-connections"
     ];
     files = [
       "/etc/machine-id"
+      "/etc/ssh/ssh_host_ed25519_key"
+      "/etc/ssh/ssh_host_ed25519_key.pub"
     ];
   };
+
+  systemd.tmpfiles.rules = [
+    "z /etc/ssh/ssh_host_ed25519_key 0600 root root -"
+    "z /etc/ssh/ssh_host_ed25519_key.pub 0644 root root -"
+  ];
 }
