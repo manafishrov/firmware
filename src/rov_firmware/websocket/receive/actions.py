@@ -87,7 +87,7 @@ async def handle_custom_action(
     """
     log_info(f"Received custom action: {payload}")
     try:
-        module = importlib.import_module(f"src.custom_actions.{payload}")
+        module = importlib.import_module(f"rov_firmware.custom_actions.{payload}")
         if hasattr(module, "execute"):
             await module.execute(state)
         else:

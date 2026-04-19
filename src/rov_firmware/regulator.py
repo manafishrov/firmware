@@ -690,12 +690,13 @@ class Regulator:
                         "depth", AxisConfig(kp=0, ki=0, kd=0)
                     ),
                     yaw=self.auto_tuning_params.get(
-                        "depth", AxisConfig(kp=0, ki=0, kd=0)
+                        "yaw", AxisConfig(kp=0, ki=0, kd=0)
                     ),
                 )
             )
             queue = get_message_queue()
             queue.put_nowait(suggestions)
+            return None
 
     def _handle_pitch_tuning(self, current_time: float) -> NDArray[np.float32]:
         pitch = self.state.regulator.pitch
