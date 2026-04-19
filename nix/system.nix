@@ -11,6 +11,10 @@
     })
   ];
 
+  systemd.tmpfiles.rules = [
+    "d /nix/var/nix/profiles/per-user/pi 0755 pi root -"
+  ];
+
   users.users.pi = {
     isNormalUser = true;
     extraGroups = ["wheel" "networkmanager" "video" "i2c" "plugdev"];
