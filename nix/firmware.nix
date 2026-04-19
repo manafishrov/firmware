@@ -1,5 +1,6 @@
 {
   pkgs,
+  lib,
   inputs,
   ...
 }: let
@@ -52,17 +53,17 @@
   startScript = pkgs.writeShellScriptBin "start" ''
     cd $HOME/firmware
     export PYTHONPATH=src
-    export PICOTOOL_PATH="${pkgs.lib.getExe pkgs.picotool}"
-    export PATH="${pkgs.lib.makeBinPath [pkgs.picotool]}:$PATH"
-    exec ${python-env}/bin/python3 -c "from rov_firmware import start; start()"
+    export PICOTOOL_PATH="${lib.getExe pkgs.picotool}"
+    export PATH="${lib.makeBinPath [pkgs.picotool]}:$PATH"
+    exec ${lib.getExe' python-env "python3"} -c "from rov_firmware import start; start()"
   '';
 
   toolsScript = pkgs.writeShellScriptBin "tools" ''
     cd $HOME/firmware
     export PYTHONPATH=src
-    export PICOTOOL_PATH="${pkgs.lib.getExe pkgs.picotool}"
-    export PATH="${pkgs.lib.makeBinPath [pkgs.picotool]}:$PATH"
-    exec ${python-env}/bin/python3 -c "from tools import cli; cli()"
+    export PICOTOOL_PATH="${lib.getExe pkgs.picotool}"
+    export PATH="${lib.makeBinPath [pkgs.picotool]}:$PATH"
+    exec ${lib.getExe' python-env "python3"} -c "from tools import cli; cli()"
   '';
 in {
   environment.systemPackages = with pkgs; [
@@ -78,12 +79,12 @@ in {
   systemd.services.manafish-firmware = {
     enable = true;
     wantedBy = ["multi-user.target"];
-    after = ["network.target" "go2rtc.service"];
+    after = ["manafish-network.service" "go2rtc.service"];
     serviceConfig = {
       Type = "simple";
       User = "pi";
       WorkingDirectory = "/home/pi/firmware";
-      ExecStart = "${startScript}/bin/start";
+      ExecStart = lib.getExe startScript;
       Restart = "always";
       RestartSec = "5";
     };

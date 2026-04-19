@@ -1,4 +1,8 @@
-{pkgs, ...}: {
+{
+  pkgs,
+  lib,
+  ...
+}: {
   nixpkgs.overlays = [
     (_: prev: {
       rpicam-apps = prev.rpicam-apps.override {
@@ -28,7 +32,7 @@
   services.go2rtc = {
     enable = true;
     settings = {
-      streams.cam = "exec:${pkgs.rpi.rpicam-apps}/bin/rpicam-vid -t 0 -n --inline -o -";
+      streams.cam = "exec:${lib.getExe' pkgs.rpi.rpicam-apps "rpicam-vid"} -t 0 -n --inline -o -";
       api = {
         listen = ":1984";
         origin = "*";

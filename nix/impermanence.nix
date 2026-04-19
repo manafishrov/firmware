@@ -27,6 +27,7 @@
       "/var/lib/NetworkManager"
       "/var/lib/iwd"
       "/etc/ssh"
+      "/etc/NetworkManager/system-connections"
     ];
     files = [
       "/etc/machine-id"
