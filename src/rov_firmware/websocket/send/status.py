@@ -18,7 +18,7 @@ async def handle_status_update(
         websocket: The WebSocket connection.
         state: The ROV state.
     """
-    voltages_v = [v for v in state.esc.voltage if v > 0]
+    voltages_v = [v for v in state.mcu_telemetry.voltage if v > 0]
     average_voltage_v = sum(voltages_v) / len(voltages_v) if voltages_v else 0
     min_v = state.rov_config.power.min_battery_voltage
     max_v = state.rov_config.power.max_battery_voltage

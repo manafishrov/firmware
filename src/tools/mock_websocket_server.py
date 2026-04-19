@@ -15,8 +15,12 @@ from websockets import ServerConnection
 WEBSOCKET_PORT = 9000
 MOCK_CONFIG: dict[str, Any] = {
     "firmwareVersion": "1.0.0",
+    "mcuFirmwareVersion": "",
     "rovName": "Manafish-m0ck",
-    "microcontrollerFirmwareVariant": "dshot",
+    "mcuBoard": "pico",
+    "thrusterProtocol": "dshot",
+    "dshotSpeed": 300,
+    "currentSensingMode": "sharedBus",
     "fluidType": "saltwater",
     "smoothingFactor": 0.0,
     "thrusterPinSetup": {
@@ -76,7 +80,7 @@ SYSTEM_STATUS: dict[str, Any] = {
 
 THRUSTER_TEST_TOAST_ID = "thruster-test"
 AUTO_TUNING_TOAST_ID = "regulator-auto-tuning"
-FLASH_TOAST_ID = "flash-microcontroller-firmware"
+FLASH_TOAST_ID = "flash-mcu-firmware"
 THRUSTER_TEST_DURATION_SECONDS = 10
 AUTO_TUNING_OSCILLATION_DURATION_SECONDS = 10
 FLASH_DURATION_SECONDS = 3
@@ -155,7 +159,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     "depthHold": SYSTEM_STATUS["depthHold"],
                     "batteryPercentage": battery_percentage,
                     "health": {
-                        "microcontrollerHealthy": True,
+                        "mcuHealthy": True,
                         "imuHealthy": True,
                         "pressureSensorHealthy": True,
                     },
@@ -533,7 +537,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         },
                     }
                     await websocket.send(json.dumps(log_msg))
-                elif msg_type == "flashMicrocontrollerFirmware":
+                elif msg_type == "flashMcuFirmware":
                     if flash_task is not None and not flash_task.done():
                         _ = flash_task.cancel()
                     flash_task = asyncio.create_task(

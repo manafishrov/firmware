@@ -21,7 +21,7 @@ async def handle_telemetry(
     temps: list[float] = []
     if state.imu.temperature > 0:
         temps.append(state.imu.temperature)
-    temps.extend(t for t in state.esc.temperature if t > 0)
+    temps.extend(t for t in state.mcu_telemetry.temperature if t > 0)
     electronics_temperature = sum(temps) / len(temps) if temps else 0
 
     if state.system_status.depth_hold:
@@ -41,8 +41,10 @@ async def handle_telemetry(
         desired_depth=desired_depth,
         water_temperature=state.pressure.temperature,
         electronics_temperature=electronics_temperature,
-        thruster_rpms=[int(erpm / (THRUSTER_POLES // 2)) for erpm in state.esc.erpm],
-        thruster_signal_qualities=list(state.esc.signal_quality),
+        thruster_rpms=[
+            int(erpm / (THRUSTER_POLES // 2)) for erpm in state.mcu_telemetry.erpm
+        ],
+        thruster_signal_qualities=list(state.mcu_telemetry.signal_quality),
         work_indicator_percentage=state.thrusters.work_indicator_percentage,
     )
     message = Telemetry(payload=payload).model_dump_json(by_alias=True)
