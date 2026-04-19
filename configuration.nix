@@ -228,12 +228,12 @@ in {
         ];
         file = {
           LICENSE.source = ./LICENSE;
-          "microcontroller-firmware/dshot.uf2".source = pkgs.fetchurl {
-            url = "https://github.com/manafishrov/microcontroller-firmware/releases/download/v1.0.0-beta.1/dshot.uf2";
+          "mcu-firmware/dshot.uf2".source = pkgs.fetchurl {
+            url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.0-beta.1/dshot.uf2";
             sha256 = "0lj0hgivshc2nh0m1lxg2ks4821203q2zrw4qd81kvk1vqldzylr";
           };
-          "microcontroller-firmware/pwm.uf2".source = pkgs.fetchurl {
-            url = "https://github.com/manafishrov/microcontroller-firmware/releases/download/v1.0.0-beta.1/pwm.uf2";
+          "mcu-firmware/pwm.uf2".source = pkgs.fetchurl {
+            url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.0-beta.1/pwm.uf2";
             sha256 = "0kmyf5imy6909412nzi87qwxkz5z8z0acxk4vghlw6fb2gwd4wn0";
           };
         };
