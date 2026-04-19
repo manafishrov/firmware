@@ -1,4 +1,4 @@
-"""WebSocket microcontroller handlers for the ROV firmware."""
+"""WebSocket MCU handlers for the ROV firmware."""
 
 import asyncio
 import os
@@ -10,23 +10,29 @@ from typing import cast
 
 from ...constants import FLASH_TOAST_ID
 from ...log import log_error, log_info, log_warn
-from ...models.config import MicrocontrollerFirmwareVariant
+from ...models.config import McuBoard
 from ...models.toast import ToastContent
 from ...rov_state import RovState
 from ...toast import toast_error, toast_loading, toast_success
 
 
-def _flash_error(message: str, *, unexpected: bool = False) -> None:
-    toast_error(
-        identifier=FLASH_TOAST_ID,
-        content=ToastContent(
-            message_key=(
-                "toasts_flash_unexpected_error" if unexpected else "toasts_flash_failed"
-            ),
-        ),
-        action=None,
-    )
+def _report_flash_error(
+    message: str, *, show_toasts: bool, unexpected: bool = False
+) -> None:
     log_error(message)
+    if show_toasts:
+        toast_error(
+            identifier=FLASH_TOAST_ID,
+            content=ToastContent(
+                message_key=(
+                    "toasts_flash_unexpected_error"
+                    if unexpected
+                    else "toasts_flash_failed"
+                ),
+                description_key="toasts_flash_board_hint",
+            ),
+            action=None,
+        )
 
 
 def _resolve_picotool_path() -> str | None:
@@ -72,33 +78,44 @@ def _process_flash_output(process: subprocess.Popen[str]) -> tuple[int, str]:
     return cast(int, process.poll()), "\n".join(all_output)
 
 
-async def handle_flash_microcontroller_firmware(
+async def flash_mcu_firmware(
     state: RovState,
-    payload: MicrocontrollerFirmwareVariant,
-) -> None:
-    """Handle flashing microcontroller firmware.
+    board: McuBoard,
+    *,
+    show_toasts: bool = True,
+) -> bool:
+    """Flash MCU firmware for the given board.
 
     Args:
         state: The ROV state.
-        payload: The firmware variant to flash.
+        board: The board-specific firmware target to flash.
+        show_toasts: Whether to show UI toasts for progress/result.
+
+    Returns:
+        True if flash succeeded, False otherwise.
     """
     firmware_paths = {
-        MicrocontrollerFirmwareVariant.PWM: "pwm.uf2",
-        MicrocontrollerFirmwareVariant.DSHOT: "dshot.uf2",
+        McuBoard.PICO: "firmware-pico.uf2",
+        McuBoard.PICO2: "firmware-pico2.uf2",
     }
-    firmware_path = Path.home() / "microcontroller-firmware" / firmware_paths[payload]
+    firmware_path = Path.home() / "mcu-firmware" / firmware_paths[board]
     picotool_path = _resolve_picotool_path()
 
-    log_info(f"Flashing firmware '{payload.value}' from {firmware_path}")
+    log_info(f"Flashing firmware '{board.value}' from {firmware_path}")
     try:
         if picotool_path is None:
-            _flash_error("Firmware flash failed: picotool not found")
-            return
+            _report_flash_error(
+                "Firmware flash failed: picotool not found", show_toasts=show_toasts
+            )
+            return False
         if not firmware_path.is_file():
-            _flash_error(f"Firmware flash failed: {firmware_path} not found")
-            return
+            _report_flash_error(
+                f"Firmware flash failed: {firmware_path} not found",
+                show_toasts=show_toasts,
+            )
+            return False
 
-        state.microcontroller_flashing = True
+        state.mcu_flashing = True
         process = subprocess.Popen(  # noqa: S603
             [picotool_path, "load", "-f", "-x", str(firmware_path)],
             stdout=subprocess.PIPE,
@@ -109,14 +126,33 @@ async def handle_flash_microcontroller_firmware(
         rc, output = await loop.run_in_executor(None, _process_flash_output, process)
 
         if rc == 0:
-            toast_success(
-                identifier=FLASH_TOAST_ID,
-                content=ToastContent(message_key="toasts_flash_success"),
-                action=None,
-            )
-        else:
-            _flash_error(f"Firmware flash failed (rc={rc}):\n{output}")
+            log_info("Firmware flash succeeded.")
+            if show_toasts:
+                toast_success(
+                    identifier=FLASH_TOAST_ID,
+                    content=ToastContent(message_key="toasts_flash_success"),
+                    action=None,
+                )
+            return True
+
+        _report_flash_error(
+            f"Firmware flash failed (rc={rc}):\n{output}", show_toasts=show_toasts
+        )
+        return False
     except Exception as ex:
-        _flash_error(f"Unexpected firmware flash error: {ex}", unexpected=True)
+        _report_flash_error(
+            f"Unexpected firmware flash error: {ex}",
+            show_toasts=show_toasts,
+            unexpected=True,
+        )
+        return False
     finally:
-        state.microcontroller_flashing = False
+        state.mcu_flashing = False
+
+
+async def handle_flash_mcu_firmware(
+    state: RovState,
+    payload: McuBoard,
+) -> None:
+    """Handle flashing MCU firmware from websocket command."""
+    await flash_mcu_firmware(state, payload, show_toasts=True)

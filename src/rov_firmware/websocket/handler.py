@@ -7,7 +7,7 @@ from websockets import ServerConnection
 from ..log import log_warn
 from ..models.actions import CustomAction, DirectionVector
 from ..models.config import (
-    MicrocontrollerFirmwareVariant,
+    McuBoard,
     PartialRovConfig,
     ThrusterTest,
 )
@@ -20,7 +20,7 @@ from .receive.actions import (
     handle_start_thruster_test,
 )
 from .receive.config import handle_get_config, handle_set_config
-from .receive.microcontroller import handle_flash_microcontroller_firmware
+from .receive.mcu import handle_flash_mcu_firmware
 from .receive.regulator import (
     handle_cancel_regulator_auto_tuning,
     handle_set_desired_depth,
@@ -41,10 +41,8 @@ async def _handle_payload_message(
     match message.type:
         case MessageType.SET_CONFIG:
             await handle_set_config(state, cast(PartialRovConfig, payload))
-        case MessageType.FLASH_MICROCONTROLLER_FIRMWARE:
-            await handle_flash_microcontroller_firmware(
-                state, cast(MicrocontrollerFirmwareVariant, payload)
-            )
+        case MessageType.FLASH_MCU_FIRMWARE:
+            await handle_flash_mcu_firmware(state, cast(McuBoard, payload))
         case MessageType.DIRECTION_VECTOR:
             await handle_direction_vector(state, cast(DirectionVector, payload))
         case MessageType.START_THRUSTER_TEST:

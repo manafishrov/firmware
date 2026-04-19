@@ -10,7 +10,7 @@ from ..models.actions import (
 )
 from ..models.base import CamelCaseModel
 from ..models.config import (
-    MicrocontrollerFirmwareVariant,
+    McuBoard,
     PartialRovConfig,
     RegulatorSuggestions as RegulatorSuggestionsPayload,
     RovConfig,
@@ -129,13 +129,11 @@ class SetDesiredDepth(CamelCaseModel):
     payload: float
 
 
-class FlashMicrocontrollerFirmware(CamelCaseModel):
-    """WebSocket message for flashing microcontroller firmware."""
+class FlashMcuFirmware(CamelCaseModel):
+    """WebSocket message for flashing MCU firmware."""
 
-    type: Literal[MessageType.FLASH_MICROCONTROLLER_FIRMWARE] = (
-        MessageType.FLASH_MICROCONTROLLER_FIRMWARE
-    )
-    payload: MicrocontrollerFirmwareVariant
+    type: Literal[MessageType.FLASH_MCU_FIRMWARE] = MessageType.FLASH_MCU_FIRMWARE
+    payload: McuBoard
 
 
 WebsocketMessage = Annotated[
@@ -156,6 +154,6 @@ WebsocketMessage = Annotated[
     | ToggleAutoStabilization
     | ToggleDepthHold
     | SetDesiredDepth
-    | FlashMicrocontrollerFirmware,
+    | FlashMcuFirmware,
     Field(discriminator="type"),
 ]
