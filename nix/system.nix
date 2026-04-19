@@ -2,7 +2,9 @@
   pkgs,
   inputs,
   ...
-}: {
+}: let
+  username = "pi";
+in {
   nixpkgs.overlays = [
     (_: prev: {
       libadwaita = prev.libadwaita.overrideAttrs (_: {
@@ -12,20 +14,20 @@
   ];
 
   systemd.tmpfiles.rules = [
-    "d /nix/var/nix/profiles/per-user/pi 0755 pi root -"
+    "d /nix/var/nix/profiles/per-user/${username} 0755 ${username} root -"
   ];
 
-  users.users.pi = {
+  users.users.${username} = {
     isNormalUser = true;
     extraGroups = ["wheel" "networkmanager" "video" "i2c" "plugdev"];
     password = "manafish";
-    home = "/home/pi";
+    home = "/home/${username}";
   };
 
   home-manager = {
     useUserPackages = true;
     useGlobalPkgs = true;
-    users.pi = {
+    users.${username} = {
       home = {
         stateVersion = "25.11";
         packages = with pkgs; [
