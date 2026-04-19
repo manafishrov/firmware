@@ -2,6 +2,7 @@
 
 import asyncio
 import struct
+import time
 
 from ..constants import (
     EXPECTED_MCU_FIRMWARE_VERSION,
@@ -12,6 +13,7 @@ from ..constants import (
     LOG_PACKET_START_BYTE,
     MCU_PROTOCOL_DSHOT,
     MCU_TELEMETRY_PACKET_SIZE,
+    MCU_TELEMETRY_STALE_TIMEOUT_S,
     MCU_TELEMETRY_START_BYTE,
     MCU_TELEMETRY_TYPE_CURRENT,
     MCU_TELEMETRY_TYPE_ERPM,
@@ -59,6 +61,7 @@ class McuSensor:
         """
         self.state: RovState = state
         self.serial_manager: SerialManager = serial_manager
+        self._last_telemetry_time: list[float] = [0.0] * NUM_MOTORS
 
     async def read_loop(self) -> None:
         """Read telemetry data from the MCU in a loop."""
@@ -69,6 +72,7 @@ class McuSensor:
                 await asyncio.sleep(1)
                 continue
             self._consume_read_buffer(read_buffer, data)
+            self._expire_stale_telemetry()
 
     async def _read_byte(self) -> bytes | None:
         if not await self.serial_manager.ensure_connection():
@@ -224,6 +228,7 @@ class McuSensor:
         self.state.rov_config.dshot_speed = dshot_speed
 
         if changed:
+            self._reset_telemetry()
             get_message_queue().put_nowait(Config(payload=self.state.rov_config))
 
         if version != EXPECTED_MCU_FIRMWARE_VERSION:
@@ -242,6 +247,29 @@ class McuSensor:
             flash_mcu_firmware(self.state, board, show_toasts=True)
         )
 
+    def _reset_telemetry(self) -> None:
+        for i in range(NUM_MOTORS):
+            self.state.mcu_telemetry.erpm[i] = 0
+            self.state.mcu_telemetry.current[i] = 0
+            self.state.mcu_telemetry.voltage[i] = 0.0
+            self.state.mcu_telemetry.temperature[i] = 0
+            self.state.mcu_telemetry.signal_quality[i] = 0.0
+            self._last_telemetry_time[i] = 0.0
+
+    def _expire_stale_telemetry(self) -> None:
+        now = time.monotonic()
+        for i in range(NUM_MOTORS):
+            if (
+                self._last_telemetry_time[i] > 0
+                and now - self._last_telemetry_time[i] > MCU_TELEMETRY_STALE_TIMEOUT_S
+            ):
+                self.state.mcu_telemetry.erpm[i] = 0
+                self.state.mcu_telemetry.current[i] = 0
+                self.state.mcu_telemetry.voltage[i] = 0.0
+                self.state.mcu_telemetry.temperature[i] = 0
+                self.state.mcu_telemetry.signal_quality[i] = 0.0
+                self._last_telemetry_time[i] = 0.0
+
     def _update_telemetry(self, packet: bytearray) -> None:
         """Update MCU telemetry from a validated packet.
 
@@ -252,6 +280,7 @@ class McuSensor:
         packet_type = packet[2]
         value = struct.unpack("<i", packet[3:7])[0]
         if 0 <= global_id < NUM_MOTORS:
+            self._last_telemetry_time[global_id] = time.monotonic()
             if packet_type == MCU_TELEMETRY_TYPE_ERPM:
                 self.state.mcu_telemetry.erpm[global_id] = value * 100
             elif packet_type == MCU_TELEMETRY_TYPE_VOLTAGE:
