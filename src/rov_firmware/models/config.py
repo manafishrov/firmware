@@ -58,19 +58,31 @@ def apply_migrations(raw: dict[str, Any]) -> dict[str, Any]:
     firmware_version = raw.get("firmwareVersion", "0.0.0")
 
     # Example: migrate config when firmware_version < "1.0.0"
-    # if compare_semver(firmware_version, "1.0.0") == -1:
-    #     # Add migration logic here
-    #     pass
-
-    _ = firmware_version  # Placeholder until migrations are needed
+    if compare_semver(firmware_version, "1.0.0") == -1:
+        # Add migration logic here
+        pass
     return raw
 
 
-class MicrocontrollerFirmwareVariant(StrEnum):
-    """Enum for microcontroller firmware variants."""
+class McuBoard(StrEnum):
+    """Enum for supported MCU boards."""
+
+    PICO = "pico"
+    PICO2 = "pico2"
+
+
+class ThrusterProtocol(StrEnum):
+    """Enum for supported thruster output protocols."""
 
     PWM = "pwm"
     DSHOT = "dshot"
+
+
+class CurrentSensingMode(StrEnum):
+    """Enum for ESC current sensing modes."""
+
+    PER_MOTOR = "perMotor"
+    SHARED_BUS = "sharedBus"
 
 
 class FluidType(StrEnum):
@@ -149,10 +161,12 @@ class RovConfig(CamelCaseModel):
     """Main ROV configuration."""
 
     firmware_version: str = CURRENT_FIRMWARE_VERSION
+    mcu_firmware_version: str = ""
     rov_name: str = Field(default_factory=_generate_rov_name)
-    microcontroller_firmware_variant: MicrocontrollerFirmwareVariant = (
-        MicrocontrollerFirmwareVariant.DSHOT
-    )
+    mcu_board: McuBoard = McuBoard.PICO
+    thruster_protocol: ThrusterProtocol = ThrusterProtocol.DSHOT
+    dshot_speed: int = 300
+    current_sensing_mode: CurrentSensingMode = CurrentSensingMode.SHARED_BUS
     fluid_type: FluidType = FluidType.SALTWATER
     smoothing_factor: float = 0.0
     thruster_pin_setup: ThrusterPinSetup = ThrusterPinSetup(
@@ -193,6 +207,15 @@ class RovConfig(CamelCaseModel):
     )
     ip_address: str = "10.10.10.10"
     websocket_port: int = 9000
+
+    @field_validator("dshot_speed", mode="after")
+    @classmethod
+    def validate_dshot_speed(cls, v: int) -> int:
+        """Validate supported DShot speeds."""
+        if v not in {150, 300, 600, 1200}:
+            msg = "DShot speed must be one of 150, 300, 600, 1200"
+            raise ValueError(msg)
+        return v
 
     @field_validator("thruster_allocation", mode="before")
     @classmethod
@@ -248,8 +271,12 @@ class PartialRovConfig(CamelCaseModel):
     """Partial ROV configuration for updates."""
 
     firmware_version: str | None = None
+    mcu_firmware_version: str | None = None
     rov_name: str | None = None
-    microcontroller_firmware_variant: MicrocontrollerFirmwareVariant | None = None
+    mcu_board: McuBoard | None = None
+    thruster_protocol: ThrusterProtocol | None = None
+    dshot_speed: int | None = None
+    current_sensing_mode: CurrentSensingMode | None = None
     fluid_type: FluidType | None = None
     smoothing_factor: float | None = None
     thruster_pin_setup: ThrusterPinSetup | None = None
@@ -269,6 +296,17 @@ class PartialRovConfig(CamelCaseModel):
         if v is None:
             return None
         return np.array(v, dtype=np.float32)
+
+    @field_validator("dshot_speed", mode="after")
+    @classmethod
+    def validate_optional_dshot_speed(cls, v: int | None) -> int | None:
+        """Validate supported DShot speeds if present."""
+        if v is None:
+            return None
+        if v not in {150, 300, 600, 1200}:
+            msg = "DShot speed must be one of 150, 300, 600, 1200"
+            raise ValueError(msg)
+        return v
 
 
 ThrusterTest = int

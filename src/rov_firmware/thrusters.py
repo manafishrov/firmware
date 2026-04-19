@@ -10,6 +10,9 @@ import numpy as np
 from numpy.typing import NDArray
 
 from .constants import (
+    MCU_CONFIG_START_BYTE,
+    MCU_PROTOCOL_DSHOT,
+    MCU_PROTOCOL_PWM,
     NUM_MOTORS,
     THRUSTER_FORWARD_PULSE_RANGE,
     THRUSTER_INPUT_START_BYTE,
@@ -47,6 +50,7 @@ class Thrusters:
         self.state: RovState = state
         self.serial_manager: SerialManager = serial_manager
         self.regulator: Regulator = regulator
+        self._last_sent_protocol_config: tuple[str, int] | None = None
 
         self.previous_direction_vector: NDArray[np.float32] = np.zeros(
             8, dtype=np.float32
@@ -118,7 +122,7 @@ class Thrusters:
         )
 
     def _create_thrust_vector(self) -> NDArray[np.float32]:
-        """Create the final thrust vector for the microcontroller from the current thruster direction vector.
+        """Create the final thrust vector for the MCU from the current thruster direction vector.
 
         The returned vector is produced by smoothing the stored direction vector, applying the regulator to adjust control signals, converting the direction vector into motor thrusts, then reordering, applying per-motor spin-direction multipliers, and clipping each component to the allowed range.
 
@@ -215,6 +219,33 @@ class Thrusters:
         writer.write(packet)
         await writer.drain()
 
+    async def _send_config_packet(self, writer: StreamWriter) -> None:
+        protocol = (
+            MCU_PROTOCOL_DSHOT
+            if self.state.rov_config.thruster_protocol == "dshot"
+            else MCU_PROTOCOL_PWM
+        )
+        dshot_speed = self.state.rov_config.dshot_speed
+        packet = bytearray([MCU_CONFIG_START_BYTE, protocol]) + bytearray(
+            struct.pack("<H", dshot_speed)
+        )
+        checksum = 0
+        for b in packet:
+            checksum ^= b
+        packet.append(checksum)
+        writer.write(packet)
+        await writer.drain()
+
+    async def _ensure_config_sent(self, writer: StreamWriter) -> None:
+        current = (
+            self.state.rov_config.thruster_protocol,
+            self.state.rov_config.dshot_speed,
+        )
+        if current == self._last_sent_protocol_config:
+            return
+        await self._send_config_packet(writer)
+        self._last_sent_protocol_config = current
+
     def _determine_thrust_vector(
         self, current_time: float, last_send_time: float
     ) -> tuple[NDArray[np.float32] | None, float]:
@@ -273,6 +304,7 @@ class Thrusters:
                 await asyncio.sleep(1)
                 continue
             writer = self.serial_manager.get_writer()
+            await self._ensure_config_sent(writer)
 
             current_time = time.time()
             self.regulator.update_regulator_data_from_imu()
@@ -287,7 +319,7 @@ class Thrusters:
             success = await self._send_with_retries(writer, thrust_values)
             if not success:
                 await self.serial_manager.handle_connection_lost(
-                    "Thruster send failed 3 times, disabling microcontroller"
+                    "Thruster send failed 3 times, disabling MCU"
                 )
 
             await asyncio.sleep(1 / THRUSTER_SEND_FREQUENCY)
