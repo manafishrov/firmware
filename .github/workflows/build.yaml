@@ -4,49 +4,13 @@ on:
   push:
     tags:
       - v[0-9]+.[0-9]+.[0-9]+*
-  workflow_dispatch:
-    inputs:
-      pi:
-        description: 'Raspberry Pi Model'
-        required: true
-        default: 'pi3'
-        type: choice
-        options:
-          - pi3
-          - pi4
-      camera:
-        description: 'Camera Model'
-        required: true
-        default: 'imx219'
-        type: choice
-        options:
-          - ov5647
-          - imx219
-          - imx477
 
 permissions:
   contents: write
 
 jobs:
-  setup-matrix:
-    runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - id: set-matrix
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "matrix={\"pi\":[\"${{ inputs.pi }}\"],\"camera\":[\"${{ inputs.camera }}\"]}" >> $GITHUB_OUTPUT
-          else
-            echo "matrix={\"pi\":[\"pi3\"],\"camera\":[\"imx219\",\"imx477\"]}" >> $GITHUB_OUTPUT
-          fi
-
   build-sd-image:
-    needs: setup-matrix
     runs-on: ubuntu-24.04-arm
-    strategy:
-      fail-fast: false
-      matrix: ${{fromJson(needs.setup-matrix.outputs.matrix)}}
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -62,7 +26,7 @@ jobs:
           diagnostic-endpoint: ""
 
       - name: Build SD image
-        run: nix build --accept-flake-config .#${{ matrix.pi }}-${{ matrix.camera }}
+        run: nix build --accept-flake-config .#pi3-imx477
 
       - name: Check if release exists
         if: startsWith(github.ref, 'refs/tags/')
@@ -84,7 +48,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name }}
-          body: 'Release assets for ${{ github.ref_name }}.'
+          body: "Release assets for ${{ github.ref_name }}."
           draft: true
           prerelease: ${{ contains(github.ref_name, '-') }}
 

@@ -13,10 +13,18 @@
   };
 
   inputs = {
-    nixpkgs.follows = "nixos-raspberrypi/nixpkgs";
     nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi";
+    nixpkgs.follows = "nixos-raspberrypi/nixpkgs";
     home-manager = {
       url = "github:nix-community/home-manager/release-25.11";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    impermanence = {
+      url = "github:nix-community/impermanence";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    treefmt-nix = {
+      url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
     ms5837-src = {
@@ -31,6 +39,14 @@
       url = "github:CoRoLab-Berlin/bmi270_python";
       flake = false;
     };
+    mcu-firmware-pico = {
+      url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.0/pico-v1.0.0.uf2";
+      flake = false;
+    };
+    mcu-firmware-pico2 = {
+      url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.0/pico2-v1.0.0.uf2";
+      flake = false;
+    };
   };
 
   outputs = {
@@ -38,107 +54,74 @@
     nixpkgs,
     nixos-raspberrypi,
     home-manager,
+    impermanence,
+    treefmt-nix,
     ...
   } @ inputs: let
-    cameras = [
-      "ov5647"
-      "imx219"
-      "imx477"
-    ];
-
-    piVersions = [
-      {
-        name = "pi3";
-        module = nixos-raspberrypi.nixosModules.raspberry-pi-3.base;
-      }
-      {
-        name = "pi4";
-        module = nixos-raspberrypi.nixosModules.raspberry-pi-4.base;
-      }
-    ];
-
     supportedSystems = [
       "aarch64-linux"
       "x86_64-linux"
       "aarch64-darwin"
     ];
 
-    mkCamera = camera: {
-      specialArgs = {
-        inherit inputs;
-        inherit nixos-raspberrypi;
-        inherit home-manager;
-        inherit camera;
-      };
+    version = self.shortRev or self.dirtyShortRev or "dev";
+
+    forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
+  in {
+    nixosConfigurations.pi3-imx477 = nixos-raspberrypi.lib.nixosSystem {
+      specialArgs = {inherit inputs version;};
       modules = [
+        nixos-raspberrypi.nixosModules.raspberry-pi-3.base
         nixos-raspberrypi.nixosModules.sd-image
         home-manager.nixosModules.default
-        ./configuration.nix
+        impermanence.nixosModules.impermanence
+        {
+          system.stateVersion = "25.11";
+          sdImage.imageName = "pi3-imx477-${version}.img";
+          documentation = {
+            enable = false;
+            doc.enable = false;
+            info.enable = false;
+            man.enable = false;
+            nixos.enable = false;
+          };
+        }
+        ./nix/camera.nix
+        ./nix/sensors.nix
+        ./nix/mcu.nix
+        ./nix/networking.nix
+        ./nix/firmware.nix
+        ./nix/system.nix
+        ./nix/impermanence.nix
       ];
     };
 
-    mkConfigurations = let
-      mkConfig = pi: camera: {
-        name = "manafish-${pi.name}-${camera}";
-        value = nixos-raspberrypi.lib.nixosSystem (mkCamera camera
-          // {
-            modules = [pi.module] ++ (mkCamera camera).modules;
-          });
-      };
-    in
-      builtins.listToAttrs (
-        builtins.concatMap
-        (pi: map (camera: mkConfig pi camera) cameras)
-        piVersions
-      );
+    packages = forAllSystems (_: let
+      inherit (self.nixosConfigurations.pi3-imx477.config.system.build) sdImage;
+    in {
+      default = sdImage;
+      pi3-imx477 = sdImage;
+    });
 
-    mkPackages = _: let
-      mkPackage = pi: camera: {
-        name = "${pi.name}-${camera}";
-        value = self.nixosConfigurations."manafish-${pi.name}-${camera}".config.system.build.sdImage;
-      };
-    in
-      builtins.listToAttrs (
-        builtins.concatMap
-        (pi: map (camera: mkPackage pi camera) cameras)
-        piVersions
-      );
-
-    mkFormatter = system: nixpkgs.legacyPackages.${system}.alejandra;
-  in {
-    nixosConfigurations = mkConfigurations;
-
-    formatter = builtins.listToAttrs (
-      map
-      (system: {
-        name = system;
-        value = mkFormatter system;
-      })
-      supportedSystems
-    );
-
-    packages = builtins.listToAttrs (
-      map
-      (system: {
-        name = system;
-        value = mkPackages system;
-      })
-      supportedSystems
-    );
-
-    devShells = builtins.listToAttrs (
-      map
-      (system: let
-        pkgs = nixpkgs.legacyPackages.${system};
-      in {
-        name = system;
-        value = {
-          default = pkgs.mkShell {
-            buildInputs = [pkgs.uv];
-          };
+    formatter = forAllSystems (system:
+      (treefmt-nix.lib.evalModule nixpkgs.legacyPackages.${system} {
+        projectRootFile = "flake.nix";
+        programs = {
+          alejandra.enable = true;
+          statix.enable = true;
+          deadnix.enable = true;
         };
       })
-      supportedSystems
-    );
+      .config
+      .build
+      .wrapper);
+
+    devShells = forAllSystems (system: let
+      pkgs = nixpkgs.legacyPackages.${system};
+    in {
+      default = pkgs.mkShell {
+        buildInputs = [pkgs.uv];
+      };
+    });
   };
 }

@@ -68,6 +68,72 @@
         "type": "github"
       }
     },
+    "home-manager_2": {
+      "inputs": {
+        "nixpkgs": [
+          "impermanence",
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1768598210,
+        "narHash": "sha256-kkgA32s/f4jaa4UG+2f8C225Qvclxnqs76mf8zvTVPg=",
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "rev": "c47b2cc64a629f8e075de52e4742de688f930dc6",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "home-manager",
+        "type": "github"
+      }
+    },
+    "impermanence": {
+      "inputs": {
+        "home-manager": "home-manager_2",
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1769548169,
+        "narHash": "sha256-03+JxvzmfwRu+5JafM0DLbxgHttOQZkUtDWBmeUkN8Y=",
+        "owner": "nix-community",
+        "repo": "impermanence",
+        "rev": "7b1d382faf603b6d264f58627330f9faa5cba149",
+        "type": "github"
+      },
+      "original": {
+        "owner": "nix-community",
+        "repo": "impermanence",
+        "type": "github"
+      }
+    },
+    "mcu-firmware-pico": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-5ZRycwTTxUqAeYA4+AMp10cvLoIerA/MhIt7QfapSHw=",
+        "type": "file",
+        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.0/pico-v1.0.0.uf2"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.0/pico-v1.0.0.uf2"
+      }
+    },
+    "mcu-firmware-pico2": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-onPzFtRGeqh9Oc/gkuxhwQ6yVabTMwixXTdUxrzMV4A=",
+        "type": "file",
+        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.0/pico2-v1.0.0.uf2"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.0/pico2-v1.0.0.uf2"
+      }
+    },
     "ms5837-src": {
       "flake": false,
       "locked": {
@@ -167,13 +233,37 @@
       "inputs": {
         "bmi270-src": "bmi270-src",
         "home-manager": "home-manager",
+        "impermanence": "impermanence",
+        "mcu-firmware-pico": "mcu-firmware-pico",
+        "mcu-firmware-pico2": "mcu-firmware-pico2",
         "ms5837-src": "ms5837-src",
         "nixos-raspberrypi": "nixos-raspberrypi",
         "nixpkgs": [
           "nixos-raspberrypi",
           "nixpkgs"
         ],
-        "numpydantic-src": "numpydantic-src"
+        "numpydantic-src": "numpydantic-src",
+        "treefmt-nix": "treefmt-nix"
+      }
+    },
+    "treefmt-nix": {
+      "inputs": {
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1775636079,
+        "narHash": "sha256-pc20NRoMdiar8oPQceQT47UUZMBTiMdUuWrYu2obUP0=",
+        "owner": "numtide",
+        "repo": "treefmt-nix",
+        "rev": "790751ff7fd3801feeaf96d7dc416a8d581265ba",
+        "type": "github"
+      },
+      "original": {
+        "owner": "numtide",
+        "repo": "treefmt-nix",
+        "type": "github"
       }
     }
   },

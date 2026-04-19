@@ -15,7 +15,6 @@ jobs:
     outputs:
       nix: ${{ steps.filter.outputs.nix }}
       python: ${{ steps.filter.outputs.python }}
-      github: ${{ steps.filter.outputs.github }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4
@@ -38,13 +37,9 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
       - uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
-      - name: Check formatting (Nix)
+      - name: Check formatting (alejandra, statix, deadnix)
         run: nix fmt -- --check .
-      - name: Check linting (Nix)
-        run: nix run nixpkgs#statix -- check .
-      - name: Check for dead code (Nix)
-        run: nix run nixpkgs#deadnix -- --fail .
-      - name: Validate flake (Nix)
+      - name: Validate flake
         run: nix flake check --show-trace
 
   code-quality-python:
@@ -71,14 +66,9 @@ jobs:
     needs: filter
     if: needs.filter.outputs.nix == 'true'
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        pi: [pi3, pi4]
-        camera: [ov5647, imx219, imx477]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
       - uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
       - uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
-      - name: Evaluate Configuration (Dry-run)
-        run: nix build --accept-flake-config .#${{ matrix.pi }}-${{ matrix.camera }} --dry-run
+      - name: Evaluate pi3-imx477 configuration (dry-run)
+        run: nix build --accept-flake-config .#pi3-imx477 --dry-run
