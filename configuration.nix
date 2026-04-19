@@ -230,11 +230,9 @@ in {
           LICENSE.source = ./LICENSE;
           "mcu-firmware/pico.uf2".source = pkgs.fetchurl {
             url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.0/pico.uf2";
-            sha256 = "0000000000000000000000000000000000000000000000000000";
           };
           "mcu-firmware/pico2.uf2".source = pkgs.fetchurl {
             url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.0/pico2.uf2";
-            sha256 = "0000000000000000000000000000000000000000000000000000";
           };
         };
         activation.setupFirmware = home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
