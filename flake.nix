@@ -15,10 +15,6 @@
   inputs = {
     nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi";
     nixpkgs.follows = "nixos-raspberrypi/nixpkgs";
-    home-manager = {
-      url = "github:nix-community/home-manager/release-25.11";
-      inputs.nixpkgs.follows = "nixpkgs";
-    };
     impermanence = {
       url = "github:nix-community/impermanence";
       inputs.nixpkgs.follows = "nixpkgs";
@@ -53,7 +49,6 @@
     self,
     nixpkgs,
     nixos-raspberrypi,
-    home-manager,
     impermanence,
     treefmt-nix,
     ...
@@ -73,7 +68,6 @@
       modules = [
         nixos-raspberrypi.nixosModules.raspberry-pi-3.base
         nixos-raspberrypi.nixosModules.sd-image
-        home-manager.nixosModules.default
         impermanence.nixosModules.impermanence
         {
           system.stateVersion = "25.11";

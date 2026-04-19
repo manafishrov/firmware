@@ -29,7 +29,7 @@ in {
       {
         directory = piUser.home;
         user = piUser.name;
-        group = piUser.group;
+        inherit (piUser) group;
         mode = "u=rwx,g=,o=";
       }
       "/var/log"

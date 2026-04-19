@@ -4,6 +4,8 @@
   ...
 }: let
   username = "pi";
+  homeDir = "/home/${username}";
+  firmwareSource = ./..;
 in {
   nixpkgs.overlays = [
     (_: prev: {
@@ -13,45 +15,45 @@ in {
     })
   ];
 
-  system.activationScripts.homeManagerProfileDir = {
-    text = ''
-      mkdir -p /nix/var/nix/profiles/per-user/${username}
-      chown ${username}:root /nix/var/nix/profiles/per-user/${username}
-    '';
-    deps = ["users"];
-  };
-
   users.users.${username} = {
     isNormalUser = true;
     extraGroups = ["wheel" "networkmanager" "video" "i2c" "plugdev"];
     password = "manafish";
-    home = "/home/${username}";
+    home = homeDir;
   };
 
-  home-manager = {
-    useUserPackages = true;
-    useGlobalPkgs = true;
-    users.${username} = {
-      home = {
-        stateVersion = "25.11";
-        packages = with pkgs; [
-          neovim
-          nano
-        ];
-        file = {
-          "mcu-firmware/pico.uf2".source = inputs.mcu-firmware-pico;
-          "mcu-firmware/pico2.uf2".source = inputs.mcu-firmware-pico2;
-        };
-        activation.setupFirmware = inputs.home-manager.lib.hm.dag.entryAfter ["writeBoundary"] ''
-          mkdir -p $HOME/firmware
-          CONFIG="$HOME/firmware/src/rov_firmware/config.json"
-          BACKUP="$HOME/firmware/src/rov_firmware/config-backup.json"
-          [ -f "$CONFIG" ] && cp "$CONFIG" "$BACKUP"
-          cp -r ${./..}/* $HOME/firmware/
-          chmod -R u+w $HOME/firmware
-          [ -f "$BACKUP" ] && mv "$BACKUP" "$CONFIG"
-        '';
-      };
+  environment.systemPackages = with pkgs; [
+    neovim
+    nano
+  ];
+
+  # Deploy firmware files and MCU firmware to the user's home directory.
+  # Uses a systemd service instead of home-manager because the SD image
+  # builder does not populate the nix database, which home-manager requires.
+  systemd.services.manafish-setup = {
+    wantedBy = ["multi-user.target"];
+    before = ["manafish-firmware.service"];
+    serviceConfig = {
+      Type = "oneshot";
+      RemainAfterExit = true;
+      User = username;
     };
+    script = ''
+      FIRMWARE_DIR="${homeDir}/firmware"
+      MCU_DIR="${homeDir}/mcu-firmware"
+      CONFIG="$FIRMWARE_DIR/src/rov_firmware/config.json"
+      BACKUP="$FIRMWARE_DIR/src/rov_firmware/config-backup.json"
+
+      [ -f "$CONFIG" ] && cp "$CONFIG" "$BACKUP"
+      rm -rf "$FIRMWARE_DIR"
+      cp -r ${firmwareSource} "$FIRMWARE_DIR"
+      chmod -R u+w "$FIRMWARE_DIR"
+      [ -f "$BACKUP" ] && mv "$BACKUP" "$CONFIG"
+
+      mkdir -p "$MCU_DIR"
+      cp ${inputs.mcu-firmware-pico} "$MCU_DIR/pico.uf2"
+      cp ${inputs.mcu-firmware-pico2} "$MCU_DIR/pico2.uf2"
+      chmod u+w "$MCU_DIR"/*.uf2
+    '';
   };
 }

@@ -79,7 +79,8 @@ in {
   systemd.services.manafish-firmware = {
     enable = true;
     wantedBy = ["multi-user.target"];
-    after = ["manafish-network.service" "go2rtc.service"];
+    after = ["manafish-setup.service" "manafish-network.service" "go2rtc.service"];
+    requires = ["manafish-setup.service"];
     serviceConfig = {
       Type = "simple";
       User = "pi";
