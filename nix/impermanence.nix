@@ -1,4 +1,10 @@
-{lib, ...}: {
+{
+  lib,
+  config,
+  ...
+}: let
+  piUser = config.users.users.pi;
+in {
   fileSystems = {
     "/" = lib.mkForce {
       device = "none";
@@ -20,7 +26,12 @@
   environment.persistence."/persistent" = {
     hideMounts = true;
     directories = [
-      "/home/pi"
+      {
+        directory = piUser.home;
+        user = piUser.name;
+        group = piUser.group;
+        mode = "u=rwx,g=,o=";
+      }
       "/var/log"
       "/var/lib/nixos"
       "/var/lib/systemd"
