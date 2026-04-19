@@ -95,8 +95,8 @@ async def flash_mcu_firmware(
         True if flash succeeded, False otherwise.
     """
     firmware_paths = {
-        McuBoard.PICO: "firmware-pico.uf2",
-        McuBoard.PICO2: "firmware-pico2.uf2",
+        McuBoard.PICO: "pico.uf2",
+        McuBoard.PICO2: "pico2.uf2",
     }
     firmware_path = Path.home() / "mcu-firmware" / firmware_paths[board]
     picotool_path = _resolve_picotool_path()
