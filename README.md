@@ -1,24 +1,18 @@
 # Firmware
 
-The Manafish firmware is designed to run on Raspberry Pi devices, specifically
-the Raspberry Pi 3 and 4. It provides the firmware for controlling and using
-the Manafish ROV.
+The Manafish firmware is designed to run on a Raspberry Pi 3b with an IMX477
+camera module. It provides the firmware for controlling and using the Manafish
+ROV.
 
 ## Building the SD Image
 
 To build the SD image you need to have `nix` installed on an aarch64-linux
 platform or proper emulation support for the aarch64-linux platform. Also add
 the caches for the `nixos-raspberrypi` flake to the build system so the build
-finishes in a reasonable time. Run the command for the specific Pi and camera
-module you want to use:
+finishes in a reasonable time:
 
 ```sh
-nix build .#pi3-ov5647
-nix build .#pi3-imx219
 nix build .#pi3-imx477
-nix build .#pi4-ov5647
-nix build .#pi4-imx219
-nix build .#pi4-imx477
 ```
 
 When you have built the image you can list it out with the following command:
@@ -201,9 +195,9 @@ Here are the common commands to manage it:
 
 6. View service logs:
 
-  ```sh
-  journalctl -u manafish-firmware -f
-  ```
+```sh
+journalctl -u manafish-firmware -f
+```
 
 ## Development Hooks
 

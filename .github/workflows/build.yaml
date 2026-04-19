@@ -26,7 +26,7 @@ jobs:
           diagnostic-endpoint: ""
 
       - name: Build SD image
-        run: nix build --accept-flake-config .#pi3-imx477
+        run: nix build --accept-flake-config
 
       - name: Check if release exists
         if: startsWith(github.ref, 'refs/tags/')

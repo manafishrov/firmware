@@ -69,7 +69,7 @@
     forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
   in {
     nixosConfigurations.pi3-imx477 = nixos-raspberrypi.lib.nixosSystem {
-      specialArgs = {inherit inputs version;};
+      specialArgs = {inherit inputs version nixos-raspberrypi;};
       modules = [
         nixos-raspberrypi.nixosModules.raspberry-pi-3.base
         nixos-raspberrypi.nixosModules.sd-image
@@ -96,11 +96,8 @@
       ];
     };
 
-    packages = forAllSystems (_: let
-      inherit (self.nixosConfigurations.pi3-imx477.config.system.build) sdImage;
-    in {
-      default = sdImage;
-      pi3-imx477 = sdImage;
+    packages = forAllSystems (_: {
+      default = self.nixosConfigurations.pi3-imx477.config.system.build.sdImage;
     });
 
     formatter = forAllSystems (system:
