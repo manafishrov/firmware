@@ -16,6 +16,30 @@ from ...rov_state import RovState
 from ...toast import toast_error, toast_loading, toast_success
 
 
+_BOARD_PREFIXES: dict[McuBoard, str] = {
+    McuBoard.PICO: "pico",
+    McuBoard.PICO2: "pico2",
+}
+
+
+def resolve_mcu_firmware(board: McuBoard) -> tuple[Path, str] | None:
+    """Resolve the versioned .uf2 firmware path and version for a board.
+
+    Returns:
+        ``(path, version)`` or ``None`` if no firmware file found.
+    """
+    prefix = _BOARD_PREFIXES[board]
+    mcu_dir = Path.home() / "mcu-firmware"
+    matches = list(mcu_dir.glob(f"{prefix}-v*.uf2"))
+    if not matches:
+        return None
+    firmware_path = matches[0]
+    match = re.match(rf"^{re.escape(prefix)}-v(.+)\.uf2$", firmware_path.name)
+    if not match:
+        return None
+    return firmware_path, match.group(1)
+
+
 def _report_flash_error(
     message: str, *, show_toasts: bool, unexpected: bool = False
 ) -> None:
@@ -94,11 +118,14 @@ async def flash_mcu_firmware(
     Returns:
         True if flash succeeded, False otherwise.
     """
-    firmware_paths = {
-        McuBoard.PICO: "pico.uf2",
-        McuBoard.PICO2: "pico2.uf2",
-    }
-    firmware_path = Path.home() / "mcu-firmware" / firmware_paths[board]
+    resolved = resolve_mcu_firmware(board)
+    if resolved is None:
+        _report_flash_error(
+            f"Firmware flash failed: no firmware file found for {board.value}",
+            show_toasts=show_toasts,
+        )
+        return False
+    firmware_path, _ = resolved
     picotool_path = _resolve_picotool_path()
 
     log_info(f"Flashing firmware '{board.value}' from {firmware_path}")
@@ -106,12 +133,6 @@ async def flash_mcu_firmware(
         if picotool_path is None:
             _report_flash_error(
                 "Firmware flash failed: picotool not found", show_toasts=show_toasts
-            )
-            return False
-        if not firmware_path.is_file():
-            _report_flash_error(
-                f"Firmware flash failed: {firmware_path} not found",
-                show_toasts=show_toasts,
             )
             return False
 

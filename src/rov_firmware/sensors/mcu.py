@@ -5,7 +5,6 @@ import struct
 import time
 
 from ..constants import (
-    EXPECTED_MCU_FIRMWARE_VERSION,
     LOG_LEVEL_ERROR,
     LOG_LEVEL_INFO,
     LOG_LEVEL_WARN,
@@ -32,6 +31,7 @@ from ..rov_state import RovState
 from ..serial import SerialManager
 from ..websocket.message import Config
 from ..websocket.queue import get_message_queue
+from ..websocket.receive.mcu import flash_mcu_firmware, resolve_mcu_firmware
 
 
 _MAX_READ_BUFFER_SIZE = 512
@@ -231,16 +231,21 @@ class McuSensor:
             self._reset_telemetry()
             get_message_queue().put_nowait(Config(payload=self.state.rov_config))
 
-        if version != EXPECTED_MCU_FIRMWARE_VERSION:
-            self._schedule_version_mismatch_flash(version)
+        expected = self._get_expected_version()
+        if expected is not None and version != expected:
+            self._schedule_version_mismatch_flash(version, expected)
 
-    def _schedule_version_mismatch_flash(self, current_version: str) -> None:
-        import asyncio  # noqa: PLC0415
+    def _get_expected_version(self) -> str | None:
+        resolved = resolve_mcu_firmware(self.state.rov_config.mcu_board)
+        if resolved is None:
+            return None
+        return resolved[1]
 
-        from ..websocket.receive.mcu import flash_mcu_firmware  # noqa: PLC0415
-
+    def _schedule_version_mismatch_flash(
+        self, current_version: str, expected_version: str
+    ) -> None:
         log_warn(
-            f"MCU firmware version mismatch: {current_version} != {EXPECTED_MCU_FIRMWARE_VERSION}. Auto-flashing..."
+            f"MCU firmware version mismatch: {current_version} != {expected_version}. Auto-flashing..."
         )
         board = self.state.rov_config.mcu_board
         asyncio.get_running_loop().create_task(
