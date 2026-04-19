@@ -13,9 +13,13 @@ in {
     })
   ];
 
-  systemd.tmpfiles.rules = [
-    "d /nix/var/nix/profiles/per-user/${username} 0755 ${username} root -"
-  ];
+  system.activationScripts.homeManagerProfileDir = {
+    text = ''
+      mkdir -p /nix/var/nix/profiles/per-user/${username}
+      chown ${username}:root /nix/var/nix/profiles/per-user/${username}
+    '';
+    deps = ["users"];
+  };
 
   users.users.${username} = {
     isNormalUser = true;

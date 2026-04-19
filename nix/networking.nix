@@ -37,6 +37,7 @@
 in {
   networking = {
     hostName = "manafish";
+    usePredictableInterfaceNames = false;
     firewall.enable = false;
     nftables.enable = false;
     wireless.iwd.enable = true;
