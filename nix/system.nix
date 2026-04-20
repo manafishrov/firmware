@@ -51,8 +51,10 @@ in {
       [ -f "$BACKUP" ] && mv "$BACKUP" "$CONFIG"
 
       mkdir -p "$MCU_DIR"
-      cp ${inputs.mcu-firmware-pico} "$MCU_DIR/pico.uf2"
-      cp ${inputs.mcu-firmware-pico2} "$MCU_DIR/pico2.uf2"
+      for fw in ${inputs.mcu-firmware-pico} ${inputs.mcu-firmware-pico2}; do
+        name="$(basename "$fw")"
+        cp "$fw" "$MCU_DIR/''${name:33}"
+      done
       chmod u+w "$MCU_DIR"/*.uf2
     '';
   };
