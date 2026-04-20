@@ -35,6 +35,7 @@ from ..websocket.receive.mcu import flash_mcu_firmware, resolve_mcu_firmware
 
 
 _MAX_READ_BUFFER_SIZE = 512
+_READ_CHUNK_SIZE = 128
 
 _LOG_LEVEL_MAP: dict[int, LogLevel] = {
     LOG_LEVEL_INFO: LogLevel.INFO,
@@ -67,20 +68,20 @@ class McuSensor:
         """Read telemetry data from the MCU in a loop."""
         read_buffer = bytearray()
         while True:
-            data = await self._read_byte()
+            data = await self._read_chunk()
             if data is None:
                 await asyncio.sleep(1)
                 continue
             self._consume_read_buffer(read_buffer, data)
             self._expire_stale_telemetry()
 
-    async def _read_byte(self) -> bytes | None:
+    async def _read_chunk(self) -> bytes | None:
         if not await self.serial_manager.ensure_connection():
             return None
 
         reader = self.serial_manager.get_reader()
         try:
-            data = await reader.read(1)
+            data = await reader.read(_READ_CHUNK_SIZE)
         except Exception as e:
             await self.serial_manager.handle_connection_lost(
                 f"MCU telemetry read failed, disabling MCU. Error: {e}"
@@ -153,14 +154,15 @@ class McuSensor:
 
     @staticmethod
     def _find_start_byte(buf: bytearray) -> int:
-        for i, b in enumerate(buf):
-            if b in (
-                MCU_TELEMETRY_START_BYTE,
-                LOG_PACKET_START_BYTE,
-                MCU_VERSION_START_BYTE,
-            ):
-                return i
-        return -1
+        candidates = (
+            buf.find(MCU_TELEMETRY_START_BYTE),
+            buf.find(LOG_PACKET_START_BYTE),
+            buf.find(MCU_VERSION_START_BYTE),
+        )
+        valid_candidates = [idx for idx in candidates if idx >= 0]
+        if not valid_candidates:
+            return -1
+        return min(valid_candidates)
 
     @staticmethod
     def _validate_telemetry_packet(packet: bytearray) -> bool:
@@ -283,7 +285,7 @@ class McuSensor:
         """
         global_id = packet[1]
         packet_type = packet[2]
-        value = struct.unpack("<i", packet[3:7])[0]
+        value = struct.unpack_from("<i", packet, 3)[0]
         if 0 <= global_id < NUM_MOTORS:
             self._last_telemetry_time[global_id] = time.monotonic()
             if packet_type == MCU_TELEMETRY_TYPE_ERPM:
