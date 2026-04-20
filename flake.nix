@@ -53,6 +53,7 @@
     treefmt-nix,
     ...
   } @ inputs: let
+    mcuFirmwareVersion = "v1.0.0";
     supportedSystems = [
       "aarch64-linux"
       "x86_64-linux"
@@ -64,7 +65,9 @@
     forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
   in {
     nixosConfigurations.pi3-imx477 = nixos-raspberrypi.lib.nixosSystem {
-      specialArgs = {inherit inputs version nixos-raspberrypi;};
+      specialArgs = {
+        inherit inputs version nixos-raspberrypi mcuFirmwareVersion;
+      };
       modules = [
         nixos-raspberrypi.nixosModules.raspberry-pi-3.base
         nixos-raspberrypi.nixosModules.sd-image

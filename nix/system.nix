@@ -1,6 +1,7 @@
 {
   pkgs,
   inputs,
+  mcuFirmwareVersion,
   ...
 }: let
   username = "pi";
@@ -51,10 +52,8 @@ in {
       [ -f "$BACKUP" ] && mv "$BACKUP" "$CONFIG"
 
       mkdir -p "$MCU_DIR"
-      for fw in ${inputs.mcu-firmware-pico} ${inputs.mcu-firmware-pico2}; do
-        name="$(basename "$fw")"
-        cp "$fw" "$MCU_DIR/''${name:33}"
-      done
+      cp ${inputs.mcu-firmware-pico} "$MCU_DIR/pico-${mcuFirmwareVersion}.uf2"
+      cp ${inputs.mcu-firmware-pico2} "$MCU_DIR/pico2-${mcuFirmwareVersion}.uf2"
       chmod u+w "$MCU_DIR"/*.uf2
     '';
   };
