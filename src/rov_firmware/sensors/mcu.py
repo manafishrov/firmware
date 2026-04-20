@@ -10,6 +10,9 @@ from ..constants import (
     LOG_LEVEL_WARN,
     LOG_PACKET_HEADER_SIZE,
     LOG_PACKET_START_BYTE,
+    MCU_TELEMETRY_BATCH_ENTRY_SIZE,
+    MCU_TELEMETRY_BATCH_MAX_ITEMS,
+    MCU_TELEMETRY_BATCH_START_BYTE,
     MCU_PROTOCOL_DSHOT,
     MCU_TELEMETRY_PACKET_SIZE,
     MCU_TELEMETRY_STALE_TIMEOUT_S,
@@ -111,6 +114,8 @@ class McuSensor:
                 return
 
     def _consume_next_packet(self, read_buffer: bytearray) -> bool:
+        if read_buffer[0] == MCU_TELEMETRY_BATCH_START_BYTE:
+            return self._try_consume_telemetry_batch(read_buffer)
         if read_buffer[0] == MCU_TELEMETRY_START_BYTE:
             return self._try_consume_telemetry(read_buffer)
         if read_buffer[0] == LOG_PACKET_START_BYTE:
@@ -127,6 +132,25 @@ class McuSensor:
         if self._validate_telemetry_packet(packet):
             self._update_telemetry(packet)
         del read_buffer[:MCU_TELEMETRY_PACKET_SIZE]
+        return True
+
+    def _try_consume_telemetry_batch(self, read_buffer: bytearray) -> bool:
+        if len(read_buffer) < 2:
+            return False
+
+        item_count = read_buffer[1]
+        if item_count == 0 or item_count > MCU_TELEMETRY_BATCH_MAX_ITEMS:
+            del read_buffer[:1]
+            return True
+
+        total_len = 3 + (item_count * MCU_TELEMETRY_BATCH_ENTRY_SIZE)
+        if len(read_buffer) < total_len:
+            return False
+
+        packet = read_buffer[:total_len]
+        if self._validate_telemetry_batch_packet(packet):
+            self._update_telemetry_batch(packet)
+        del read_buffer[:total_len]
         return True
 
     @staticmethod
@@ -156,6 +180,7 @@ class McuSensor:
     def _find_start_byte(buf: bytearray) -> int:
         candidates = (
             buf.find(MCU_TELEMETRY_START_BYTE),
+            buf.find(MCU_TELEMETRY_BATCH_START_BYTE),
             buf.find(LOG_PACKET_START_BYTE),
             buf.find(MCU_VERSION_START_BYTE),
         )
@@ -175,6 +200,23 @@ class McuSensor:
         for b in packet[:7]:
             calculated_checksum ^= b
         return calculated_checksum == packet[7]
+
+    @staticmethod
+    def _validate_telemetry_batch_packet(packet: bytearray) -> bool:
+        if len(packet) < 3 or packet[0] != MCU_TELEMETRY_BATCH_START_BYTE:
+            return False
+
+        item_count = packet[1]
+        expected_len = 3 + (item_count * MCU_TELEMETRY_BATCH_ENTRY_SIZE)
+        if item_count == 0 or item_count > MCU_TELEMETRY_BATCH_MAX_ITEMS:
+            return False
+        if len(packet) != expected_len:
+            return False
+
+        calculated_checksum = 0
+        for b in packet[:-1]:
+            calculated_checksum ^= b
+        return calculated_checksum == packet[-1]
 
     @staticmethod
     def _validate_log_packet(packet: bytearray) -> bool:
@@ -283,9 +325,23 @@ class McuSensor:
         Units: erpm in full eRPM, voltage in volts (0.25V/LSB),
         current in 1A, temperature in °C, signal_quality in %.
         """
-        global_id = packet[1]
-        packet_type = packet[2]
-        value = struct.unpack_from("<i", packet, 3)[0]
+        self._update_telemetry_item(
+            global_id=packet[1],
+            packet_type=packet[2],
+            value=struct.unpack_from("<i", packet, 3)[0],
+        )
+
+    def _update_telemetry_batch(self, packet: bytearray) -> None:
+        item_count = packet[1]
+        offset = 2
+        for _ in range(item_count):
+            global_id = packet[offset]
+            packet_type = packet[offset + 1]
+            value = struct.unpack_from("<i", packet, offset + 2)[0]
+            self._update_telemetry_item(global_id, packet_type, value)
+            offset += MCU_TELEMETRY_BATCH_ENTRY_SIZE
+
+    def _update_telemetry_item(self, global_id: int, packet_type: int, value: int) -> None:
         if 0 <= global_id < NUM_MOTORS:
             self._last_telemetry_time[global_id] = time.monotonic()
             if packet_type == MCU_TELEMETRY_TYPE_ERPM:
