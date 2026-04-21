@@ -146,7 +146,7 @@ class Power(CamelCaseModel):
     regulator_limit: int
     min_battery_voltage: float
     max_battery_voltage: float
-    internal_resistance: float = 0.0
+    internal_resistance: float = 0.1
 
     @field_validator("min_battery_voltage", "max_battery_voltage", mode="after")
     @classmethod
