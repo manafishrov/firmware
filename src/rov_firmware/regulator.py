@@ -204,6 +204,26 @@ class Regulator:
         self.gyro_rad_s: NDArray[np.float32] = np.array(
             [0.0, 0.0, 0.0], dtype=np.float32
         )  # rad/s
+        self._accel_buffer: NDArray[np.float32] = np.zeros(3, dtype=np.float32)
+        self._gyro_buffer: NDArray[np.float32] = np.zeros(3, dtype=np.float32)
+        self._regulator_direction_vector: NDArray[np.float32] = np.zeros(
+            8, dtype=np.float32
+        )
+        self._unlimited_direction_vector: NDArray[np.float32] = np.zeros(
+            8, dtype=np.float32
+        )
+        self._depth_hold_vector_buffer: NDArray[np.float32] = np.zeros(3, dtype=np.float32)
+        self._movement_vector_buffer: NDArray[np.float32] = np.zeros(3, dtype=np.float32)
+        self._stabilization_input_buffer: NDArray[np.float32] = np.zeros(
+            3, dtype=np.float32
+        )
+        self._stabilization_actuation_buffer: NDArray[np.float32] = np.zeros(
+            3, dtype=np.float32
+        )
+        self._unit_vectors: NDArray[np.float32] = np.eye(3, dtype=np.float32)
+        self._world_frame_movement_buffer: NDArray[np.float32] = np.zeros(
+            3, dtype=np.float32
+        )
 
         self.last_update_ahrs_time: float = 0.0
         self.delta_t_update_ahrs: float = 1 / THRUSTER_SEND_FREQUENCY
@@ -315,14 +335,12 @@ class Regulator:
             return
 
         imu_data = self.state.imu
-        accel = np.array(
-            cast(np.ndarray, imu_data.acceleration), dtype=np.float32, copy=True
-        )
-        gyr = np.array(
-            cast(np.ndarray, imu_data.gyroscope), dtype=np.float32, copy=True
-        )
+        accel = self._accel_buffer
+        accel[:] = cast(np.ndarray, imu_data.acceleration)
+        gyr = self._gyro_buffer
+        gyr[:] = cast(np.ndarray, imu_data.gyroscope)
 
-        self.gyro_rad_s = gyr
+        self.gyro_rad_s[:] = gyr
 
         now = time.time()
         if self.last_update_ahrs_time > 0.0:
@@ -479,9 +497,10 @@ class Regulator:
             + config.yaw.kd * (-omega[2]),
         )
 
-        stabilization_actuation = (
-            np.array([u_pitch, u_yaw, u_roll], dtype=np.float32) / 10.0
-        )
+        stabilization_actuation = self._stabilization_actuation_buffer
+        stabilization_actuation[0] = np.float32(u_pitch / 10.0)
+        stabilization_actuation[1] = np.float32(u_yaw / 10.0)
+        stabilization_actuation[2] = np.float32(u_roll / 10.0)
 
         return stabilization_actuation
 
@@ -496,25 +515,15 @@ class Regulator:
         Returns:
             NDArray[np.float32]: 3-element movement vector expressed in the body frame with direction coefficients applied.
         """
-        surge_movement_world = np.array(
-            [direction_vector_movement[0], 0, 0], dtype=np.float32
-        )
-        sway_movement_world = np.array(
-            [0, direction_vector_movement[1], 0], dtype=np.float32
-        )
-        heave_movement_world = np.array(
-            [0, 0, direction_vector_movement[2]], dtype=np.float32
-        )
-
         current_attitude = self.ahrs.current_attitude
 
         # Remove yaw component from current attitude, because surge should always make ROV move forward relative to body, regardless of yaw
         _yaw, pitch, roll = current_attitude.as_euler("ZYX", degrees=False)
         current_attitude = Rotation.from_euler("ZYX", [0, pitch, roll], degrees=False)
 
-        surge_movement_body = current_attitude.inv().apply(surge_movement_world)
-        sway_movement_body = current_attitude.inv().apply(sway_movement_world)
-        heave_movement_body = current_attitude.inv().apply(heave_movement_world)
+        basis_vectors = cast(
+            NDArray[np.float32], current_attitude.inv().apply(self._unit_vectors)
+        )
 
         dir_coeffs = self.state.rov_config.direction_coefficients
         surge_coeff = dir_coeffs.surge if np.isfinite(dir_coeffs.surge) else 1.0
@@ -526,17 +535,28 @@ class Regulator:
         heave_surge_ratio = heave_coeff / surge_coeff if surge_coeff != 0 else 0.0
         heave_sway_ratio = heave_coeff / sway_coeff if sway_coeff != 0 else 0.0
 
-        surge_movement_body *= np.array([1.0, 1.0, surge_heave_ratio], dtype=np.float32)
-        sway_movement_body *= np.array([1.0, 1.0, sway_heave_ratio], dtype=np.float32)
-        heave_movement_body *= np.array(
-            [heave_surge_ratio, heave_sway_ratio, 1.0], dtype=np.float32
+        surge = float(direction_vector_movement[0])
+        sway = float(direction_vector_movement[1])
+        heave = float(direction_vector_movement[2])
+
+        world_frame_movement = self._world_frame_movement_buffer
+        world_frame_movement[0] = (
+            basis_vectors[0][0] * surge
+            + basis_vectors[1][0] * sway
+            + basis_vectors[2][0] * heave * heave_surge_ratio
+        )
+        world_frame_movement[1] = (
+            basis_vectors[0][1] * surge
+            + basis_vectors[1][1] * sway
+            + basis_vectors[2][1] * heave * heave_sway_ratio
+        )
+        world_frame_movement[2] = (
+            basis_vectors[0][2] * surge * surge_heave_ratio
+            + basis_vectors[1][2] * sway * sway_heave_ratio
+            + basis_vectors[2][2] * heave
         )
 
-        world_frame_movement = (
-            surge_movement_body + sway_movement_body + heave_movement_body
-        )
-
-        return world_frame_movement.astype(np.float32, copy=False)
+        return world_frame_movement
 
     def _scale_direction_vector_with_user_max_power(
         self, direction_vector: NDArray[np.float32]
@@ -593,7 +613,8 @@ class Regulator:
         Returns:
             NDArray[np.float32]: Combined direction vector before user/regulator power limits are applied.
         """
-        regulator_direction_vector = np.zeros(8, dtype=np.float32)
+        regulator_direction_vector = self._regulator_direction_vector
+        regulator_direction_vector.fill(0.0)
 
         now = time.time()
         if self.last_run_regulator_time > 0.0:
@@ -609,23 +630,28 @@ class Regulator:
             depth_regulator_actuation = self._handle_depth_hold(
                 cast(np.float32, direction_vector[2])
             )
+            depth_hold_vector = self._depth_hold_vector_buffer
+            depth_hold_vector[:] = (0.0, 0.0, depth_regulator_actuation)
             regulator_direction_vector[0:3] = (
-                self._transform_movement_vector_world_to_body(
-                    np.array([0.0, 0.0, depth_regulator_actuation], dtype=np.float32)
-                )
+                self._transform_movement_vector_world_to_body(depth_hold_vector)
             )
             direction_vector[2] = 0.0
+            movement_vector = self._movement_vector_buffer
+            movement_vector[:] = direction_vector[0:3]
             direction_vector[0:3] = self._transform_movement_vector_world_to_body(
-                direction_vector[0:3].copy()
+                movement_vector
             )
 
         if self.state.system_status.auto_stabilization:
+            stabilization_input = self._stabilization_input_buffer
+            stabilization_input[:] = direction_vector[3:6]
             regulator_direction_vector[3:6] = self._handle_stabilization(
-                direction_vector[3:6].copy()
+                stabilization_input
             )
             direction_vector[3:6] = 0.0
 
-        unlimited_direction_vector = direction_vector.copy()
+        unlimited_direction_vector = self._unlimited_direction_vector
+        unlimited_direction_vector[:] = direction_vector
         unlimited_direction_vector += regulator_direction_vector
 
         self._scale_regulator_direction_vector(regulator_direction_vector)

@@ -39,6 +39,10 @@ from ..websocket.receive.mcu import flash_mcu_firmware, resolve_mcu_firmware
 
 _MAX_READ_BUFFER_SIZE = 512
 _READ_CHUNK_SIZE = 128
+_TELEMETRY_START_TOKEN = bytes((MCU_TELEMETRY_START_BYTE,))
+_TELEMETRY_BATCH_START_TOKEN = bytes((MCU_TELEMETRY_BATCH_START_BYTE,))
+_LOG_PACKET_START_TOKEN = bytes((LOG_PACKET_START_BYTE,))
+_VERSION_PACKET_START_TOKEN = bytes((MCU_VERSION_START_BYTE,))
 
 _LOG_LEVEL_MAP: dict[int, LogLevel] = {
     LOG_LEVEL_INFO: LogLevel.INFO,
@@ -101,88 +105,99 @@ class McuSensor:
 
     def _consume_read_buffer(self, read_buffer: bytearray, data: bytes) -> None:
         read_buffer.extend(data)
+        search_start = 0
+
         while True:
-            start_idx = self._find_start_byte(read_buffer)
+            start_idx = self._find_start_byte(read_buffer, search_start)
             if start_idx == -1:
+                if search_start > 0:
+                    del read_buffer[:search_start]
                 if len(read_buffer) > _MAX_READ_BUFFER_SIZE:
                     read_buffer.clear()
                 return
-            if start_idx > 0:
-                del read_buffer[:start_idx]
 
-            if not self._consume_next_packet(read_buffer):
+            next_idx = self._consume_next_packet(read_buffer, start_idx)
+            if next_idx is None:
+                if start_idx > 0:
+                    del read_buffer[:start_idx]
+                return
+            search_start = next_idx
+
+            if search_start >= len(read_buffer):
+                read_buffer.clear()
                 return
 
-    def _consume_next_packet(self, read_buffer: bytearray) -> bool:
-        if read_buffer[0] == MCU_TELEMETRY_BATCH_START_BYTE:
-            return self._try_consume_telemetry_batch(read_buffer)
-        if read_buffer[0] == MCU_TELEMETRY_START_BYTE:
-            return self._try_consume_telemetry(read_buffer)
-        if read_buffer[0] == LOG_PACKET_START_BYTE:
-            return self._try_consume_log(read_buffer)
-        if read_buffer[0] == MCU_VERSION_START_BYTE:
-            return self._try_consume_version(read_buffer)
-        del read_buffer[:1]
-        return True
+    def _consume_next_packet(self, read_buffer: bytearray, start_idx: int) -> int | None:
+        packet_type = read_buffer[start_idx]
+        if packet_type == MCU_TELEMETRY_BATCH_START_BYTE:
+            return self._try_consume_telemetry_batch(read_buffer, start_idx)
+        if packet_type == MCU_TELEMETRY_START_BYTE:
+            return self._try_consume_telemetry(read_buffer, start_idx)
+        if packet_type == LOG_PACKET_START_BYTE:
+            return self._try_consume_log(read_buffer, start_idx)
+        if packet_type == MCU_VERSION_START_BYTE:
+            return self._try_consume_version(read_buffer, start_idx)
+        return start_idx + 1
 
-    def _try_consume_telemetry(self, read_buffer: bytearray) -> bool:
-        if len(read_buffer) < MCU_TELEMETRY_PACKET_SIZE:
-            return False
-        packet = read_buffer[:MCU_TELEMETRY_PACKET_SIZE]
+    def _try_consume_telemetry(self, read_buffer: bytearray, start_idx: int) -> int | None:
+        end_idx = start_idx + MCU_TELEMETRY_PACKET_SIZE
+        if len(read_buffer) < end_idx:
+            return None
+
+        packet = memoryview(read_buffer)[start_idx:end_idx]
         if self._validate_telemetry_packet(packet):
             self._update_telemetry(packet)
-        del read_buffer[:MCU_TELEMETRY_PACKET_SIZE]
-        return True
+        return end_idx
 
-    def _try_consume_telemetry_batch(self, read_buffer: bytearray) -> bool:
-        if len(read_buffer) < 2:
-            return False
+    def _try_consume_telemetry_batch(
+        self, read_buffer: bytearray, start_idx: int
+    ) -> int | None:
+        if len(read_buffer) < start_idx + 2:
+            return None
 
-        item_count = read_buffer[1]
+        item_count = read_buffer[start_idx + 1]
         if item_count == 0 or item_count > MCU_TELEMETRY_BATCH_MAX_ITEMS:
-            del read_buffer[:1]
-            return True
+            return start_idx + 1
 
-        total_len = 3 + (item_count * MCU_TELEMETRY_BATCH_ENTRY_SIZE)
-        if len(read_buffer) < total_len:
-            return False
+        end_idx = start_idx + 3 + (item_count * MCU_TELEMETRY_BATCH_ENTRY_SIZE)
+        if len(read_buffer) < end_idx:
+            return None
 
-        packet = read_buffer[:total_len]
+        packet = memoryview(read_buffer)[start_idx:end_idx]
         if self._validate_telemetry_batch_packet(packet):
             self._update_telemetry_batch(packet)
-        del read_buffer[:total_len]
-        return True
+        return end_idx
 
     @staticmethod
-    def _try_consume_log(read_buffer: bytearray) -> bool:
-        if len(read_buffer) < LOG_PACKET_HEADER_SIZE:
-            return False
-        msg_len = read_buffer[2]
-        total_len = LOG_PACKET_HEADER_SIZE + msg_len + 1
-        if len(read_buffer) < total_len:
-            return False
-        packet = read_buffer[:total_len]
+    def _try_consume_log(read_buffer: bytearray, start_idx: int) -> int | None:
+        header_end_idx = start_idx + LOG_PACKET_HEADER_SIZE
+        if len(read_buffer) < header_end_idx:
+            return None
+        msg_len = read_buffer[start_idx + 2]
+        end_idx = header_end_idx + msg_len + 1
+        if len(read_buffer) < end_idx:
+            return None
+        packet = memoryview(read_buffer)[start_idx:end_idx]
         if McuSensor._validate_log_packet(packet):
             McuSensor._handle_log_packet(packet)
-        del read_buffer[:total_len]
-        return True
+        return end_idx
 
-    def _try_consume_version(self, read_buffer: bytearray) -> bool:
-        if len(read_buffer) < MCU_VERSION_PACKET_SIZE:
-            return False
-        packet = read_buffer[:MCU_VERSION_PACKET_SIZE]
+    def _try_consume_version(self, read_buffer: bytearray, start_idx: int) -> int | None:
+        end_idx = start_idx + MCU_VERSION_PACKET_SIZE
+        if len(read_buffer) < end_idx:
+            return None
+        packet = memoryview(read_buffer)[start_idx:end_idx]
         if self._validate_version_packet(packet):
             self._handle_version_packet(packet)
-        del read_buffer[:MCU_VERSION_PACKET_SIZE]
-        return True
+        return end_idx
 
     @staticmethod
-    def _find_start_byte(buf: bytearray) -> int:
+    def _find_start_byte(buf: bytearray, start: int) -> int:
         candidates = (
-            buf.find(MCU_TELEMETRY_START_BYTE),
-            buf.find(MCU_TELEMETRY_BATCH_START_BYTE),
-            buf.find(LOG_PACKET_START_BYTE),
-            buf.find(MCU_VERSION_START_BYTE),
+            buf.find(_TELEMETRY_START_TOKEN, start),
+            buf.find(_TELEMETRY_BATCH_START_TOKEN, start),
+            buf.find(_LOG_PACKET_START_TOKEN, start),
+            buf.find(_VERSION_PACKET_START_TOKEN, start),
         )
         valid_candidates = [idx for idx in candidates if idx >= 0]
         if not valid_candidates:
@@ -190,7 +205,7 @@ class McuSensor:
         return min(valid_candidates)
 
     @staticmethod
-    def _validate_telemetry_packet(packet: bytearray) -> bool:
+    def _validate_telemetry_packet(packet: bytes | bytearray | memoryview) -> bool:
         if (
             len(packet) != MCU_TELEMETRY_PACKET_SIZE
             or packet[0] != MCU_TELEMETRY_START_BYTE
@@ -202,7 +217,7 @@ class McuSensor:
         return calculated_checksum == packet[7]
 
     @staticmethod
-    def _validate_telemetry_batch_packet(packet: bytearray) -> bool:
+    def _validate_telemetry_batch_packet(packet: bytes | bytearray | memoryview) -> bool:
         if len(packet) < 3 or packet[0] != MCU_TELEMETRY_BATCH_START_BYTE:
             return False
 
@@ -219,7 +234,7 @@ class McuSensor:
         return calculated_checksum == packet[-1]
 
     @staticmethod
-    def _validate_log_packet(packet: bytearray) -> bool:
+    def _validate_log_packet(packet: bytes | bytearray | memoryview) -> bool:
         if (
             len(packet) < LOG_PACKET_HEADER_SIZE + 1
             or packet[0] != LOG_PACKET_START_BYTE
@@ -231,7 +246,7 @@ class McuSensor:
         return calculated_checksum == packet[-1]
 
     @staticmethod
-    def _validate_version_packet(packet: bytearray) -> bool:
+    def _validate_version_packet(packet: bytes | bytearray | memoryview) -> bool:
         if (
             len(packet) != MCU_VERSION_PACKET_SIZE
             or packet[0] != MCU_VERSION_START_BYTE
@@ -243,16 +258,16 @@ class McuSensor:
         return calculated_checksum == packet[-1]
 
     @staticmethod
-    def _handle_log_packet(packet: bytearray) -> None:
+    def _handle_log_packet(packet: bytes | bytearray | memoryview) -> None:
         level_byte = packet[1]
         msg_len = packet[2]
-        message = packet[3 : 3 + msg_len].decode("utf-8", errors="replace")
+        message = bytes(packet[3 : 3 + msg_len]).decode("utf-8", errors="replace")
 
         level = _LOG_LEVEL_MAP.get(level_byte, LogLevel.INFO)
         log_fn = _LOG_FN_MAP[level]
         log_fn(message, origin=LogOrigin.MCU)
 
-    def _handle_version_packet(self, packet: bytearray) -> None:
+    def _handle_version_packet(self, packet: bytes | bytearray | memoryview) -> None:
         version = f"{packet[1]}.{packet[2]}.{packet[3]}"
         protocol = (
             ThrusterProtocol.DSHOT
@@ -319,7 +334,7 @@ class McuSensor:
                 self.state.mcu_telemetry.signal_quality[i] = 0.0
                 self._last_telemetry_time[i] = 0.0
 
-    def _update_telemetry(self, packet: bytearray) -> None:
+    def _update_telemetry(self, packet: bytes | bytearray | memoryview) -> None:
         """Update MCU telemetry from a validated packet.
 
         Units: erpm in full eRPM, voltage in volts (0.25V/LSB),
@@ -331,7 +346,7 @@ class McuSensor:
             value=struct.unpack_from("<i", packet, 3)[0],
         )
 
-    def _update_telemetry_batch(self, packet: bytearray) -> None:
+    def _update_telemetry_batch(self, packet: bytes | bytearray | memoryview) -> None:
         item_count = packet[1]
         offset = 2
         for _ in range(item_count):

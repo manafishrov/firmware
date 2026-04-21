@@ -28,6 +28,7 @@ class SerialManager:
         self._connection_lock: asyncio.Lock = asyncio.Lock()
         self._first_boot_retries: int = 0
         self._first_boot_flashed: bool = False
+        self._connection_generation: int = 0
 
     async def _find_mcu_port(self, *, log_missing: bool = True) -> str | None:
         mcu_ports = list(Path("/dev/serial/by-id/").glob("usb-Raspberry_Pi_Pico*"))
@@ -82,6 +83,7 @@ class SerialManager:
                 self.reader, self.writer = await open_serial_connection(
                     url=serial_port, baudrate=115200
                 )
+                self._connection_generation += 1
                 self.state.system_health.mcu_healthy = True
                 log_info("MCU initialized successfully.")
                 return True
@@ -141,6 +143,11 @@ class SerialManager:
             msg = "Serial not initialized"
             raise RuntimeError(msg)
         return self.writer
+
+    @property
+    def connection_generation(self) -> int:
+        """Monotonically increasing serial connection generation."""
+        return self._connection_generation
 
     async def shutdown(self) -> None:
         """Shutdown the serial connection."""

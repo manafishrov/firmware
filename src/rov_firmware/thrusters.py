@@ -51,10 +51,22 @@ class Thrusters:
         self.serial_manager: SerialManager = serial_manager
         self.regulator: Regulator = regulator
         self._last_sent_protocol_config: tuple[str, int] | None = None
+        self._last_config_generation: int = -1
 
         self.previous_direction_vector: NDArray[np.float32] = np.zeros(
             8, dtype=np.float32
         )
+        self._direction_vector_buffer: NDArray[np.float32] = np.zeros(8, dtype=np.float32)
+        self._smoothing_buffer: NDArray[np.float32] = np.zeros(8, dtype=np.float32)
+        self._thrust_vector_buffer: NDArray[np.float32] = np.zeros(
+            NUM_MOTORS, dtype=np.float32
+        )
+        self._work_indicator_thrust_vector: NDArray[np.float32] = np.zeros(
+            NUM_MOTORS, dtype=np.float32
+        )
+        self._test_thrust_vector: NDArray[np.float32] = np.zeros(NUM_MOTORS, dtype=np.float32)
+        self._zero_thrust_vector: NDArray[np.float32] = np.zeros(NUM_MOTORS, dtype=np.float32)
+        self._reorder_buffer: NDArray[np.float32] = np.zeros(NUM_MOTORS, dtype=np.float32)
 
     def _smooth_direction_vector(
         self,
@@ -68,22 +80,28 @@ class Thrusters:
 
         direction_vector_step = 1 / (THRUSTER_SEND_FREQUENCY * smoothing_factor)
 
-        diff = direction_vector - previous_direction_vector
-
-        increment = np.clip(diff, -direction_vector_step, direction_vector_step)
-
-        result = previous_direction_vector + increment
-
-        direction_vector[:] = result.astype(np.float32, copy=False)
+        np.subtract(direction_vector, previous_direction_vector, out=self._smoothing_buffer)
+        _ = np.clip(
+            self._smoothing_buffer,
+            -direction_vector_step,
+            direction_vector_step,
+            out=self._smoothing_buffer,
+            dtype=np.float32,
+        )
+        np.add(previous_direction_vector, self._smoothing_buffer, out=direction_vector)
 
     def _create_thrust_vector_from_direction_vector(
-        self, direction_vector: NDArray[np.float32]
+        self,
+        direction_vector: NDArray[np.float32],
+        out: NDArray[np.float32] | None = None,
     ) -> NDArray[np.float32]:
         allocation_matrix = cast(
             NDArray[np.float32], self.state.rov_config.thruster_allocation
         )
-        thrust_vector = allocation_matrix @ direction_vector
-        return thrust_vector
+        if out is None:
+            return cast(NDArray[np.float32], allocation_matrix @ direction_vector)
+        np.matmul(allocation_matrix, direction_vector, out=out)
+        return out
 
     def _correct_thrust_vector_spin_directions(
         self, thrust_vector: NDArray[np.float32]
@@ -98,16 +116,18 @@ class Thrusters:
         identifiers = cast(
             NDArray[np.int8], self.state.rov_config.thruster_pin_setup.identifiers
         )
-        thrust_vector[:] = thrust_vector[identifiers]
+        np.take(thrust_vector, identifiers, out=self._reorder_buffer)
+        thrust_vector[:] = self._reorder_buffer
 
     def _clip_thrust_vector(self, thrust_vector: NDArray[np.float32]) -> None:
-        thrust_vector[:] = np.clip(thrust_vector, -1.0, 1.0)
+        _ = np.clip(thrust_vector, -1.0, 1.0, out=thrust_vector, dtype=np.float32)
 
     def _calculate_work_indicator_percentage_from_thrust_vector(
         self, thrust_vector: NDArray[np.float32]
     ) -> int:
-        clipped_thrust_vector = np.clip(thrust_vector, -1.0, 1.0)
-        total_thrust = float(np.sum(np.abs(clipped_thrust_vector)))
+        total_thrust = 0.0
+        for thrust in thrust_vector:
+            total_thrust += abs(max(-1.0, min(1.0, float(thrust))))
         work_indicator_percentage = min(100, max(0, (total_thrust / NUM_MOTORS) * 100))
         return int(work_indicator_percentage)
 
@@ -115,7 +135,7 @@ class Thrusters:
         self, direction_vector: NDArray[np.float32]
     ) -> int:
         thrust_vector = self._create_thrust_vector_from_direction_vector(
-            direction_vector
+            direction_vector, self._work_indicator_thrust_vector
         )
         return self._calculate_work_indicator_percentage_from_thrust_vector(
             thrust_vector
@@ -129,12 +149,11 @@ class Thrusters:
         Returns:
             thrust_vector (ndarray[float32]): 1D array of motor thrust values in the range [-1.0, 1.0], ordered for hardware output and sized to the configured number of motors.
         """
-        direction_vector = cast(
-            NDArray[np.float32], self.state.thrusters.direction_vector
-        ).copy()
+        direction_vector = self._direction_vector_buffer
+        direction_vector[:] = cast(NDArray[np.float32], self.state.thrusters.direction_vector)
 
         self._smooth_direction_vector(direction_vector, self.previous_direction_vector)
-        self.previous_direction_vector = direction_vector.copy()
+        self.previous_direction_vector[:] = direction_vector
 
         work_indicator_direction_vector = (
             self.regulator.apply_regulator_to_direction_vector(direction_vector)
@@ -146,7 +165,7 @@ class Thrusters:
         )
 
         thrust_vector = self._create_thrust_vector_from_direction_vector(
-            direction_vector
+            direction_vector, self._thrust_vector_buffer
         )
 
         self._reorder_thrust_vector(thrust_vector)
@@ -189,7 +208,8 @@ class Thrusters:
             )
             return None
         else:
-            thrust_vector = np.zeros(NUM_MOTORS, dtype=np.float32)
+            thrust_vector = self._test_thrust_vector
+            thrust_vector.fill(0.0)
             thrust_vector[test_thruster] = 0.1
             remaining = int(THRUSTER_TEST_DURATION_SECONDS - elapsed)
             if remaining != self.state.thrusters.last_remaining:
@@ -241,10 +261,15 @@ class Thrusters:
             self.state.rov_config.thruster_protocol,
             self.state.rov_config.dshot_speed,
         )
-        if current == self._last_sent_protocol_config:
+        generation = self.serial_manager.connection_generation
+        if (
+            current == self._last_sent_protocol_config
+            and generation == self._last_config_generation
+        ):
             return
         await self._send_config_packet(writer)
         self._last_sent_protocol_config = current
+        self._last_config_generation = generation
 
     def _determine_thrust_vector(
         self, current_time: float, last_send_time: float
@@ -279,7 +304,7 @@ class Thrusters:
 
         if current_time - last_send_time > THRUSTER_TIMEOUT_MS / 1000:
             self.state.thrusters.work_indicator_percentage = 0
-            return np.zeros(NUM_MOTORS, dtype=np.float32), last_send_time
+            return self._zero_thrust_vector, last_send_time
 
         return None, last_send_time
 
