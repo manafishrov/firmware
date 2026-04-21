@@ -65,31 +65,37 @@ def _map_log_level(level: LogLevel) -> int:
     return mapping.get(level, logging.INFO)
 
 
-def log_info(message: str, origin: LogOrigin = LogOrigin.FIRMWARE) -> None:
+def log_info(*args: object, origin: LogOrigin = LogOrigin.FIRMWARE) -> None:
     """Log an info message.
 
+    Accepts any number of arguments of any type, like ``print()``.
+
     Args:
-        message: The message to log.
+        *args: Values to log, joined by spaces.
         origin: The origin of the log message.
     """
-    _log_message(LogLevel.INFO, message, origin)
+    _log_message(LogLevel.INFO, " ".join(str(a) for a in args), origin)
 
 
-def log_warn(message: str, origin: LogOrigin = LogOrigin.FIRMWARE) -> None:
+def log_warn(*args: object, origin: LogOrigin = LogOrigin.FIRMWARE) -> None:
     """Log a warning message.
 
+    Accepts any number of arguments of any type, like ``print()``.
+
     Args:
-        message: The message to log.
+        *args: Values to log, joined by spaces.
         origin: The origin of the log message.
     """
-    _log_message(LogLevel.WARN, message, origin)
+    _log_message(LogLevel.WARN, " ".join(str(a) for a in args), origin)
 
 
-def log_error(message: str, origin: LogOrigin = LogOrigin.FIRMWARE) -> None:
+def log_error(*args: object, origin: LogOrigin = LogOrigin.FIRMWARE) -> None:
     """Log an error message.
 
+    Accepts any number of arguments of any type, like ``print()``.
+
     Args:
-        message: The message to log.
+        *args: Values to log, joined by spaces.
         origin: The origin of the log message.
     """
-    _log_message(LogLevel.ERROR, message, origin)
+    _log_message(LogLevel.ERROR, " ".join(str(a) for a in args), origin)
