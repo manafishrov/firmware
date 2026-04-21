@@ -28,9 +28,7 @@ in {
     nano
   ];
 
-  # Deploy firmware files and MCU firmware to the user's home directory.
-  # Uses a systemd service instead of home-manager because the SD image
-  # builder does not populate the nix database, which home-manager requires.
+  # Deploy firmware files and MCU firmware to the user's home directory
   systemd.services.manafish-setup = {
     wantedBy = ["multi-user.target"];
     before = ["manafish-firmware.service"];
@@ -43,18 +41,29 @@ in {
       FIRMWARE_DIR="${homeDir}/firmware"
       MCU_DIR="${homeDir}/mcu-firmware"
       CONFIG="$FIRMWARE_DIR/src/rov_firmware/config.json"
-      BACKUP="$FIRMWARE_DIR/src/rov_firmware/config-backup.json"
+      MARKER="$FIRMWARE_DIR/.nix-source"
+      CURRENT_SOURCE="${firmwareSource}"
 
-      [ -f "$CONFIG" ] && cp "$CONFIG" "$BACKUP"
-      rm -rf "$FIRMWARE_DIR"
-      cp -r ${firmwareSource} "$FIRMWARE_DIR"
-      chmod -R u+w "$FIRMWARE_DIR"
-      [ -f "$BACKUP" ] && mv "$BACKUP" "$CONFIG"
+      if [ ! -f "$MARKER" ] || [ "$(cat "$MARKER")" != "$CURRENT_SOURCE" ]; then
+        CONFIG_BACKUP="${homeDir}/.config-backup.json"
+        [ -f "$CONFIG" ] && cp "$CONFIG" "$CONFIG_BACKUP"
+        rm -rf "$FIRMWARE_DIR"
+        cp -r "$CURRENT_SOURCE" "$FIRMWARE_DIR"
+        chmod -R u+w "$FIRMWARE_DIR"
+        echo "$CURRENT_SOURCE" > "$MARKER"
+        [ -f "$CONFIG_BACKUP" ] && mv "$CONFIG_BACKUP" "$CONFIG"
+      fi
 
       mkdir -p "$MCU_DIR"
-      cp ${inputs.mcu-firmware-pico} "$MCU_DIR/pico-${mcuFirmwareVersion}.uf2"
-      cp ${inputs.mcu-firmware-pico2} "$MCU_DIR/pico2-${mcuFirmwareVersion}.uf2"
-      chmod u+w "$MCU_DIR"/*.uf2
+      for board in pico pico2; do
+        TARGET="$MCU_DIR/$board-${mcuFirmwareVersion}.uf2"
+        [ -f "$TARGET" ] && continue
+        case "$board" in
+          pico)  cp ${inputs.mcu-firmware-pico} "$TARGET" ;;
+          pico2) cp ${inputs.mcu-firmware-pico2} "$TARGET" ;;
+        esac
+        chmod u+w "$TARGET"
+      done
     '';
   };
 }
