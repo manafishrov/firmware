@@ -36,11 +36,11 @@
       flake = false;
     };
     mcu-firmware-pico = {
-      url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.0/pico-v1.0.0.uf2";
+      url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.1/pico-v1.0.1.uf2";
       flake = false;
     };
     mcu-firmware-pico2 = {
-      url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.0/pico2-v1.0.0.uf2";
+      url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.1/pico2-v1.0.1.uf2";
       flake = false;
     };
   };
@@ -53,7 +53,7 @@
     treefmt-nix,
     ...
   } @ inputs: let
-    mcuFirmwareVersion = "v1.0.0";
+    mcuFirmwareVersion = "v1.0.1";
     supportedSystems = [
       "aarch64-linux"
       "x86_64-linux"
