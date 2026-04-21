@@ -146,6 +146,7 @@ class Power(CamelCaseModel):
     regulator_limit: int
     min_battery_voltage: float
     max_battery_voltage: float
+    internal_resistance: float = 0.0
 
     @field_validator("min_battery_voltage", "max_battery_voltage", mode="after")
     @classmethod
@@ -153,6 +154,15 @@ class Power(CamelCaseModel):
         """Validate that battery voltage is positive."""
         if v <= 0:
             msg = "Battery voltage must be positive"
+            raise ValueError(msg)
+        return v
+
+    @field_validator("internal_resistance", mode="after")
+    @classmethod
+    def validate_internal_resistance(cls, v: float) -> float:
+        """Validate that internal resistance is non-negative."""
+        if v < 0:
+            msg = "Internal resistance must be non-negative"
             raise ValueError(msg)
         return v
 
