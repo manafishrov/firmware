@@ -9,8 +9,10 @@ from serial_asyncio_fast import open_serial_connection
 
 
 MCU_TELEMETRY_MAX_READ_BUFFER_SIZE = 16
+MCU_TELEMETRY_BATCH_HEADER_SIZE = 2
 MCU_TELEMETRY_BATCH_ENTRY_SIZE = 6
 MCU_TELEMETRY_BATCH_MAX_ITEMS = 16
+MCU_TELEMETRY_BATCH_MIN_PACKET_SIZE = 3
 MCU_TELEMETRY_BATCH_START_BYTE = 0xA6
 MCU_TELEMETRY_TYPE_ERPM = 0
 MCU_TELEMETRY_TYPE_VOLTAGE = 1
@@ -107,7 +109,9 @@ def _try_consume_telemetry_packet(
 
     packet = read_buffer[:MCU_TELEMETRY_PACKET_SIZE]
     if _validate_telemetry_packet(packet):
-        _log_telemetry(packet[1], packet[2], struct.unpack_from("<i", packet, 3)[0], logger)
+        _log_telemetry(
+            packet[1], packet[2], struct.unpack_from("<i", packet, 3)[0], logger
+        )
     read_buffer[:] = read_buffer[MCU_TELEMETRY_PACKET_SIZE:]
     return True
 
@@ -115,7 +119,7 @@ def _try_consume_telemetry_packet(
 def _try_consume_telemetry_batch(
     read_buffer: bytearray, logger: logging.Logger
 ) -> bool:
-    if len(read_buffer) < 2:
+    if len(read_buffer) < MCU_TELEMETRY_BATCH_HEADER_SIZE:
         return False
 
     item_count = read_buffer[1]
@@ -123,7 +127,9 @@ def _try_consume_telemetry_batch(
         read_buffer[:] = read_buffer[1:]
         return True
 
-    total_len = 3 + (item_count * MCU_TELEMETRY_BATCH_ENTRY_SIZE)
+    total_len = MCU_TELEMETRY_BATCH_MIN_PACKET_SIZE + (
+        item_count * MCU_TELEMETRY_BATCH_ENTRY_SIZE
+    )
     if len(read_buffer) < total_len:
         return False
 
@@ -157,11 +163,16 @@ def _validate_telemetry_packet(packet: bytearray) -> bool:
 
 
 def _validate_telemetry_batch_packet(packet: bytearray) -> bool:
-    if len(packet) < 3 or packet[0] != MCU_TELEMETRY_BATCH_START_BYTE:
+    if (
+        len(packet) < MCU_TELEMETRY_BATCH_MIN_PACKET_SIZE
+        or packet[0] != MCU_TELEMETRY_BATCH_START_BYTE
+    ):
         return False
 
     item_count = packet[1]
-    expected_len = 3 + (item_count * MCU_TELEMETRY_BATCH_ENTRY_SIZE)
+    expected_len = MCU_TELEMETRY_BATCH_MIN_PACKET_SIZE + (
+        item_count * MCU_TELEMETRY_BATCH_ENTRY_SIZE
+    )
     if item_count == 0 or item_count > MCU_TELEMETRY_BATCH_MAX_ITEMS:
         return False
     if len(packet) != expected_len:

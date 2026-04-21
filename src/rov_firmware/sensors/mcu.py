@@ -10,10 +10,10 @@ from ..constants import (
     LOG_LEVEL_WARN,
     LOG_PACKET_HEADER_SIZE,
     LOG_PACKET_START_BYTE,
+    MCU_PROTOCOL_DSHOT,
     MCU_TELEMETRY_BATCH_ENTRY_SIZE,
     MCU_TELEMETRY_BATCH_MAX_ITEMS,
     MCU_TELEMETRY_BATCH_START_BYTE,
-    MCU_PROTOCOL_DSHOT,
     MCU_TELEMETRY_PACKET_SIZE,
     MCU_TELEMETRY_STALE_TIMEOUT_S,
     MCU_TELEMETRY_START_BYTE,
@@ -39,6 +39,7 @@ from ..websocket.receive.mcu import flash_mcu_firmware, resolve_mcu_firmware
 
 _MAX_READ_BUFFER_SIZE = 512
 _READ_CHUNK_SIZE = 128
+_TELEMETRY_BATCH_MIN_PACKET_SIZE = 3
 _TELEMETRY_START_TOKEN = bytes((MCU_TELEMETRY_START_BYTE,))
 _TELEMETRY_BATCH_START_TOKEN = bytes((MCU_TELEMETRY_BATCH_START_BYTE,))
 _LOG_PACKET_START_TOKEN = bytes((LOG_PACKET_START_BYTE,))
@@ -127,7 +128,9 @@ class McuSensor:
                 read_buffer.clear()
                 return
 
-    def _consume_next_packet(self, read_buffer: bytearray, start_idx: int) -> int | None:
+    def _consume_next_packet(
+        self, read_buffer: bytearray, start_idx: int
+    ) -> int | None:
         packet_type = read_buffer[start_idx]
         if packet_type == MCU_TELEMETRY_BATCH_START_BYTE:
             return self._try_consume_telemetry_batch(read_buffer, start_idx)
@@ -139,7 +142,9 @@ class McuSensor:
             return self._try_consume_version(read_buffer, start_idx)
         return start_idx + 1
 
-    def _try_consume_telemetry(self, read_buffer: bytearray, start_idx: int) -> int | None:
+    def _try_consume_telemetry(
+        self, read_buffer: bytearray, start_idx: int
+    ) -> int | None:
         end_idx = start_idx + MCU_TELEMETRY_PACKET_SIZE
         if len(read_buffer) < end_idx:
             return None
@@ -182,7 +187,9 @@ class McuSensor:
             McuSensor._handle_log_packet(packet)
         return end_idx
 
-    def _try_consume_version(self, read_buffer: bytearray, start_idx: int) -> int | None:
+    def _try_consume_version(
+        self, read_buffer: bytearray, start_idx: int
+    ) -> int | None:
         end_idx = start_idx + MCU_VERSION_PACKET_SIZE
         if len(read_buffer) < end_idx:
             return None
@@ -217,12 +224,19 @@ class McuSensor:
         return calculated_checksum == packet[7]
 
     @staticmethod
-    def _validate_telemetry_batch_packet(packet: bytes | bytearray | memoryview) -> bool:
-        if len(packet) < 3 or packet[0] != MCU_TELEMETRY_BATCH_START_BYTE:
+    def _validate_telemetry_batch_packet(
+        packet: bytes | bytearray | memoryview,
+    ) -> bool:
+        if (
+            len(packet) < _TELEMETRY_BATCH_MIN_PACKET_SIZE
+            or packet[0] != MCU_TELEMETRY_BATCH_START_BYTE
+        ):
             return False
 
         item_count = packet[1]
-        expected_len = 3 + (item_count * MCU_TELEMETRY_BATCH_ENTRY_SIZE)
+        expected_len = _TELEMETRY_BATCH_MIN_PACKET_SIZE + (
+            item_count * MCU_TELEMETRY_BATCH_ENTRY_SIZE
+        )
         if item_count == 0 or item_count > MCU_TELEMETRY_BATCH_MAX_ITEMS:
             return False
         if len(packet) != expected_len:
@@ -356,7 +370,9 @@ class McuSensor:
             self._update_telemetry_item(global_id, packet_type, value)
             offset += MCU_TELEMETRY_BATCH_ENTRY_SIZE
 
-    def _update_telemetry_item(self, global_id: int, packet_type: int, value: int) -> None:
+    def _update_telemetry_item(
+        self, global_id: int, packet_type: int, value: int
+    ) -> None:
         if 0 <= global_id < NUM_MOTORS:
             self._last_telemetry_time[global_id] = time.monotonic()
             if packet_type == MCU_TELEMETRY_TYPE_ERPM:

@@ -212,8 +212,12 @@ class Regulator:
         self._unlimited_direction_vector: NDArray[np.float32] = np.zeros(
             8, dtype=np.float32
         )
-        self._depth_hold_vector_buffer: NDArray[np.float32] = np.zeros(3, dtype=np.float32)
-        self._movement_vector_buffer: NDArray[np.float32] = np.zeros(3, dtype=np.float32)
+        self._depth_hold_vector_buffer: NDArray[np.float32] = np.zeros(
+            3, dtype=np.float32
+        )
+        self._movement_vector_buffer: NDArray[np.float32] = np.zeros(
+            3, dtype=np.float32
+        )
         self._stabilization_input_buffer: NDArray[np.float32] = np.zeros(
             3, dtype=np.float32
         )

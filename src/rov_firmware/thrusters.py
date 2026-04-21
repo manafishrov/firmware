@@ -56,7 +56,9 @@ class Thrusters:
         self.previous_direction_vector: NDArray[np.float32] = np.zeros(
             8, dtype=np.float32
         )
-        self._direction_vector_buffer: NDArray[np.float32] = np.zeros(8, dtype=np.float32)
+        self._direction_vector_buffer: NDArray[np.float32] = np.zeros(
+            8, dtype=np.float32
+        )
         self._smoothing_buffer: NDArray[np.float32] = np.zeros(8, dtype=np.float32)
         self._thrust_vector_buffer: NDArray[np.float32] = np.zeros(
             NUM_MOTORS, dtype=np.float32
@@ -64,9 +66,15 @@ class Thrusters:
         self._work_indicator_thrust_vector: NDArray[np.float32] = np.zeros(
             NUM_MOTORS, dtype=np.float32
         )
-        self._test_thrust_vector: NDArray[np.float32] = np.zeros(NUM_MOTORS, dtype=np.float32)
-        self._zero_thrust_vector: NDArray[np.float32] = np.zeros(NUM_MOTORS, dtype=np.float32)
-        self._reorder_buffer: NDArray[np.float32] = np.zeros(NUM_MOTORS, dtype=np.float32)
+        self._test_thrust_vector: NDArray[np.float32] = np.zeros(
+            NUM_MOTORS, dtype=np.float32
+        )
+        self._zero_thrust_vector: NDArray[np.float32] = np.zeros(
+            NUM_MOTORS, dtype=np.float32
+        )
+        self._reorder_buffer: NDArray[np.float32] = np.zeros(
+            NUM_MOTORS, dtype=np.float32
+        )
 
     def _smooth_direction_vector(
         self,
@@ -80,7 +88,9 @@ class Thrusters:
 
         direction_vector_step = 1 / (THRUSTER_SEND_FREQUENCY * smoothing_factor)
 
-        np.subtract(direction_vector, previous_direction_vector, out=self._smoothing_buffer)
+        np.subtract(
+            direction_vector, previous_direction_vector, out=self._smoothing_buffer
+        )
         _ = np.clip(
             self._smoothing_buffer,
             -direction_vector_step,
@@ -150,7 +160,9 @@ class Thrusters:
             thrust_vector (ndarray[float32]): 1D array of motor thrust values in the range [-1.0, 1.0], ordered for hardware output and sized to the configured number of motors.
         """
         direction_vector = self._direction_vector_buffer
-        direction_vector[:] = cast(NDArray[np.float32], self.state.thrusters.direction_vector)
+        direction_vector[:] = cast(
+            NDArray[np.float32], self.state.thrusters.direction_vector
+        )
 
         self._smooth_direction_vector(direction_vector, self.previous_direction_vector)
         self.previous_direction_vector[:] = direction_vector
