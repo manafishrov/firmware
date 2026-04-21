@@ -92,25 +92,25 @@
     "mcu-firmware-pico": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-TOQhOUzTHEVZ0ulzdcQq7KctUv+vqkLYk5+0jNuc9is=",
+        "narHash": "sha256-lEzXurXmW6Zkhpona7BDqHISf+dDC9CrYYc+Vx8K5O4=",
         "type": "file",
-        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.1/pico-v1.0.1.uf2"
+        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.2/pico-v1.0.2.uf2"
       },
       "original": {
         "type": "file",
-        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.1/pico-v1.0.1.uf2"
+        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.2/pico-v1.0.2.uf2"
       }
     },
     "mcu-firmware-pico2": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-MazBQk9X8LUMiEr4hjr/y+PevOODjRvuMwm9WUEvL9g=",
+        "narHash": "sha256-4+tiVwAMUtcFv0LO1C4bRys3qTXgNyap5T07Ms9+J+8=",
         "type": "file",
-        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.1/pico2-v1.0.1.uf2"
+        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.2/pico2-v1.0.2.uf2"
       },
       "original": {
         "type": "file",
-        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.1/pico2-v1.0.1.uf2"
+        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.2/pico2-v1.0.2.uf2"
       }
     },
     "ms5837-src": {
