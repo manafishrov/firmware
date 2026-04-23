@@ -11,6 +11,11 @@ permissions:
 jobs:
   build-sd-image:
     runs-on: ubuntu-24.04-arm
+    env:
+      ARTIFACT_PREFIX: pi3-imx477
+      RETAIN_RELEASES: "3"
+      VERSION: ${{ github.ref_name }}
+      FIRMWARE_RELEASE_BASE_URL: ${{ vars.FIRMWARE_RELEASE_BASE_URL }}
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -25,52 +30,221 @@ jobs:
         with:
           diagnostic-endpoint: ""
 
-      - name: Build SD image
-        run: nix build --accept-flake-config
-
-      - name: Check if release exists
-        if: startsWith(github.ref, 'refs/tags/')
-        id: check_release
+      - name: Build Nix outputs
         run: |
-          if gh release view ${{ github.ref_name }} --json id > /dev/null 2>&1; then
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
+          nix build --accept-flake-config .#sdImage --out-link result-sd-image
+          nix build --accept-flake-config .#systemClosure --out-link result-system
+
+      - name: Assemble release artifacts
+        env:
+          FIRMWARE_SIGNING_PRIVATE_KEY: ${{ secrets.FIRMWARE_SIGNING_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$FIRMWARE_RELEASE_BASE_URL" ]; then
+            echo "::error::Repository variable FIRMWARE_RELEASE_BASE_URL is missing."
+            exit 1
           fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Create draft release
-        if: startsWith(github.ref, 'refs/tags/') && steps.check_release.outputs.exists == 'false'
-        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name }}
-          body: "Release assets for ${{ github.ref_name }}."
-          draft: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
+          nix profile install nixpkgs#python3 nixpkgs#zstd nixpkgs#minisign
 
-      - name: Upload to Cloud Storage (Rclone)
+          mkdir -p dist
+
+          SD_IMAGE_NAME="${ARTIFACT_PREFIX}-${VERSION}.img.zst"
+          CLOSURE_NAME="${ARTIFACT_PREFIX}-${VERSION}.closure.zst"
+          CHECKSUM_NAME="${ARTIFACT_PREFIX}-${VERSION}.sha256"
+          MANIFEST_NAME="${ARTIFACT_PREFIX}-${VERSION}.json"
+
+          cp result-sd-image/sd-image/*.img.zst "dist/${SD_IMAGE_NAME}"
+
+          SYSTEM_PATH="$(readlink -f result-system)"
+          mapfile -t CLOSURE_PATHS < <(nix-store --query --requisites "$SYSTEM_PATH" | sort -u)
+          nix-store --export "${CLOSURE_PATHS[@]}" | zstd -19 -T0 -o "dist/${CLOSURE_NAME}"
+
+          (
+            cd dist
+            sha256sum "${SD_IMAGE_NAME}" "${CLOSURE_NAME}" > "${CHECKSUM_NAME}"
+          )
+
+          SIGNING_ENABLED=false
+          if [ -n "${FIRMWARE_SIGNING_PRIVATE_KEY}" ]; then
+            printf '%s' "$FIRMWARE_SIGNING_PRIVATE_KEY" > firmware-signing.key
+            chmod 600 firmware-signing.key
+            minisign -S -s firmware-signing.key -m "dist/${SD_IMAGE_NAME}" -x "dist/${SD_IMAGE_NAME}.minisig"
+            minisign -S -s firmware-signing.key -m "dist/${CLOSURE_NAME}" -x "dist/${CLOSURE_NAME}.minisig"
+            minisign -S -s firmware-signing.key -m "dist/${CHECKSUM_NAME}" -x "dist/${CHECKSUM_NAME}.minisig"
+            SIGNING_ENABLED=true
+          fi
+
+          export SYSTEM_PATH
+          export SD_IMAGE_NAME
+          export CLOSURE_NAME
+          export CHECKSUM_NAME
+          export MANIFEST_NAME
+          export SIGNING_ENABLED
+
+          python3 <<'PY'
+          import hashlib
+          import json
+          import os
+          from datetime import datetime, timezone
+          from pathlib import Path
+
+          dist = Path("dist")
+          version = os.environ["VERSION"]
+          prefix = os.environ["ARTIFACT_PREFIX"]
+          base_url = os.environ["FIRMWARE_RELEASE_BASE_URL"].rstrip("/")
+          system_path = os.environ["SYSTEM_PATH"]
+          signing_enabled = os.environ["SIGNING_ENABLED"].lower() == "true"
+
+          def file_sha256(path: Path) -> str:
+            digest = hashlib.sha256()
+            with path.open("rb") as handle:
+              for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+            return digest.hexdigest()
+
+          artifacts = []
+          for file_name, kind, format_name in [
+            (os.environ["SD_IMAGE_NAME"], "sd-image", "nixos-sd-image"),
+            (os.environ["CLOSURE_NAME"], "system-closure", "nix-store-export+zstd"),
+            (os.environ["CHECKSUM_NAME"], "checksums", "sha256sum"),
+          ]:
+            path = dist / file_name
+            artifact = {
+              "name": file_name,
+              "kind": kind,
+              "format": format_name,
+              "url": f"{base_url}/{version}/{file_name}",
+              "size": path.stat().st_size,
+              "sha256": file_sha256(path),
+            }
+            signature_path = Path(f"{path}.minisig")
+            if signature_path.exists():
+              artifact["signature"] = {
+                "url": f"{base_url}/{version}/{signature_path.name}",
+                "format": "minisign",
+              }
+            artifacts.append(artifact)
+
+          manifest = {
+            "version": version,
+            "product": prefix,
+            "publishedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "releaseUrl": f"{base_url}/{version}/",
+            "offlineInstall": {
+              "systemPath": system_path,
+              "closureFormat": "nix-store --export + zstd",
+              "importCommand": f"zstd -dc {os.environ['CLOSURE_NAME']} | nix-store --import",
+            },
+            "signing": {
+              "enabled": signing_enabled,
+              "scheme": "minisign" if signing_enabled else None,
+            },
+            "artifacts": artifacts,
+          }
+
+          manifest_path = dist / os.environ["MANIFEST_NAME"]
+          manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+          PY
+
+          if [ "$SIGNING_ENABLED" = true ]; then
+            minisign -S -s firmware-signing.key -m "dist/${MANIFEST_NAME}" -x "dist/${MANIFEST_NAME}.minisig"
+            rm -f firmware-signing.key
+          fi
+
+      - name: Upload to cloud storage
         env:
           RCLONE_CONF_CONTENT: ${{ secrets.RCLONE_CONF }}
         run: |
+          set -euo pipefail
+
           if [ -z "$RCLONE_CONF_CONTENT" ]; then
             echo "::error::Secret RCLONE_CONF is missing. Skipping upload."
+            exit 1
+          fi
+
+          if [ -z "$FIRMWARE_RELEASE_BASE_URL" ]; then
+            echo "::error::Repository variable FIRMWARE_RELEASE_BASE_URL is missing."
             exit 1
           fi
 
           nix profile install nixpkgs#rclone
 
           mkdir -p ~/.config/rclone
-          echo "$RCLONE_CONF_CONTENT" > ~/.config/rclone/rclone.conf
+          printf '%s' "$RCLONE_CONF_CONTENT" > ~/.config/rclone/rclone.conf
 
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            TARGET_DIR="manual/${{ github.ref_name }}"
-          else
-            TARGET_DIR="releases/${{ github.ref_name }}"
-          fi
+          TARGET_DIR="${VERSION}"
 
           echo "Uploading to $TARGET_DIR..."
-          rclone copy result/sd-image/*.img.zst "remote:$TARGET_DIR" --progress
+          rclone copy dist "remote:${TARGET_DIR}" --progress
+          rclone copyto "dist/${ARTIFACT_PREFIX}-${VERSION}.json" "remote:latest.json"
+
+          if [ -f "dist/${ARTIFACT_PREFIX}-${VERSION}.json.minisig" ]; then
+            rclone copyto "dist/${ARTIFACT_PREFIX}-${VERSION}.json.minisig" "remote:latest.json.minisig"
+          else
+            rclone deletefile "remote:latest.json.minisig" || true
+          fi
+
+      - name: Prune old cloud releases
+        env:
+          RCLONE_CONF_CONTENT: ${{ secrets.RCLONE_CONF }}
+        run: |
+          set -euo pipefail
+
+          nix profile install nixpkgs#rclone
+
+          mkdir -p ~/.config/rclone
+          printf '%s' "$RCLONE_CONF_CONTENT" > ~/.config/rclone/rclone.conf
+
+          mapfile -t RELEASE_DIRS < <(rclone lsf remote: --dirs-only | tr -d '/' | awk '/^v/' | sort -V)
+
+          if [ "${#RELEASE_DIRS[@]}" -le "$RETAIN_RELEASES" ]; then
+            exit 0
+          fi
+
+          DELETE_COUNT=$((${#RELEASE_DIRS[@]} - RETAIN_RELEASES))
+          for OLD_RELEASE in "${RELEASE_DIRS[@]:0:${DELETE_COUNT}}"; do
+            rclone purge "remote:${OLD_RELEASE}"
+          done
+
+      - name: Generate release notes
+        run: |
+          set -euo pipefail
+
+          BASE_URL="${FIRMWARE_RELEASE_BASE_URL%/}/${VERSION}"
+          MANIFEST_NAME="${ARTIFACT_PREFIX}-${VERSION}.json"
+          CHECKSUM_NAME="${ARTIFACT_PREFIX}-${VERSION}.sha256"
+
+          cat > release-notes.md <<EOF
+          Release assets for ${VERSION}.
+
+          ## Firmware artifacts
+
+          - [${ARTIFACT_PREFIX}-${VERSION}.img.zst](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.img.zst)
+          - [${ARTIFACT_PREFIX}-${VERSION}.closure.zst](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.closure.zst)
+          - [${CHECKSUM_NAME}](${BASE_URL}/${CHECKSUM_NAME})
+          - [${MANIFEST_NAME}](${BASE_URL}/${MANIFEST_NAME})
+          - [latest.json](${FIRMWARE_RELEASE_BASE_URL%/}/latest.json)
+          EOF
+
+          if [ -f "dist/${ARTIFACT_PREFIX}-${VERSION}.img.zst.minisig" ]; then
+            cat >> release-notes.md <<EOF
+          - [${ARTIFACT_PREFIX}-${VERSION}.img.zst.minisig](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.img.zst.minisig)
+          - [${ARTIFACT_PREFIX}-${VERSION}.closure.zst.minisig](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.closure.zst.minisig)
+          - [${CHECKSUM_NAME}.minisig](${BASE_URL}/${CHECKSUM_NAME}.minisig)
+          - [${MANIFEST_NAME}.minisig](${BASE_URL}/${MANIFEST_NAME}.minisig)
+          - [latest.json.minisig](${FIRMWARE_RELEASE_BASE_URL%/}/latest.json.minisig)
+          EOF
+          fi
+
+      - name: Create or update draft release
+        uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          body_path: release-notes.md
+          draft: true
+          prerelease: ${{ contains(github.ref_name, '-') }}
