@@ -94,6 +94,8 @@
     };
 
     packages = forAllSystems (_: {
+      inherit (self.nixosConfigurations.pi3-imx477.config.system.build) sdImage;
+      systemClosure = self.nixosConfigurations.pi3-imx477.config.system.build.toplevel;
       default = self.nixosConfigurations.pi3-imx477.config.system.build.sdImage;
     });
 
