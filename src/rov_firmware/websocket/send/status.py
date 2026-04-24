@@ -18,31 +18,15 @@ async def handle_status_update(
         websocket: The WebSocket connection.
         state: The ROV state.
     """
-    power = state.rov_config.power
-
-    voltage_sum = 0.0
-    voltage_count = 0
-    current_sum = 0.0
-    for i, voltage in enumerate(state.mcu_telemetry.voltage):
-        if voltage > 0:
-            voltage_sum += voltage
-            voltage_count += 1
-            current_sum += state.mcu_telemetry.current[i]
-
-    average_voltage_v = voltage_sum / voltage_count if voltage_count > 0 else 0
-
-    # Compensate for voltage sag: V_unloaded = V_measured + I_total * R_internal
-    if average_voltage_v > 0 and power.internal_resistance > 0:
-        average_voltage_v += current_sum * power.internal_resistance
-
-    min_v = power.min_battery_voltage
-    max_v = power.max_battery_voltage
+    voltages_v = [v for v in state.mcu_telemetry.voltage if v > 0]
+    average_voltage_v = sum(voltages_v) / len(voltages_v) if voltages_v else 0
+    min_v = state.rov_config.power.min_battery_voltage
+    max_v = state.rov_config.power.max_battery_voltage
     current_percentage = (
-        max(0.0, min(100.0, ((average_voltage_v - min_v) / (max_v - min_v)) * 100))
+        max(0, min(100, ((average_voltage_v - min_v) / (max_v - min_v)) * 100))
         if average_voltage_v
-        else 0.0
+        else 0
     )
-
     state.system_status.battery_percentage = (
         BATTERY_EMA_ALPHA * current_percentage
         + (1 - BATTERY_EMA_ALPHA) * state.system_status.battery_percentage
