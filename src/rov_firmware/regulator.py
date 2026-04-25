@@ -288,7 +288,6 @@ class Regulator:
 
         if self.state.system_status.auto_stabilization:
             if not self.state.rov_config.regulator.fpv_mode:
-
                 desired_yaw_change = cast(
                     float,
                     direction_vector[4]
@@ -311,7 +310,9 @@ class Regulator:
                     self.desired_attitude.as_euler("ZYX", degrees=True),
                 )
                 pitch = pitch + desired_pitch_change
-                pitch = cast(float, np.clip(pitch, -PITCH_MAX, PITCH_MAX, dtype=np.float32))
+                pitch = cast(
+                    float, np.clip(pitch, -PITCH_MAX, PITCH_MAX, dtype=np.float32)
+                )
                 self.desired_attitude = Rotation.from_euler(
                     "ZYX", [yaw, pitch, roll], degrees=True
                 )
@@ -346,11 +347,13 @@ class Regulator:
                     * self.delta_t_run_regulator
                     * self.state.rov_config.regulator.roll.rate,
                 )
-                local_rotation = Rotation.from_rotvec([
-                    np.deg2rad(desired_roll_change, dtype=np.float32),
-                    np.deg2rad(desired_pitch_change, dtype=np.float32),
-                    np.deg2rad(desired_yaw_change, dtype=np.float32),
-                ])
+                local_rotation = Rotation.from_rotvec(
+                    [
+                        np.deg2rad(desired_roll_change, dtype=np.float32),
+                        np.deg2rad(desired_pitch_change, dtype=np.float32),
+                        np.deg2rad(desired_yaw_change, dtype=np.float32),
+                    ]
+                )
                 self.desired_attitude = self.desired_attitude * local_rotation
 
             yaw, pitch, roll = self.desired_attitude.as_euler("ZYX", degrees=True)
