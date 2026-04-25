@@ -22,15 +22,12 @@ async def handle_status_update(
     average_voltage_v = sum(voltages_v) / len(voltages_v) if voltages_v else 0
     min_v = state.rov_config.power.min_battery_voltage
     max_v = state.rov_config.power.max_battery_voltage
-    current_percentage = (
+    state.system_status.battery_percentage = (
         max(0, min(100, ((average_voltage_v - min_v) / (max_v - min_v)) * 100))
         if average_voltage_v
         else 0
     )
-    state.system_status.battery_percentage = (
-        BATTERY_EMA_ALPHA * current_percentage
-        + (1 - BATTERY_EMA_ALPHA) * state.system_status.battery_percentage
-    )
+     
 
     payload = RovStatus(
         auto_stabilization=state.system_status.auto_stabilization,
