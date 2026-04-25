@@ -2,7 +2,6 @@
 
 from websockets import ServerConnection
 
-from ...constants import BATTERY_EMA_ALPHA
 from ...models.rov_status import RovStatus
 from ...rov_state import RovState
 from ..message import StatusUpdate
@@ -27,7 +26,6 @@ async def handle_status_update(
         if average_voltage_v
         else 0
     )
-     
 
     payload = RovStatus(
         auto_stabilization=state.system_status.auto_stabilization,
