@@ -1,6 +1,5 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "allowedCommands": ["sync-python-deps.sh"],
   "extends": [
     "config:best-practices",
     "schedule:earlyMondays",
@@ -11,7 +10,6 @@
   ],
   "enabledManagers": ["nix", "custom.regex", "github-actions"],
   "postUpgradeTasks": {
-    "commands": ["sync-python-deps.sh"],
     "fileFilters": ["pyproject.toml", "flake.lock", "configuration.nix"],
     "executionMode": "update"
   },
