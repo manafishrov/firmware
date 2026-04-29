@@ -13,9 +13,10 @@ jobs:
     runs-on: ubuntu-24.04-arm
     env:
       ARTIFACT_PREFIX: pi3-imx477
+      RELEASES_PREFIX: releases
       RETAIN_RELEASES: "3"
       VERSION: ${{ github.ref_name }}
-      FIRMWARE_RELEASE_BASE_URL: ${{ vars.FIRMWARE_RELEASE_BASE_URL }}
+      FIRMWARE_RELEASE_BASE_URL: https://s3.manafishrov.com/manafishrov-firmware
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -94,6 +95,7 @@ jobs:
           version = os.environ["VERSION"]
           prefix = os.environ["ARTIFACT_PREFIX"]
           base_url = os.environ["FIRMWARE_RELEASE_BASE_URL"].rstrip("/")
+          release_dir = os.environ["RELEASES_PREFIX"].strip("/")
           system_path = os.environ["SYSTEM_PATH"]
           signing_enabled = os.environ["SIGNING_ENABLED"].lower() == "true"
 
@@ -115,14 +117,14 @@ jobs:
               "name": file_name,
               "kind": kind,
               "format": format_name,
-              "url": f"{base_url}/{version}/{file_name}",
+              "url": f"{base_url}/{release_dir}/{version}/{file_name}",
               "size": path.stat().st_size,
               "sha256": file_sha256(path),
             }
             signature_path = Path(f"{path}.minisig")
             if signature_path.exists():
               artifact["signature"] = {
-                "url": f"{base_url}/{version}/{signature_path.name}",
+                "url": f"{base_url}/{release_dir}/{version}/{signature_path.name}",
                 "format": "minisign",
               }
             artifacts.append(artifact)
@@ -131,7 +133,7 @@ jobs:
             "version": version,
             "product": prefix,
             "publishedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "releaseUrl": f"{base_url}/{version}/",
+            "releaseUrl": f"{base_url}/{release_dir}/{version}/",
             "offlineInstall": {
               "systemPath": system_path,
               "closureFormat": "nix-store --export + zstd",
@@ -174,16 +176,16 @@ jobs:
           mkdir -p ~/.config/rclone
           printf '%s' "$RCLONE_CONF_CONTENT" > ~/.config/rclone/rclone.conf
 
-          TARGET_DIR="${VERSION}"
+          TARGET_DIR="${RELEASES_PREFIX}/${VERSION}"
 
           echo "Uploading to $TARGET_DIR..."
           rclone copy dist "remote:${TARGET_DIR}" --progress
-          rclone copyto "dist/${ARTIFACT_PREFIX}-${VERSION}.json" "remote:latest.json"
+          rclone copyto "dist/${ARTIFACT_PREFIX}-${VERSION}.json" "remote:${RELEASES_PREFIX}/latest.json"
 
           if [ -f "dist/${ARTIFACT_PREFIX}-${VERSION}.json.minisig" ]; then
-            rclone copyto "dist/${ARTIFACT_PREFIX}-${VERSION}.json.minisig" "remote:latest.json.minisig"
+            rclone copyto "dist/${ARTIFACT_PREFIX}-${VERSION}.json.minisig" "remote:${RELEASES_PREFIX}/latest.json.minisig"
           else
-            rclone deletefile "remote:latest.json.minisig" || true
+            rclone deletefile "remote:${RELEASES_PREFIX}/latest.json.minisig" || true
           fi
 
       - name: Prune old cloud releases
@@ -197,7 +199,7 @@ jobs:
           mkdir -p ~/.config/rclone
           printf '%s' "$RCLONE_CONF_CONTENT" > ~/.config/rclone/rclone.conf
 
-          mapfile -t RELEASE_DIRS < <(rclone lsf remote: --dirs-only | tr -d '/' | awk '/^v/' | sort -V)
+          mapfile -t RELEASE_DIRS < <(rclone lsf "remote:${RELEASES_PREFIX}" --dirs-only | tr -d '/' | awk '/^v/' | sort -V)
 
           if [ "${#RELEASE_DIRS[@]}" -le "$RETAIN_RELEASES" ]; then
             exit 0
@@ -205,14 +207,14 @@ jobs:
 
           DELETE_COUNT=$((${#RELEASE_DIRS[@]} - RETAIN_RELEASES))
           for OLD_RELEASE in "${RELEASE_DIRS[@]:0:${DELETE_COUNT}}"; do
-            rclone purge "remote:${OLD_RELEASE}"
+            rclone purge "remote:${RELEASES_PREFIX}/${OLD_RELEASE}"
           done
 
       - name: Generate release notes
         run: |
           set -euo pipefail
 
-          BASE_URL="${FIRMWARE_RELEASE_BASE_URL%/}/${VERSION}"
+          BASE_URL="${FIRMWARE_RELEASE_BASE_URL%/}/${RELEASES_PREFIX}/${VERSION}"
           MANIFEST_NAME="${ARTIFACT_PREFIX}-${VERSION}.json"
           CHECKSUM_NAME="${ARTIFACT_PREFIX}-${VERSION}.sha256"
 
@@ -225,7 +227,7 @@ jobs:
           - [${ARTIFACT_PREFIX}-${VERSION}.closure.zst](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.closure.zst)
           - [${CHECKSUM_NAME}](${BASE_URL}/${CHECKSUM_NAME})
           - [${MANIFEST_NAME}](${BASE_URL}/${MANIFEST_NAME})
-          - [latest.json](${FIRMWARE_RELEASE_BASE_URL%/}/latest.json)
+          - [latest.json](${FIRMWARE_RELEASE_BASE_URL%/}/${RELEASES_PREFIX}/latest.json)
           EOF
 
           if [ -f "dist/${ARTIFACT_PREFIX}-${VERSION}.img.zst.minisig" ]; then
@@ -234,7 +236,7 @@ jobs:
           - [${ARTIFACT_PREFIX}-${VERSION}.closure.zst.minisig](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.closure.zst.minisig)
           - [${CHECKSUM_NAME}.minisig](${BASE_URL}/${CHECKSUM_NAME}.minisig)
           - [${MANIFEST_NAME}.minisig](${BASE_URL}/${MANIFEST_NAME}.minisig)
-          - [latest.json.minisig](${FIRMWARE_RELEASE_BASE_URL%/}/latest.json.minisig)
+          - [latest.json.minisig](${FIRMWARE_RELEASE_BASE_URL%/}/${RELEASES_PREFIX}/latest.json.minisig)
           EOF
           fi
 

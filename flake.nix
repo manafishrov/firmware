@@ -116,7 +116,10 @@
       pkgs = nixpkgs.legacyPackages.${system};
     in {
       default = pkgs.mkShell {
-        buildInputs = [pkgs.uv];
+        buildInputs = [
+          pkgs.minisign
+          pkgs.uv
+        ];
       };
     });
   };
