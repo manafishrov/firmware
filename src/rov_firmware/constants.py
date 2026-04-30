@@ -1,5 +1,7 @@
 """Constants used throughout the firmware."""
 
+from pathlib import Path
+import re
 from typing import Final
 
 
@@ -66,6 +68,19 @@ MOTORS_PER_BUS: Final = 4
 THRUSTER_TEST_TOAST_ID: Final = "thruster-test"
 AUTO_TUNING_TOAST_ID: Final = "regulator-auto-tuning"
 FLASH_TOAST_ID: Final = "flash-mcu-firmware"
+FIRMWARE_UPDATE_TOAST_ID: Final = "firmware-update"
+
+# Firmware update
+FIRMWARE_UPDATE_PORT: Final = 9100
+FIRMWARE_UPDATE_DIR: Final = Path.home() / ".cache" / "manafish-firmware-update"
+FIRMWARE_UPDATE_REQUEST_PATH: Final = FIRMWARE_UPDATE_DIR / "request.json"
+FIRMWARE_UPDATE_STATUS_PATH: Final = FIRMWARE_UPDATE_DIR / "status.json"
+FIRMWARE_UPDATE_MAX_HEADER_BYTES: Final = 64 * 1024
+FIRMWARE_UPDATE_CHUNK_SIZE: Final = 1024 * 1024
+FIRMWARE_UPDATE_FREE_SPACE_MARGIN_BYTES: Final = 512 * 1024 * 1024
+FIRMWARE_UPDATE_NIX_SYSTEM_PATH_RE: Final[re.Pattern[str]] = re.compile(
+    r"^/nix/store/[a-z0-9]{32}-nixos-system-.+"
+)
 
 # General
 SYSTEM_FAILURE_THRESHOLD: Final = 3

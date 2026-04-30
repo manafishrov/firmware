@@ -1,4 +1,5 @@
 {
+  config,
   pkgs,
   lib,
   inputs,
@@ -65,6 +66,77 @@
     export PATH="${lib.makeBinPath [pkgs.picotool]}:$PATH"
     exec ${lib.getExe' python-env "python3"} -c "from tools import cli; cli()"
   '';
+
+  firmwareUpdateInstaller = pkgs.writeShellScriptBin "install-firmware-update" ''
+    set -euo pipefail
+
+    UPDATE_DIR="/home/pi/.cache/manafish-firmware-update"
+    REQUEST="$UPDATE_DIR/request.json"
+    STATUS="$UPDATE_DIR/status.json"
+    PUBLIC_KEY="RWQ79VrKeNgtcTOSQWqd8vI9zVSZbrzXzuUNUzht6ZpHwRLLnUZPSl8s"
+
+    write_status() {
+      local phase="$1"
+      local message="''${2:-}"
+      PHASE="$phase" MESSAGE="$message" STATUS="$STATUS" ${lib.getExe' python-env "python3"} -c 'import json, os; from pathlib import Path; Path(os.environ["STATUS"]).write_text(json.dumps({"phase": os.environ["PHASE"], "message": os.environ["MESSAGE"]}), encoding="utf-8")'
+    }
+
+    fail() {
+      write_status failed "$1"
+      exit 1
+    }
+
+    read_field() {
+      local field="$1"
+      FIELD="$field" REQUEST="$REQUEST" ${lib.getExe' python-env "python3"} -c 'import json, os; print(json.load(open(os.environ["REQUEST"], encoding="utf-8"))[os.environ["FIELD"]])'
+    }
+
+    [ -f "$REQUEST" ] || fail "No firmware update request found."
+
+    CLOSURE_PATH="$(read_field closurePath)"
+    SIGNATURE_PATH="$(read_field signaturePath)"
+    SYSTEM_PATH="$(read_field systemPath)"
+
+    case "$CLOSURE_PATH" in
+      "$UPDATE_DIR"/*.closure.zst) ;;
+      *) fail "Firmware closure path is outside the update staging directory." ;;
+    esac
+    case "$SIGNATURE_PATH" in
+      "$UPDATE_DIR"/*.closure.zst.minisig) ;;
+      *) fail "Firmware signature path is outside the update staging directory." ;;
+    esac
+    case "$SYSTEM_PATH" in
+      /nix/store/*-nixos-system-*) ;;
+      *) fail "Firmware system path is not a NixOS system closure." ;;
+    esac
+
+    [ -f "$CLOSURE_PATH" ] || fail "Firmware closure is missing."
+    [ -f "$SIGNATURE_PATH" ] || fail "Firmware signature is missing."
+    [ ! -L "$CLOSURE_PATH" ] || fail "Firmware closure must not be a symlink."
+    [ ! -L "$SIGNATURE_PATH" ] || fail "Firmware signature must not be a symlink."
+
+    write_status verifying "Verifying firmware update signature."
+    ${lib.getExe pkgs.minisign} -Vm "$CLOSURE_PATH" -P "$PUBLIC_KEY" -x "$SIGNATURE_PATH" \
+      || fail "Firmware signature verification failed."
+
+    write_status importing "Importing firmware closure."
+    IMPORTED_PATHS="$(${lib.getExe pkgs.zstd} -dc "$CLOSURE_PATH" | ${config.nix.package}/bin/nix-store --import)" \
+      || fail "Firmware closure import failed."
+
+    printf '%s\n' "$IMPORTED_PATHS" | ${lib.getExe pkgs.gnugrep} -Fx "$SYSTEM_PATH" >/dev/null \
+      || fail "Firmware system path was not present in imported closure."
+    [ -x "$SYSTEM_PATH/bin/switch-to-configuration" ] \
+      || fail "Firmware activation command is missing."
+
+    write_status activating "Activating firmware system generation."
+    "$SYSTEM_PATH/bin/switch-to-configuration" switch \
+      || fail "Firmware system activation failed."
+
+    write_status activated "Firmware update activated; waiting for MCU firmware verification."
+    rm -f "$CLOSURE_PATH" "$SIGNATURE_PATH" "$REQUEST"
+    ${pkgs.systemd}/bin/systemctl restart manafish-setup.service || true
+    ${pkgs.systemd}/bin/systemctl restart manafish-firmware.service || true
+  '';
 in {
   environment.systemPackages = with pkgs; [
     htop
@@ -74,6 +146,11 @@ in {
     python-env
     startScript
     toolsScript
+    firmwareUpdateInstaller
+  ];
+
+  systemd.tmpfiles.rules = [
+    "d /home/pi/.cache/manafish-firmware-update 0755 pi users - -"
   ];
 
   systemd.services.manafish-firmware = {
@@ -89,5 +166,23 @@ in {
       Restart = "always";
       RestartSec = "5";
     };
+  };
+
+  systemd.paths.manafish-firmware-update = {
+    wantedBy = ["multi-user.target"];
+    pathConfig = {
+      PathChanged = "/home/pi/.cache/manafish-firmware-update/request.json";
+      Unit = "manafish-firmware-update.service";
+    };
+  };
+
+  systemd.services.manafish-firmware-update = {
+    serviceConfig = {
+      Type = "oneshot";
+      User = "root";
+    };
+    script = ''
+      ${lib.getExe firmwareUpdateInstaller}
+    '';
   };
 }

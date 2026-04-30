@@ -21,3 +21,4 @@ class RovState:
         self.regulator: RegulatorData = RegulatorData()
         self.thrusters: ThrusterData = ThrusterData()
         self.mcu_flashing: bool = False
+        self.firmware_uploading: bool = False
