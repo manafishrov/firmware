@@ -1,10 +1,14 @@
 """MCU sensor interface for the ROV firmware."""
 
 import asyncio
+import json
 import struct
 import time
+from typing import cast
 
 from ..constants import (
+    FIRMWARE_UPDATE_STATUS_PATH,
+    FIRMWARE_UPDATE_TOAST_ID,
     LOG_LEVEL_ERROR,
     LOG_LEVEL_INFO,
     LOG_LEVEL_WARN,
@@ -30,8 +34,10 @@ from ..constants import (
 from ..log import log_error, log_info, log_warn
 from ..models.config import CurrentSensingMode, ThrusterProtocol
 from ..models.log import LogLevel, LogOrigin
+from ..models.toast import ToastContent
 from ..rov_state import RovState
 from ..serial import SerialManager
+from ..toast import toast_success
 from ..websocket.message import Config
 from ..websocket.queue import get_message_queue
 from ..websocket.receive.mcu import flash_mcu_firmware, resolve_mcu_firmware
@@ -71,6 +77,7 @@ class McuSensor:
         self.state: RovState = state
         self.serial_manager: SerialManager = serial_manager
         self._last_telemetry_time: list[float] = [0.0] * NUM_MOTORS
+        self._firmware_update_flash_started: bool = False
 
     async def read_loop(self) -> None:
         """Read telemetry data from the MCU in a loop."""
@@ -305,8 +312,7 @@ class McuSensor:
             get_message_queue().put_nowait(Config(payload=self.state.rov_config))
 
         expected = self._get_expected_version()
-        if expected is not None and version != expected:
-            self._schedule_version_mismatch_flash(version, expected)
+        self._handle_firmware_update_mcu_state(version, expected)
 
     def _get_expected_version(self) -> str | None:
         resolved = resolve_mcu_firmware(self.state.rov_config.mcu_board)
@@ -314,15 +320,88 @@ class McuSensor:
             return None
         return resolved[1]
 
-    def _schedule_version_mismatch_flash(
-        self, current_version: str, expected_version: str
+    def _handle_firmware_update_mcu_state(
+        self, current_version: str, expected_version: str | None
     ) -> None:
+        if not self._is_firmware_update_activation_pending():
+            return
+
+        if expected_version is None:
+            log_warn(
+                "Firmware update activated, but no bundled MCU firmware was found."
+            )
+            return
+
+        if current_version == expected_version:
+            self._complete_firmware_update_if_pending()
+            return
+
+        if self._firmware_update_flash_started:
+            return
+
+        self._firmware_update_flash_started = True
         log_warn(
-            f"MCU firmware version mismatch: {current_version} != {expected_version}. Auto-flashing..."
+            f"Firmware update activated with MCU firmware {current_version}; flashing bundled {expected_version}."
         )
-        board = self.state.rov_config.mcu_board
-        asyncio.get_running_loop().create_task(
-            flash_mcu_firmware(self.state, board, show_toasts=True)
+        _ = asyncio.get_running_loop().create_task(
+            self._flash_mcu_after_firmware_update()
+        )
+
+    async def _flash_mcu_after_firmware_update(self) -> None:
+        succeeded = await flash_mcu_firmware(
+            self.state,
+            self.state.rov_config.mcu_board,
+            show_toasts=True,
+            toast_identifier=FIRMWARE_UPDATE_TOAST_ID,
+        )
+        if succeeded:
+            self._complete_firmware_update_if_pending()
+            return
+
+        self._write_firmware_update_status(
+            "failed", "MCU firmware flash failed after system update."
+        )
+
+    @staticmethod
+    def _read_firmware_update_status() -> dict[str, object] | None:
+        status_path = FIRMWARE_UPDATE_STATUS_PATH
+        if not status_path.exists():
+            return None
+
+        try:
+            status = json.loads(status_path.read_text(encoding="utf-8"))
+        except Exception:
+            return None
+
+        if not isinstance(status, dict):
+            return None
+
+        return cast(dict[str, object], status)
+
+    @classmethod
+    def _is_firmware_update_activation_pending(cls) -> bool:
+        status = cls._read_firmware_update_status()
+        return status is not None and status.get("phase") == "activated"
+
+    @classmethod
+    def _complete_firmware_update_if_pending(cls) -> None:
+        if not cls._is_firmware_update_activation_pending():
+            return
+
+        cls._write_firmware_update_status(
+            "completed", "Firmware and MCU versions verified."
+        )
+        toast_success(
+            identifier=FIRMWARE_UPDATE_TOAST_ID,
+            content=ToastContent(message_key="toasts_firmware_update_success"),
+            action=None,
+        )
+
+    @staticmethod
+    def _write_firmware_update_status(phase: str, message: str) -> None:
+        _ = FIRMWARE_UPDATE_STATUS_PATH.write_text(
+            json.dumps({"phase": phase, "message": message}),
+            encoding="utf-8",
         )
 
     def _reset_telemetry(self) -> None:
