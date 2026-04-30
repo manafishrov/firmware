@@ -67,22 +67,17 @@ jobs:
             sha256sum "${SD_IMAGE_NAME}" "${CLOSURE_NAME}" > "${CHECKSUM_NAME}"
           )
 
-          SIGNING_ENABLED=false
-          if [ -n "${FIRMWARE_SIGNING_PRIVATE_KEY}" ]; then
-            printf '%s' "$FIRMWARE_SIGNING_PRIVATE_KEY" > firmware-signing.key
-            chmod 600 firmware-signing.key
-            minisign -S -s firmware-signing.key -m "dist/${SD_IMAGE_NAME}" -x "dist/${SD_IMAGE_NAME}.minisig"
-            minisign -S -s firmware-signing.key -m "dist/${CLOSURE_NAME}" -x "dist/${CLOSURE_NAME}.minisig"
-            minisign -S -s firmware-signing.key -m "dist/${CHECKSUM_NAME}" -x "dist/${CHECKSUM_NAME}.minisig"
-            SIGNING_ENABLED=true
-          fi
+          printf '%s' "$FIRMWARE_SIGNING_PRIVATE_KEY" > firmware-signing.key
+          chmod 600 firmware-signing.key
+          minisign -S -s firmware-signing.key -m "dist/${SD_IMAGE_NAME}" -x "dist/${SD_IMAGE_NAME}.minisig"
+          minisign -S -s firmware-signing.key -m "dist/${CLOSURE_NAME}" -x "dist/${CLOSURE_NAME}.minisig"
+          minisign -S -s firmware-signing.key -m "dist/${CHECKSUM_NAME}" -x "dist/${CHECKSUM_NAME}.minisig"
 
           export SYSTEM_PATH
           export SD_IMAGE_NAME
           export CLOSURE_NAME
           export CHECKSUM_NAME
           export MANIFEST_NAME
-          export SIGNING_ENABLED
 
           python3 <<'PY'
           import hashlib
@@ -97,8 +92,6 @@ jobs:
           base_url = os.environ["FIRMWARE_RELEASE_BASE_URL"].rstrip("/")
           release_dir = os.environ["RELEASES_PREFIX"].strip("/")
           system_path = os.environ["SYSTEM_PATH"]
-          signing_enabled = os.environ["SIGNING_ENABLED"].lower() == "true"
-
           def file_sha256(path: Path) -> str:
             digest = hashlib.sha256()
             with path.open("rb") as handle:
@@ -122,11 +115,10 @@ jobs:
               "sha256": file_sha256(path),
             }
             signature_path = Path(f"{path}.minisig")
-            if signature_path.exists():
-              artifact["signature"] = {
-                "url": f"{base_url}/{release_dir}/{version}/{signature_path.name}",
-                "format": "minisign",
-              }
+            artifact["signature"] = {
+              "url": f"{base_url}/{release_dir}/{version}/{signature_path.name}",
+              "format": "minisign",
+            }
             artifacts.append(artifact)
 
           manifest = {
@@ -140,8 +132,8 @@ jobs:
               "importCommand": f"zstd -dc {os.environ['CLOSURE_NAME']} | nix-store --import",
             },
             "signing": {
-              "enabled": signing_enabled,
-              "scheme": "minisign" if signing_enabled else None,
+              "enabled": True,
+              "scheme": "minisign",
             },
             "artifacts": artifacts,
           }
@@ -150,10 +142,8 @@ jobs:
           manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
           PY
 
-          if [ "$SIGNING_ENABLED" = true ]; then
-            minisign -S -s firmware-signing.key -m "dist/${MANIFEST_NAME}" -x "dist/${MANIFEST_NAME}.minisig"
-            rm -f firmware-signing.key
-          fi
+          minisign -S -s firmware-signing.key -m "dist/${MANIFEST_NAME}" -x "dist/${MANIFEST_NAME}.minisig"
+          rm -f firmware-signing.key
 
       - name: Upload to cloud storage
         env:
@@ -181,12 +171,7 @@ jobs:
           echo "Uploading to $TARGET_DIR..."
           rclone copy dist "remote:${TARGET_DIR}" --progress
           rclone copyto "dist/${ARTIFACT_PREFIX}-${VERSION}.json" "remote:${RELEASES_PREFIX}/latest.json"
-
-          if [ -f "dist/${ARTIFACT_PREFIX}-${VERSION}.json.minisig" ]; then
-            rclone copyto "dist/${ARTIFACT_PREFIX}-${VERSION}.json.minisig" "remote:${RELEASES_PREFIX}/latest.json.minisig"
-          else
-            rclone deletefile "remote:${RELEASES_PREFIX}/latest.json.minisig" || true
-          fi
+          rclone copyto "dist/${ARTIFACT_PREFIX}-${VERSION}.json.minisig" "remote:${RELEASES_PREFIX}/latest.json.minisig"
 
       - name: Prune old cloud releases
         env:
@@ -230,15 +215,13 @@ jobs:
           - [latest.json](${FIRMWARE_RELEASE_BASE_URL%/}/${RELEASES_PREFIX}/latest.json)
           EOF
 
-          if [ -f "dist/${ARTIFACT_PREFIX}-${VERSION}.img.zst.minisig" ]; then
-            cat >> release-notes.md <<EOF
+          cat >> release-notes.md <<EOF
           - [${ARTIFACT_PREFIX}-${VERSION}.img.zst.minisig](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.img.zst.minisig)
           - [${ARTIFACT_PREFIX}-${VERSION}.closure.zst.minisig](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.closure.zst.minisig)
           - [${CHECKSUM_NAME}.minisig](${BASE_URL}/${CHECKSUM_NAME}.minisig)
           - [${MANIFEST_NAME}.minisig](${BASE_URL}/${MANIFEST_NAME}.minisig)
           - [latest.json.minisig](${FIRMWARE_RELEASE_BASE_URL%/}/${RELEASES_PREFIX}/latest.json.minisig)
           EOF
-          fi
 
       - name: Create or update draft release
         uses: softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3
