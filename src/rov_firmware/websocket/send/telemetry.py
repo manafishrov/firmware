@@ -18,22 +18,13 @@ async def handle_telemetry(
         websocket: The WebSocket connection.
         state: The ROV state.
     """
-    electronics_temperature_sum = 0.0
-    electronics_temperature_count = 0
-
-    if state.imu.temperature > 0:
-        electronics_temperature_sum += state.imu.temperature
-        electronics_temperature_count += 1
-
-    for temperature in state.mcu_telemetry.temperature:
-        if temperature > 0:
-            electronics_temperature_sum += temperature
-            electronics_temperature_count += 1
-
+    valid_esc_temperatures = [
+        temperature
+        for temperature in state.mcu_telemetry.temperature
+        if temperature > 0
+    ]
     electronics_temperature = (
-        electronics_temperature_sum / electronics_temperature_count
-        if electronics_temperature_count > 0
-        else 0
+        float(max(valid_esc_temperatures)) if valid_esc_temperatures else 0.0
     )
 
     if state.system_status.depth_hold:
