@@ -72,7 +72,7 @@ FIRMWARE_UPDATE_TOAST_ID: Final = "firmware-update"
 
 # Firmware update
 FIRMWARE_UPDATE_PORT: Final = 9100
-FIRMWARE_UPDATE_DIR: Final = Path.home() / ".cache" / "manafish-firmware-update"
+FIRMWARE_UPDATE_DIR: Final = Path("/var/lib/manafish-firmware-update")
 FIRMWARE_UPDATE_REQUEST_PATH: Final = FIRMWARE_UPDATE_DIR / "request.json"
 FIRMWARE_UPDATE_STATUS_PATH: Final = FIRMWARE_UPDATE_DIR / "status.json"
 FIRMWARE_UPDATE_MAX_HEADER_BYTES: Final = 64 * 1024

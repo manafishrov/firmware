@@ -70,7 +70,7 @@
   firmwareUpdateInstaller = pkgs.writeShellScriptBin "install-firmware-update" ''
     set -euo pipefail
 
-    UPDATE_DIR="/home/pi/.cache/manafish-firmware-update"
+    UPDATE_DIR="/var/lib/manafish-firmware-update"
     REQUEST="$UPDATE_DIR/request.json"
     STATUS="$UPDATE_DIR/status.json"
     PUBLIC_KEY="RWQ79VrKeNgtcTOSQWqd8vI9zVSZbrzXzuUNUzht6ZpHwRLLnUZPSl8s"
@@ -150,7 +150,7 @@ in {
   ];
 
   systemd.tmpfiles.rules = [
-    "d /home/pi/.cache/manafish-firmware-update 0755 pi users - -"
+    "d /var/lib/manafish-firmware-update 0750 pi users - -"
   ];
 
   systemd.services.manafish-firmware = {
@@ -163,6 +163,8 @@ in {
       User = "pi";
       WorkingDirectory = "/home/pi/firmware";
       ExecStart = lib.getExe startScript;
+      StateDirectory = "manafish-firmware-update";
+      StateDirectoryMode = "0750";
       Restart = "always";
       RestartSec = "5";
     };
@@ -171,7 +173,7 @@ in {
   systemd.paths.manafish-firmware-update = {
     wantedBy = ["multi-user.target"];
     pathConfig = {
-      PathChanged = "/home/pi/.cache/manafish-firmware-update/request.json";
+      PathChanged = "/var/lib/manafish-firmware-update/request.json";
       Unit = "manafish-firmware-update.service";
     };
   };
@@ -180,6 +182,8 @@ in {
     serviceConfig = {
       Type = "oneshot";
       User = "root";
+      StateDirectory = "manafish-firmware-update";
+      StateDirectoryMode = "0750";
     };
     script = ''
       ${lib.getExe firmwareUpdateInstaller}
