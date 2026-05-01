@@ -152,6 +152,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
         while True:
             current_time = time.time()
             battery_percentage = int((math.sin(current_time / 5) + 1) * 50)
+            current_draw = int(20 + 10 * math.sin(current_time / 4))
 
             status_msg = {
                 "type": "statusUpdate",
@@ -159,6 +160,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     "autoStabilization": SYSTEM_STATUS["autoStabilization"],
                     "depthHold": SYSTEM_STATUS["depthHold"],
                     "batteryPercentage": battery_percentage,
+                    "currentDraw": current_draw,
                     "health": {
                         "mcuHealthy": True,
                         "imuHealthy": True,

@@ -10,4 +10,5 @@ class RovStatus(CamelCaseModel):
     auto_stabilization: bool
     depth_hold: bool
     battery_percentage: int
+    current_draw: int
     health: SystemHealth

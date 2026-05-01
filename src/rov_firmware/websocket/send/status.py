@@ -26,11 +26,13 @@ async def handle_status_update(
         if average_voltage_v
         else 0
     )
+    current_draw = sum(state.mcu_telemetry.current)
 
     payload = RovStatus(
         auto_stabilization=state.system_status.auto_stabilization,
         depth_hold=state.system_status.depth_hold,
         battery_percentage=int(state.system_status.battery_percentage),
+        current_draw=current_draw,
         health=state.system_health,
     )
     message = StatusUpdate(payload=payload).model_dump_json(by_alias=True)
