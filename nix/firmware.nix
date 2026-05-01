@@ -79,6 +79,8 @@
       local phase="$1"
       local message="''${2:-}"
       PHASE="$phase" MESSAGE="$message" STATUS="$STATUS" ${lib.getExe' python-env "python3"} -c 'import json, os; from pathlib import Path; Path(os.environ["STATUS"]).write_text(json.dumps({"phase": os.environ["PHASE"], "message": os.environ["MESSAGE"]}), encoding="utf-8")'
+      chown pi:users "$STATUS"
+      chmod 0640 "$STATUS"
     }
 
     fail() {
