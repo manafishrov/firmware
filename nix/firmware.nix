@@ -184,8 +184,6 @@ in {
     serviceConfig = {
       Type = "oneshot";
       User = "root";
-      StateDirectory = "manafish-firmware-update";
-      StateDirectoryMode = "0750";
     };
     script = ''
       ${lib.getExe firmwareUpdateInstaller}
