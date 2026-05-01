@@ -24,7 +24,7 @@ ls -lh result/sd-image
 This will include the size of the image in the output. The image is compressed
 with zstd.
 
-## Flashing the SD Card
+## Flashing
 
 We need to plug in the SD card and find out what the device path is for the
 SD card.
@@ -41,15 +41,32 @@ On darwin:
 diskutil list
 ```
 
-On linux it is usually `/dev/sdX` where `X` is a letter, for example `/dev/sdb`.
 On darwin it is usually `/dev/diskX` where `X` is a number for example
-`/dev/disk6`.
+`/dev/disk6` (use `/dev/rdiskX` when flashing for better performance).
+
+### Unmount the SD Card
+
+Before flashing, make sure the SD card is unmounted.
+
+On linux:
+
+```sh
+sudo umount /dev/sdX*
+```
+
+On darwin:
+
+```sh
+diskutil unmountDisk /dev/diskX
+```
+
+### Flashing the SD Card
 
 To flash the image to the SD card you can use the following command, make sure
 to replace `/dev/XXX` with the correct device path for your SD card:
 
 ```sh
-zstd -dc result/sd-image/*.zst | sudo dd of=/dev/XXX bs=4M status=progress oflag=sync
+zstd -dc result/sd-image/*.zst | sudo dd of=/dev/XXX bs=4M status=progress conv=fsync
 ```
 
 Flashing the SD card on windows is a little more complicated. It is not possible
