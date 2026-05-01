@@ -151,42 +151,46 @@ in {
     firmwareUpdateInstaller
   ];
 
-  systemd.tmpfiles.rules = [
-    "d /var/lib/manafish-firmware-update 0750 pi users - -"
-  ];
+  systemd = {
+    tmpfiles.rules = [
+      "d /var/lib/manafish-firmware-update 0750 pi users - -"
+    ];
 
-  systemd.services.manafish-firmware = {
-    enable = true;
-    wantedBy = ["multi-user.target"];
-    after = ["manafish-setup.service" "manafish-network.service" "go2rtc.service"];
-    requires = ["manafish-setup.service"];
-    serviceConfig = {
-      Type = "simple";
-      User = "pi";
-      WorkingDirectory = "/home/pi/firmware";
-      ExecStart = lib.getExe startScript;
-      StateDirectory = "manafish-firmware-update";
-      StateDirectoryMode = "0750";
-      Restart = "always";
-      RestartSec = "5";
-    };
-  };
+    services = {
+      manafish-firmware = {
+        enable = true;
+        wantedBy = ["multi-user.target"];
+        after = ["manafish-setup.service" "manafish-network.service" "go2rtc.service"];
+        requires = ["manafish-setup.service"];
+        serviceConfig = {
+          Type = "simple";
+          User = "pi";
+          WorkingDirectory = "/home/pi/firmware";
+          ExecStart = lib.getExe startScript;
+          StateDirectory = "manafish-firmware-update";
+          StateDirectoryMode = "0750";
+          Restart = "always";
+          RestartSec = "5";
+        };
+      };
 
-  systemd.paths.manafish-firmware-update = {
-    wantedBy = ["multi-user.target"];
-    pathConfig = {
-      PathChanged = "/var/lib/manafish-firmware-update/request.json";
-      Unit = "manafish-firmware-update.service";
+      manafish-firmware-update = {
+        serviceConfig = {
+          Type = "oneshot";
+          User = "root";
+        };
+        script = ''
+          ${lib.getExe firmwareUpdateInstaller}
+        '';
+      };
     };
-  };
 
-  systemd.services.manafish-firmware-update = {
-    serviceConfig = {
-      Type = "oneshot";
-      User = "root";
+    paths.manafish-firmware-update = {
+      wantedBy = ["multi-user.target"];
+      pathConfig = {
+        PathChanged = "/var/lib/manafish-firmware-update/request.json";
+        Unit = "manafish-firmware-update.service";
+      };
     };
-    script = ''
-      ${lib.getExe firmwareUpdateInstaller}
-    '';
   };
 }
