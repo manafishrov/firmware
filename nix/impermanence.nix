@@ -37,6 +37,12 @@ in {
       "/var/lib/systemd"
       "/var/lib/NetworkManager"
       "/var/lib/iwd"
+      {
+        directory = "/var/lib/manafish-firmware-update";
+        user = piUser.name;
+        inherit (piUser) group;
+        mode = "u=rwx,g=rx,o=";
+      }
     ];
     files = [
       "/etc/machine-id"
