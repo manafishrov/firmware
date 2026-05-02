@@ -71,6 +71,7 @@ class HttpUpdateServer:
         status = cast(dict[str, object], json.loads(status_text))
         phase = str(status.get("phase", ""))
         message = str(status.get("message", ""))
+        percent = int(cast(int | float, status.get("percent", 0)))
 
         if phase == "completed":
             toast_success(
@@ -99,7 +100,10 @@ class HttpUpdateServer:
         )
         toast_loading(
             identifier=FIRMWARE_UPDATE_TOAST_ID,
-            content=ToastContent(message_key=message_key),
+            content=ToastContent(
+                message_key=message_key,
+                message_args={"percent": percent},
+            ),
             action=None,
         )
 
@@ -117,7 +121,7 @@ class HttpUpdateServer:
             await self._handle_update_upload(reader, writer, headers)
         except Exception as exc:
             log_error(f"Firmware update upload failed: {exc}")
-            await self._send_response(writer, 500, "Firmware update upload failed")
+            await self._send_response(writer, 500, str(exc))
         finally:
             writer.close()
             await writer.wait_closed()
@@ -163,7 +167,7 @@ class HttpUpdateServer:
             content_length = self._require_content_length(headers)
             closure_path = FIRMWARE_UPDATE_DIR / file_name
             partial_path = closure_path.with_suffix(f"{closure_path.suffix}.part")
-            self._prepare_staging_paths(partial_path, closure_path)
+            self._prepare_staging_paths()
             self._require_free_space(content_length)
 
             try:
@@ -214,9 +218,11 @@ class HttpUpdateServer:
         return content_length
 
     @staticmethod
-    def _prepare_staging_paths(partial_path: Path, closure_path: Path) -> None:
-        partial_path.unlink(missing_ok=True)
-        Path(f"{closure_path}.minisig").unlink(missing_ok=True)
+    def _prepare_staging_paths() -> None:
+        FIRMWARE_UPDATE_REQUEST_PATH.unlink(missing_ok=True)
+        for pattern in ("*.part", "*.closure.zst", "*.closure.zst.minisig"):
+            for path in FIRMWARE_UPDATE_DIR.glob(pattern):
+                path.unlink(missing_ok=True)
 
     @staticmethod
     def _require_free_space(content_length: int) -> None:

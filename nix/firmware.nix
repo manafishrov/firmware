@@ -78,13 +78,19 @@
     write_status() {
       local phase="$1"
       local message="''${2:-}"
-      PHASE="$phase" MESSAGE="$message" STATUS="$STATUS" ${lib.getExe' python-env "python3"} -c 'import json, os; from pathlib import Path; Path(os.environ["STATUS"]).write_text(json.dumps({"phase": os.environ["PHASE"], "message": os.environ["MESSAGE"]}), encoding="utf-8")'
+      local percent="''${3:-0}"
+      PHASE="$phase" MESSAGE="$message" PERCENT="$percent" STATUS="$STATUS" ${lib.getExe' python-env "python3"} -c 'import json, os; from pathlib import Path; Path(os.environ["STATUS"]).write_text(json.dumps({"phase": os.environ["PHASE"], "message": os.environ["MESSAGE"], "percent": int(os.environ["PERCENT"])}), encoding="utf-8")'
       chown pi:users "$STATUS"
       chmod 0640 "$STATUS"
     }
 
+    cleanup_staged_update() {
+      rm -f "''${CLOSURE_PATH:-}" "''${SIGNATURE_PATH:-}" "''${REQUEST:-}"
+    }
+
     fail() {
       write_status failed "$1"
+      cleanup_staged_update
       exit 1
     }
 
@@ -117,11 +123,11 @@
     [ ! -L "$CLOSURE_PATH" ] || fail "Firmware closure must not be a symlink."
     [ ! -L "$SIGNATURE_PATH" ] || fail "Firmware signature must not be a symlink."
 
-    write_status verifying "Verifying firmware update signature."
+    write_status verifying "Verifying firmware update signature." 20
     ${lib.getExe pkgs.minisign} -Vm "$CLOSURE_PATH" -P "$PUBLIC_KEY" -x "$SIGNATURE_PATH" \
       || fail "Firmware signature verification failed."
 
-    write_status importing "Importing firmware closure."
+    write_status importing "Importing firmware closure." 45
     IMPORTED_PATHS="$(${lib.getExe pkgs.zstd} -dc "$CLOSURE_PATH" | ${config.nix.package}/bin/nix-store --import)" \
       || fail "Firmware closure import failed."
 
@@ -130,12 +136,15 @@
     [ -x "$SYSTEM_PATH/bin/switch-to-configuration" ] \
       || fail "Firmware activation command is missing."
 
-    write_status activating "Activating firmware system generation."
+    write_status activating "Activating firmware system generation." 75
     "$SYSTEM_PATH/bin/switch-to-configuration" switch \
       || fail "Firmware system activation failed."
 
-    write_status activated "Firmware update activated; waiting for MCU firmware verification."
-    rm -f "$CLOSURE_PATH" "$SIGNATURE_PATH" "$REQUEST"
+    write_status cleaning "Cleaning old firmware generations." 90
+    ${config.nix.package}/bin/nix-collect-garbage -d || true
+
+    write_status activated "Firmware update activated; waiting for MCU firmware verification." 95
+    cleanup_staged_update
     ${pkgs.systemd}/bin/systemctl restart manafish-setup.service || true
     ${pkgs.systemd}/bin/systemctl restart manafish-firmware.service || true
   '';
