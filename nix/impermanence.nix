@@ -73,18 +73,18 @@ in {
 
       persistent_part="/dev/disk/by-label/NIXOS_SD"
       stamp="/persistent/.partition-expanded"
-      boot_device="$(${pkgs.util-linux}/bin/lsblk -npo PKNAME "$persistent_part")"
-      part_number="$(${pkgs.util-linux}/bin/lsblk -npo PARTN "$persistent_part")"
+      boot_device="$(${lib.getExe' pkgs.util-linux "lsblk"} -npo PKNAME "$persistent_part")"
+      part_number="$(${lib.getExe' pkgs.util-linux "lsblk"} -npo PARTN "$persistent_part")"
 
       if [ -z "$boot_device" ] || [ -z "$part_number" ]; then
         echo "Could not resolve persistent partition parent device; skipping grow."
         exit 0
       fi
 
-      echo ",+," | ${pkgs.util-linux}/bin/sfdisk -N"$part_number" --no-reread "$boot_device"
-      ${pkgs.parted}/bin/partprobe "$boot_device" || true
-      ${pkgs.systemd}/bin/udevadm settle || true
-      ${pkgs.e2fsprogs}/bin/resize2fs "$persistent_part"
+      echo ",+," | ${lib.getExe' pkgs.util-linux "sfdisk"} -N"$part_number" --no-reread "$boot_device"
+      ${lib.getExe' pkgs.parted "partprobe"} "$boot_device" || true
+      ${lib.getExe' pkgs.systemd "udevadm"} settle || true
+      ${lib.getExe' pkgs.e2fsprogs "resize2fs"} "$persistent_part"
       touch "$stamp"
     '';
   };

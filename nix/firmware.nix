@@ -128,7 +128,7 @@
       || fail "Firmware signature verification failed."
 
     write_status importing "Importing firmware closure." 45
-    IMPORTED_PATHS="$(${lib.getExe pkgs.zstd} -dc "$CLOSURE_PATH" | ${config.nix.package}/bin/nix-store --import)" \
+    IMPORTED_PATHS="$(${lib.getExe pkgs.zstd} -dc "$CLOSURE_PATH" | ${lib.getExe' config.nix.package "nix-store"} --import)" \
       || fail "Firmware closure import failed."
 
     printf '%s\n' "$IMPORTED_PATHS" | ${lib.getExe pkgs.gnugrep} -Fx "$SYSTEM_PATH" >/dev/null \
@@ -141,12 +141,12 @@
       || fail "Firmware system activation failed."
 
     write_status cleaning "Cleaning old firmware generations." 90
-    ${config.nix.package}/bin/nix-collect-garbage -d || true
+    ${lib.getExe' config.nix.package "nix-collect-garbage"} -d || true
 
     write_status activated "Firmware update activated; waiting for MCU firmware verification." 95
     cleanup_staged_update
-    ${pkgs.systemd}/bin/systemctl restart manafish-setup.service || true
-    ${pkgs.systemd}/bin/systemctl restart manafish-firmware.service || true
+    ${lib.getExe' pkgs.systemd "systemctl"} restart manafish-setup.service || true
+    ${lib.getExe' pkgs.systemd "systemctl"} restart manafish-firmware.service || true
   '';
 in {
   environment.systemPackages = with pkgs; [
