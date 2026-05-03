@@ -5,7 +5,6 @@
   ...
 }: let
   piUser = config.users.users.pi;
-  minGrowBytes = 512 * 1024 * 1024;
 in {
   sdImage.expandOnBoot = false;
 
@@ -65,6 +64,7 @@ in {
     wantedBy = ["multi-user.target"];
     after = ["local-fs.target"];
     before = ["manafish-setup.service" "manafish-firmware.service"];
+    unitConfig.ConditionPathExists = "!/persistent/.partition-expanded";
     serviceConfig = {
       Type = "oneshot";
     };
@@ -72,6 +72,7 @@ in {
       set -euo pipefail
 
       persistent_part="/dev/disk/by-label/NIXOS_SD"
+      stamp="/persistent/.partition-expanded"
       boot_device="$(${pkgs.util-linux}/bin/lsblk -npo PKNAME "$persistent_part")"
       part_number="$(${pkgs.util-linux}/bin/lsblk -npo PARTN "$persistent_part")"
 
@@ -80,19 +81,11 @@ in {
         exit 0
       fi
 
-      disk_bytes="$(${pkgs.util-linux}/bin/blockdev --getsize64 "$boot_device")"
-      part_bytes="$(${pkgs.util-linux}/bin/blockdev --getsize64 "$persistent_part")"
-      available_growth=$((disk_bytes - part_bytes))
-
-      if [ "$available_growth" -lt ${toString minGrowBytes} ]; then
-        echo "Persistent partition already uses available SD card space."
-        exit 0
-      fi
-
       echo ",+," | ${pkgs.util-linux}/bin/sfdisk -N"$part_number" --no-reread "$boot_device"
       ${pkgs.parted}/bin/partprobe "$boot_device" || true
       ${pkgs.systemd}/bin/udevadm settle || true
       ${pkgs.e2fsprogs}/bin/resize2fs "$persistent_part"
+      touch "$stamp"
     '';
   };
 }
