@@ -123,11 +123,11 @@
     [ ! -L "$CLOSURE_PATH" ] || fail "Firmware closure must not be a symlink."
     [ ! -L "$SIGNATURE_PATH" ] || fail "Firmware signature must not be a symlink."
 
-    write_status verifying "Verifying firmware update signature." 20
+    write_status verifying "Verifying firmware update signature." 15
     ${lib.getExe pkgs.minisign} -Vm "$CLOSURE_PATH" -P "$PUBLIC_KEY" -x "$SIGNATURE_PATH" \
       || fail "Firmware signature verification failed."
 
-    write_status importing "Importing firmware closure." 45
+    write_status importing "Importing firmware closure." 35
     IMPORTED_PATHS="$(${lib.getExe pkgs.zstd} -dc "$CLOSURE_PATH" | ${lib.getExe' config.nix.package "nix-store"} --import)" \
       || fail "Firmware closure import failed."
 
@@ -136,7 +136,7 @@
     [ -x "$SYSTEM_PATH/bin/switch-to-configuration" ] \
       || fail "Firmware activation command is missing."
 
-    write_status activating "Activating firmware system generation." 75
+    write_status activating "Activating firmware system generation." 80
     "$SYSTEM_PATH/bin/switch-to-configuration" switch \
       || fail "Firmware system activation failed."
 

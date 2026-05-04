@@ -95,19 +95,39 @@ class HttpUpdateServer:
             )
             return
 
-        message_key = (
-            "toasts_firmware_update_flashing_mcu"
-            if phase == "activated"
-            else "toasts_firmware_update_installing"
-        )
+        message_key = self._message_key_for_phase(phase)
+        description_key = self._description_key_for_phase(phase)
         toast_loading(
             identifier=FIRMWARE_UPDATE_TOAST_ID,
             content=ToastContent(
                 message_key=message_key,
                 message_args={"percent": percent},
+                description_key=description_key,
             ),
             action=None,
         )
+
+    @staticmethod
+    def _message_key_for_phase(phase: str) -> str:
+        if phase == "activated":
+            return "toasts_firmware_update_flashing_mcu"
+        return "toasts_firmware_update_installing"
+
+    @staticmethod
+    def _description_key_for_phase(phase: str) -> str | None:
+        match phase:
+            case "verifying":
+                return "toasts_firmware_update_rover_verifying_description"
+            case "importing":
+                return "toasts_firmware_update_rover_importing_description"
+            case "activating":
+                return "toasts_firmware_update_rover_activating_description"
+            case "cleaning":
+                return "toasts_firmware_update_rover_cleaning_description"
+            case "activated":
+                return "toasts_firmware_update_rover_mcu_description"
+            case _:
+                return None
 
     async def _handle_client(
         self,
