@@ -28,6 +28,31 @@ in {
     nano
   ];
 
+  swapDevices = [
+    {
+      device = "/persistent/swapfile";
+      size = 2048;
+    }
+  ];
+
+  boot.kernel.sysctl = {
+    "vm.swappiness" = 20;
+  };
+
+  nix = {
+    gc = {
+      automatic = true;
+      dates = "weekly";
+      options = "--delete-older-than 7d";
+      persistent = true;
+    };
+    optimise = {
+      automatic = true;
+      dates = ["weekly"];
+      persistent = true;
+    };
+  };
+
   # Deploy firmware files and MCU firmware to the user's home directory
   systemd.services.manafish-setup = {
     wantedBy = ["multi-user.target"];
