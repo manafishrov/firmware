@@ -64,14 +64,16 @@ class HttpUpdateServer:
             return
 
         status_text = FIRMWARE_UPDATE_STATUS_PATH.read_text(encoding="utf-8")
-        if status_text == self._last_status:
-            return
-
-        self._last_status = status_text
         status = cast(dict[str, object], json.loads(status_text))
         phase = str(status.get("phase", ""))
         message = str(status.get("message", ""))
         percent = int(cast(int | float, status.get("percent", 0)))
+        is_terminal_phase = phase in {"completed", "failed"}
+
+        if status_text == self._last_status and is_terminal_phase:
+            return
+
+        self._last_status = status_text
 
         if phase == "completed":
             toast_success(
