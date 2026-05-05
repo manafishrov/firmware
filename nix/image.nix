@@ -1,5 +1,6 @@
 {
   pkgs,
+  targetPkgs ? pkgs,
   lib,
   config,
   version,
@@ -17,7 +18,7 @@
   firmwareSizeMiB = 256;
   persistentSeedSizeMiB = 256;
 
-  ubootPackage = pkgs.ubootRaspberryPi3_64bit.override {
+  ubootPackage = targetPkgs.ubootRaspberryPi3_64bit.override {
     extraConfig = ''
       CONFIG_ENV_IS_IN_MMC=y
       CONFIG_ENV_OFFSET=0x80000

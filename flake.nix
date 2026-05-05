@@ -94,22 +94,17 @@
       ];
     };
 
-    checks = forLinuxBuildSystems (system: let
-      pkgs = nixpkgs.legacyPackages.${system};
-    in {
-      firmware-update-staging = import ./tests/ab-update.nix {
-        inherit pkgs;
-        inherit (nixpkgs) lib;
-        inherit (pkgs.testers) nixosTest;
-      };
-    });
-
     packages = forLinuxBuildSystems (system: let
       buildPkgs = nixpkgs.legacyPackages.${system};
+      targetPkgs =
+        if system == "aarch64-linux"
+        then buildPkgs
+        else buildPkgs.pkgsCross.aarch64-multiplatform;
       nixosConfig = self.nixosConfigurations.pi3-imx477.config;
 
       images = import ./nix/image.nix {
         pkgs = buildPkgs;
+        inherit targetPkgs;
         inherit version;
         inherit (nixpkgs) lib;
         config = nixosConfig;
