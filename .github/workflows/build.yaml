@@ -58,6 +58,7 @@ jobs:
           nix build --accept-flake-config \
             --impure .#sdImage --out-link result-sd-image
           nix build --accept-flake-config \
+            --option extra-sandbox-paths "$RUNNER_TEMP/rauc" \
             --impure .#raucBundle --out-link result-rauc-bundle
 
       - name: Assemble release artifacts

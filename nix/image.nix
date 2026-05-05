@@ -5,6 +5,8 @@
   config,
   version,
   firmwarePackage,
+  raucSigningKeyPath ? builtins.getEnv "RAUC_SIGNING_KEY_PATH",
+  raucSigningCertPath ? builtins.getEnv "RAUC_SIGNING_CERT_PATH",
 }: let
   diskId = "0x6d616e61";
   partUuidA = "6d616e61-02";
@@ -234,6 +236,8 @@
   raucBundle =
     pkgs.runCommand "manafishrov-${version}-rauc-bundle" {
       nativeBuildInputs = [pkgs.rauc pkgs.coreutils];
+      RAUC_SIGNING_KEY_PATH = raucSigningKeyPath;
+      RAUC_SIGNING_CERT_PATH = raucSigningCertPath;
       passthru = {
         inherit version;
         bundleName = "manafishrov-${version}.raucb";
