@@ -111,7 +111,7 @@
       uuid = "6d616e61-000${slotIndex slot}-4000-8000-00000000000${slotIndex slot}";
       populateImageCommands = ''
         mkdir -p ./files/boot
-        ${config.system.build.installBootLoader} ${config.system.build.toplevel} -d ./files/boot
+        ${config.boot.loader.raspberryPi.bootPopulateCmd} -c ${config.system.build.toplevel} -b ./files/boot
         ${patchExtlinuxForSlot slot}
       '';
     };
@@ -227,7 +227,7 @@
     volumeLabel = "ROOT_BUNDLE";
     populateImageCommands = ''
       mkdir -p ./files/boot
-      ${config.system.build.installBootLoader} ${config.system.build.toplevel} -d ./files/boot
+      ${config.boot.loader.raspberryPi.bootPopulateCmd} -c ${config.system.build.toplevel} -b ./files/boot
     '';
   };
 
