@@ -1,5 +1,4 @@
 {
-  config,
   pkgs,
   lib,
   inputs,
@@ -73,7 +72,7 @@
     UPDATE_DIR="/var/lib/manafish-firmware-update"
     REQUEST="$UPDATE_DIR/request.json"
     STATUS="$UPDATE_DIR/status.json"
-    PUBLIC_KEY="RWQ79VrKeNgtcTOSQWqd8vI9zVSZbrzXzuUNUzht6ZpHwRLLnUZPSl8s"
+    EXPECTED_SLOT_FILE="/persistent/rauc/expected-slot"
 
     write_status() {
       local phase="$1"
@@ -84,13 +83,13 @@
       chmod 0640 "$STATUS"
     }
 
-    cleanup_staged_update() {
-      rm -f "''${CLOSURE_PATH:-}" "''${SIGNATURE_PATH:-}" "''${REQUEST:-}"
+    cleanup_staged_bundle() {
+      rm -f "''${BUNDLE_PATH:-}" "''${REQUEST:-}"
     }
 
     fail() {
       write_status failed "$1"
-      cleanup_staged_update
+      cleanup_staged_bundle
       exit 1
     }
 
@@ -99,54 +98,49 @@
       FIELD="$field" REQUEST="$REQUEST" ${lib.getExe' python-env "python3"} -c 'import json, os; print(json.load(open(os.environ["REQUEST"], encoding="utf-8"))[os.environ["FIELD"]])'
     }
 
+    target_slot() {
+      local booted target
+      booted="$(${lib.getExe pkgs.rauc} status booted 2>/dev/null \
+        | ${lib.getExe pkgs.gnugrep} -oE 'rootfs\.[01]' \
+        | head -n1 || true)"
+      case "$booted" in
+        rootfs.0) target="B" ;;
+        rootfs.1) target="A" ;;
+        *) target="" ;;
+      esac
+      printf '%s\n' "$target"
+    }
+
     [ -f "$REQUEST" ] || fail "No firmware update request found."
 
-    CLOSURE_PATH="$(read_field closurePath)"
-    SIGNATURE_PATH="$(read_field signaturePath)"
-    SYSTEM_PATH="$(read_field systemPath)"
+    BUNDLE_PATH="$(read_field bundlePath)"
 
-    case "$CLOSURE_PATH" in
-      "$UPDATE_DIR"/*.closure.zst) ;;
-      *) fail "Firmware closure path is outside the update staging directory." ;;
-    esac
-    case "$SIGNATURE_PATH" in
-      "$UPDATE_DIR"/*.closure.zst.minisig) ;;
-      *) fail "Firmware signature path is outside the update staging directory." ;;
-    esac
-    case "$SYSTEM_PATH" in
-      /nix/store/*-nixos-system-*) ;;
-      *) fail "Firmware system path is not a NixOS system closure." ;;
+    case "$BUNDLE_PATH" in
+      "$UPDATE_DIR"/*.raucb) ;;
+      *) fail "Firmware bundle path is outside the update staging directory." ;;
     esac
 
-    [ -f "$CLOSURE_PATH" ] || fail "Firmware closure is missing."
-    [ -f "$SIGNATURE_PATH" ] || fail "Firmware signature is missing."
-    [ ! -L "$CLOSURE_PATH" ] || fail "Firmware closure must not be a symlink."
-    [ ! -L "$SIGNATURE_PATH" ] || fail "Firmware signature must not be a symlink."
+    [ -f "$BUNDLE_PATH" ] || fail "Firmware bundle is missing."
+    [ ! -L "$BUNDLE_PATH" ] || fail "Firmware bundle must not be a symlink."
 
-    write_status verifying "Verifying firmware update signature." 15
-    ${lib.getExe pkgs.minisign} -Vm "$CLOSURE_PATH" -P "$PUBLIC_KEY" -x "$SIGNATURE_PATH" \
-      || fail "Firmware signature verification failed."
+    write_status verifying "Verifying firmware bundle signature." 15
 
-    write_status importing "Importing firmware closure." 35
-    IMPORTED_PATHS="$(${lib.getExe pkgs.zstd} -dc "$CLOSURE_PATH" | ${lib.getExe' config.nix.package "nix-store"} --import)" \
-      || fail "Firmware closure import failed."
+    write_status installing "Writing firmware bundle to inactive slot." 35
+    ${lib.getExe pkgs.rauc} install "$BUNDLE_PATH" \
+      || fail "RAUC install failed."
 
-    printf '%s\n' "$IMPORTED_PATHS" | ${lib.getExe pkgs.gnugrep} -Fx "$SYSTEM_PATH" >/dev/null \
-      || fail "Firmware system path was not present in imported closure."
-    [ -x "$SYSTEM_PATH/bin/switch-to-configuration" ] \
-      || fail "Firmware activation command is missing."
+    expected="$(target_slot)"
+    if [ -z "$expected" ]; then
+      fail "Could not determine target slot after install."
+    fi
 
-    write_status activating "Activating firmware system generation." 80
-    "$SYSTEM_PATH/bin/switch-to-configuration" switch \
-      || fail "Firmware system activation failed."
+    install -d -m 0755 -o root -g root /persistent/rauc
+    printf '%s\n' "$expected" > "$EXPECTED_SLOT_FILE"
 
-    write_status cleaning "Cleaning old firmware generations." 90
-    ${lib.getExe' config.nix.package "nix-collect-garbage"} -d || true
+    write_status rebooting "Reboot required to activate new firmware." 95
 
-    write_status activated "Firmware update activated; waiting for MCU firmware verification." 95
-    cleanup_staged_update
-    ${lib.getExe' pkgs.systemd "systemctl"} restart manafish-setup.service || true
-    ${lib.getExe' pkgs.systemd "systemctl"} restart manafish-firmware.service || true
+    cleanup_staged_bundle
+    ${lib.getExe' pkgs.systemd "systemctl"} reboot
   '';
 in {
   environment.systemPackages = with pkgs; [
@@ -184,9 +178,15 @@ in {
       };
 
       manafish-firmware-update = {
+        unitConfig.Conflicts = ["manafish-firmware.service"];
         serviceConfig = {
           Type = "oneshot";
           User = "root";
+          MemoryAccounting = true;
+          MemoryHigh = "300M";
+          MemoryMax = "500M";
+          MemorySwapMax = "infinity";
+          TasksMax = 64;
         };
         script = ''
           ${lib.getExe firmwareUpdateInstaller}
