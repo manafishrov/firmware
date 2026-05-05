@@ -63,6 +63,8 @@
     version = self.shortRev or self.dirtyShortRev or "dev";
 
     forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
+    linuxBuildSystems = ["aarch64-linux" "x86_64-linux"];
+    forLinuxBuildSystems = nixpkgs.lib.genAttrs linuxBuildSystems;
   in {
     nixosConfigurations.pi3-imx477 = nixos-raspberrypi.lib.nixosSystem {
       specialArgs = {
@@ -70,11 +72,9 @@
       };
       modules = [
         nixos-raspberrypi.nixosModules.raspberry-pi-3.base
-        nixos-raspberrypi.nixosModules.sd-image
         impermanence.nixosModules.impermanence
         {
           system.stateVersion = "25.11";
-          image.fileName = "pi3-imx477-${version}.img";
           documentation = {
             enable = false;
             doc.enable = false;
@@ -88,15 +88,37 @@
         ./nix/mcu.nix
         ./nix/networking.nix
         ./nix/firmware.nix
+        ./nix/rauc.nix
         ./nix/system.nix
         ./nix/impermanence.nix
       ];
     };
 
-    packages = forAllSystems (_: {
-      inherit (self.nixosConfigurations.pi3-imx477.config.system.build) sdImage;
-      systemClosure = self.nixosConfigurations.pi3-imx477.config.system.build.toplevel;
-      default = self.nixosConfigurations.pi3-imx477.config.system.build.sdImage;
+    checks = forLinuxBuildSystems (system: let
+      pkgs = nixpkgs.legacyPackages.${system};
+    in {
+      firmware-update-staging = import ./tests/ab-update.nix {
+        inherit pkgs;
+        inherit (nixpkgs) lib;
+        inherit (pkgs.testers) nixosTest;
+      };
+    });
+
+    packages = forLinuxBuildSystems (system: let
+      buildPkgs = nixpkgs.legacyPackages.${system};
+      nixosConfig = self.nixosConfigurations.pi3-imx477.config;
+
+      images = import ./nix/image.nix {
+        pkgs = buildPkgs;
+        inherit version;
+        inherit (nixpkgs) lib;
+        config = nixosConfig;
+        inherit (nixosConfig.boot.loader.raspberryPi) firmwarePackage;
+      };
+    in {
+      inherit (images) sdImage raucBundle;
+      systemToplevel = nixosConfig.system.build.toplevel;
+      default = images.sdImage;
     });
 
     formatter = forAllSystems (system:

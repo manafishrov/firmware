@@ -15,5 +15,7 @@ config.json
 config-backup.json
 
 # nix
-keys
 nixos.qcow2
+
+# RAUC private signing key
+rauc-release.key
