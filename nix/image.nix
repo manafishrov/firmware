@@ -256,9 +256,6 @@
           cp "${bundleRootfsImage}" "$workdir/rootfs.img"
           chmod u+w "$workdir/rootfs.img"
 
-          rootfs_size_bytes="$(stat -c %s "$workdir/rootfs.img")"
-          rootfs_sha256="$(sha256sum "$workdir/rootfs.img" | awk '{print $1}')"
-
           cat > "$workdir/manifest.raucm" <<MANIFEST
       [update]
       compatible=manafishrov-pi3
@@ -270,8 +267,6 @@
 
       [image.rootfs]
       filename=rootfs.img
-      size=$rootfs_size_bytes
-      sha256=$rootfs_sha256
       MANIFEST
 
           mkdir -p "$out"
