@@ -81,8 +81,8 @@ jobs:
           CHECKSUM_NAME="${ARTIFACT_PREFIX}-${VERSION}.sha256"
           MANIFEST_NAME="${ARTIFACT_PREFIX}-${VERSION}.json"
 
-          SD_IMAGE_SOURCE="$(find result-sd-image -maxdepth 1 -type f -name 'manafishrov-*.img.zst' -print -quit)"
-          BUNDLE_SOURCE="$(find result-rauc-bundle -maxdepth 1 -type f -name 'manafishrov-*.raucb' -print -quit)"
+          SD_IMAGE_SOURCE="$(find -L result-sd-image -maxdepth 1 -type f -name 'manafishrov-*.img.zst' -print -quit)"
+          BUNDLE_SOURCE="$(find -L result-rauc-bundle -maxdepth 1 -type f -name 'manafishrov-*.raucb' -print -quit)"
 
           if [ -z "$SD_IMAGE_SOURCE" ] || [ -z "$BUNDLE_SOURCE" ]; then
             echo "::error::Built firmware artifacts were not found." >&2
