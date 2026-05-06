@@ -44,10 +44,10 @@ jobs:
           fi
 
           mkdir -p "$RUNNER_TEMP/rauc"
-          chmod 700 "$RUNNER_TEMP/rauc"
+          chmod 755 "$RUNNER_TEMP/rauc"
           printf '%s' "$RAUC_SIGNING_KEY" > "$RUNNER_TEMP/rauc/bundle.key"
           printf '%s' "$RAUC_SIGNING_CERT" > "$RUNNER_TEMP/rauc/bundle-chain.pem"
-          chmod 600 "$RUNNER_TEMP/rauc/bundle.key"
+          chmod 644 "$RUNNER_TEMP/rauc/bundle.key"
           chmod 644 "$RUNNER_TEMP/rauc/bundle-chain.pem"
 
           echo "RAUC_SIGNING_KEY_PATH=$RUNNER_TEMP/rauc/bundle.key" >> "$GITHUB_ENV"
