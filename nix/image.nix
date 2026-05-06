@@ -235,7 +235,7 @@
 
   raucBundle =
     pkgs.runCommand "manafishrov-${version}-rauc-bundle" {
-      nativeBuildInputs = [pkgs.rauc pkgs.coreutils];
+      nativeBuildInputs = [pkgs.rauc pkgs.squashfsTools pkgs.coreutils];
       RAUC_SIGNING_KEY_PATH = raucSigningKeyPath;
       RAUC_SIGNING_CERT_PATH = raucSigningCertPath;
       passthru = {
