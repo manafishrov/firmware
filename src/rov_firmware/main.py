@@ -4,7 +4,6 @@ import asyncio
 
 from serial import SerialException
 
-from .firmware_update import HttpUpdateServer
 from .regulator import Regulator
 from .rov_state import RovState
 from .sensors.imu import Imu
@@ -30,7 +29,6 @@ async def main() -> None:
 
     state: RovState = RovState()
     ws_server: WebsocketServer = WebsocketServer(state)
-    http_update_server: HttpUpdateServer = HttpUpdateServer(state)
     serial_manager: SerialManager = SerialManager(state)
     imu: Imu = Imu(state)
     pressure: PressureSensor = PressureSensor(state)
@@ -39,7 +37,6 @@ async def main() -> None:
     thrusters: Thrusters = Thrusters(state, serial_manager, regulator)
 
     await ws_server.initialize()
-    await http_update_server.initialize()
     _ = await serial_manager.initialize()
     await imu.initialize()
     await pressure.initialize()
@@ -50,8 +47,6 @@ async def main() -> None:
         mcu.read_loop(),
         thrusters.send_loop(),
         ws_server.wait_closed(),
-        http_update_server.wait_closed(),
-        http_update_server.watch_status_loop(),
     ]
     _ = await asyncio.gather(*tasks)
 

@@ -21,5 +21,4 @@ def rov_state():
     state.regulator = RegulatorData()
     state.thrusters = ThrusterData(direction_vector=np.zeros(8, dtype=np.float32))
     state.mcu_flashing = False
-    state.firmware_uploading = False
     return state

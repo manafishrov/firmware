@@ -8,7 +8,7 @@ import shutil
 import subprocess
 from typing import cast
 
-from ...constants import FIRMWARE_UPDATE_TOAST_ID, FLASH_TOAST_ID
+from ...constants import FLASH_TOAST_ID
 from ...log import log_error, log_info, log_warn
 from ...models.config import McuBoard
 from ...models.toast import ToastContent
@@ -164,13 +164,7 @@ async def flash_mcu_firmware(
             if show_toasts:
                 toast_success(
                     identifier=toast_identifier,
-                    content=ToastContent(
-                        message_key=(
-                            "toasts_firmware_update_success"
-                            if toast_identifier == FIRMWARE_UPDATE_TOAST_ID
-                            else "toasts_flash_success"
-                        )
-                    ),
+                    content=ToastContent(message_key="toasts_flash_success"),
                     action=None,
                 )
             return True

@@ -1,5 +1,4 @@
 {
-  config,
   pkgs,
   lib,
   inputs,
@@ -66,88 +65,6 @@
     export PATH="${lib.makeBinPath [pkgs.picotool]}:$PATH"
     exec ${lib.getExe' python-env "python3"} -c "from tools import cli; cli()"
   '';
-
-  firmwareUpdateInstaller = pkgs.writeShellScriptBin "install-firmware-update" ''
-    set -euo pipefail
-
-    UPDATE_DIR="/var/lib/manafish-firmware-update"
-    REQUEST="$UPDATE_DIR/request.json"
-    STATUS="$UPDATE_DIR/status.json"
-    PUBLIC_KEY="RWQ79VrKeNgtcTOSQWqd8vI9zVSZbrzXzuUNUzht6ZpHwRLLnUZPSl8s"
-
-    write_status() {
-      local phase="$1"
-      local message="''${2:-}"
-      local percent="''${3:-0}"
-      PHASE="$phase" MESSAGE="$message" PERCENT="$percent" STATUS="$STATUS" ${lib.getExe' python-env "python3"} -c 'import json, os; from pathlib import Path; Path(os.environ["STATUS"]).write_text(json.dumps({"phase": os.environ["PHASE"], "message": os.environ["MESSAGE"], "percent": int(os.environ["PERCENT"])}), encoding="utf-8")'
-      chown pi:users "$STATUS"
-      chmod 0640 "$STATUS"
-    }
-
-    cleanup_staged_update() {
-      rm -f "''${CLOSURE_PATH:-}" "''${SIGNATURE_PATH:-}" "''${REQUEST:-}"
-    }
-
-    fail() {
-      write_status failed "$1"
-      cleanup_staged_update
-      exit 1
-    }
-
-    read_field() {
-      local field="$1"
-      FIELD="$field" REQUEST="$REQUEST" ${lib.getExe' python-env "python3"} -c 'import json, os; print(json.load(open(os.environ["REQUEST"], encoding="utf-8"))[os.environ["FIELD"]])'
-    }
-
-    [ -f "$REQUEST" ] || fail "No firmware update request found."
-
-    CLOSURE_PATH="$(read_field closurePath)"
-    SIGNATURE_PATH="$(read_field signaturePath)"
-    SYSTEM_PATH="$(read_field systemPath)"
-
-    case "$CLOSURE_PATH" in
-      "$UPDATE_DIR"/*.closure.zst) ;;
-      *) fail "Firmware closure path is outside the update staging directory." ;;
-    esac
-    case "$SIGNATURE_PATH" in
-      "$UPDATE_DIR"/*.closure.zst.minisig) ;;
-      *) fail "Firmware signature path is outside the update staging directory." ;;
-    esac
-    case "$SYSTEM_PATH" in
-      /nix/store/*-nixos-system-*) ;;
-      *) fail "Firmware system path is not a NixOS system closure." ;;
-    esac
-
-    [ -f "$CLOSURE_PATH" ] || fail "Firmware closure is missing."
-    [ -f "$SIGNATURE_PATH" ] || fail "Firmware signature is missing."
-    [ ! -L "$CLOSURE_PATH" ] || fail "Firmware closure must not be a symlink."
-    [ ! -L "$SIGNATURE_PATH" ] || fail "Firmware signature must not be a symlink."
-
-    write_status verifying "Verifying firmware update signature." 20
-    ${lib.getExe pkgs.minisign} -Vm "$CLOSURE_PATH" -P "$PUBLIC_KEY" -x "$SIGNATURE_PATH" \
-      || fail "Firmware signature verification failed."
-
-    write_status importing "Importing firmware closure." 45
-    IMPORTED_PATHS="$(${lib.getExe pkgs.zstd} -dc "$CLOSURE_PATH" | ${config.nix.package}/bin/nix-store --import)" \
-      || fail "Firmware closure import failed."
-
-    printf '%s\n' "$IMPORTED_PATHS" | ${lib.getExe pkgs.gnugrep} -Fx "$SYSTEM_PATH" >/dev/null \
-      || fail "Firmware system path was not present in imported closure."
-    [ -x "$SYSTEM_PATH/bin/switch-to-configuration" ] \
-      || fail "Firmware activation command is missing."
-
-    write_status activating "Activating firmware system generation." 75
-    "$SYSTEM_PATH/bin/switch-to-configuration" switch \
-      || fail "Firmware system activation failed."
-
-    write_status cleaning "Cleaning old firmware generations." 90
-    ${config.nix.package}/bin/nix-collect-garbage -d || true
-
-    write_status activated "Firmware update activated; waiting for MCU firmware verification." 95
-    cleanup_staged_update
-    ${pkgs.systemd}/bin/systemctl restart manafish-setup.service || true
-    ${pkgs.systemd}/bin/systemctl restart manafish-firmware.service || true
-  '';
 in {
   environment.systemPackages = with pkgs; [
     htop
@@ -157,14 +74,9 @@ in {
     python-env
     startScript
     toolsScript
-    firmwareUpdateInstaller
   ];
 
   systemd = {
-    tmpfiles.rules = [
-      "d /var/lib/manafish-firmware-update 0750 pi users - -"
-    ];
-
     services = {
       manafish-firmware = {
         enable = true;
@@ -176,29 +88,9 @@ in {
           User = "pi";
           WorkingDirectory = "/home/pi/firmware";
           ExecStart = lib.getExe startScript;
-          StateDirectory = "manafish-firmware-update";
-          StateDirectoryMode = "0750";
           Restart = "always";
           RestartSec = "5";
         };
-      };
-
-      manafish-firmware-update = {
-        serviceConfig = {
-          Type = "oneshot";
-          User = "root";
-        };
-        script = ''
-          ${lib.getExe firmwareUpdateInstaller}
-        '';
-      };
-    };
-
-    paths.manafish-firmware-update = {
-      wantedBy = ["multi-user.target"];
-      pathConfig = {
-        PathChanged = "/var/lib/manafish-firmware-update/request.json";
-        Unit = "manafish-firmware-update.service";
       };
     };
   };
