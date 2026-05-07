@@ -63,8 +63,6 @@
     version = self.shortRev or self.dirtyShortRev or "dev";
 
     forAllSystems = nixpkgs.lib.genAttrs supportedSystems;
-    linuxBuildSystems = ["aarch64-linux" "x86_64-linux"];
-    forLinuxBuildSystems = nixpkgs.lib.genAttrs linuxBuildSystems;
   in {
     nixosConfigurations.pi3-imx477 = nixos-raspberrypi.lib.nixosSystem {
       specialArgs = {
@@ -72,9 +70,11 @@
       };
       modules = [
         nixos-raspberrypi.nixosModules.raspberry-pi-3.base
+        nixos-raspberrypi.nixosModules.sd-image
         impermanence.nixosModules.impermanence
         {
           system.stateVersion = "25.11";
+          image.fileName = "pi3-imx477-${version}.img";
           documentation = {
             enable = false;
             doc.enable = false;
@@ -88,32 +88,15 @@
         ./nix/mcu.nix
         ./nix/networking.nix
         ./nix/firmware.nix
-        ./nix/rauc.nix
         ./nix/system.nix
         ./nix/impermanence.nix
       ];
     };
 
-    packages = forLinuxBuildSystems (system: let
-      buildPkgs = nixpkgs.legacyPackages.${system};
-      targetPkgs =
-        if system == "aarch64-linux"
-        then buildPkgs
-        else buildPkgs.pkgsCross.aarch64-multiplatform;
-      nixosConfig = self.nixosConfigurations.pi3-imx477.config;
-
-      images = import ./nix/image.nix {
-        pkgs = buildPkgs;
-        inherit targetPkgs;
-        inherit version;
-        inherit (nixpkgs) lib;
-        config = nixosConfig;
-        inherit (nixosConfig.boot.loader.raspberryPi) firmwarePackage;
-      };
-    in {
-      inherit (images) sdImage raucBundle;
-      systemToplevel = nixosConfig.system.build.toplevel;
-      default = images.sdImage;
+    packages = forAllSystems (_: {
+      inherit (self.nixosConfigurations.pi3-imx477.config.system.build) sdImage;
+      systemClosure = self.nixosConfigurations.pi3-imx477.config.system.build.toplevel;
+      default = self.nixosConfigurations.pi3-imx477.config.system.build.sdImage;
     });
 
     formatter = forAllSystems (system:

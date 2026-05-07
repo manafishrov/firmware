@@ -22,44 +22,19 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@4a754ab0c192f4d12cf88b5954b9dd13fd2d612e # main
+        uses: DeterminateSystems/nix-installer-action@92148bb48b9a0c5458c53dd0b368fbfbfbaa3210 # main
         with:
           diagnostic-endpoint: ""
 
       - name: Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@3c034b51a9deec0a09ef1df8b436ac5db50fae94 # main
+        uses: DeterminateSystems/magic-nix-cache-action@b4a9864e3a8ab8179be30f2e70fd71fe9996bb9d # main
         with:
           diagnostic-endpoint: ""
 
-      - name: Stage RAUC bundle signing material
-        env:
-          RAUC_SIGNING_KEY: ${{ secrets.RAUC_SIGNING_KEY }}
-          RAUC_SIGNING_CERT: ${{ secrets.RAUC_SIGNING_CERT }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "$RAUC_SIGNING_KEY" ] || [ -z "$RAUC_SIGNING_CERT" ]; then
-            echo "::error::RAUC_SIGNING_KEY and RAUC_SIGNING_CERT secrets are required." >&2
-            exit 1
-          fi
-
-          mkdir -p "$RUNNER_TEMP/rauc"
-          chmod 755 "$RUNNER_TEMP/rauc"
-          printf '%s' "$RAUC_SIGNING_KEY" > "$RUNNER_TEMP/rauc/bundle.key"
-          printf '%s' "$RAUC_SIGNING_CERT" > "$RUNNER_TEMP/rauc/bundle-chain.pem"
-          chmod 644 "$RUNNER_TEMP/rauc/bundle.key"
-          chmod 644 "$RUNNER_TEMP/rauc/bundle-chain.pem"
-
-          echo "RAUC_SIGNING_KEY_PATH=$RUNNER_TEMP/rauc/bundle.key" >> "$GITHUB_ENV"
-          echo "RAUC_SIGNING_CERT_PATH=$RUNNER_TEMP/rauc/bundle-chain.pem" >> "$GITHUB_ENV"
-
       - name: Build Nix outputs
         run: |
-          nix build --accept-flake-config \
-            --impure .#sdImage --out-link result-sd-image
-          nix build --accept-flake-config \
-            --option extra-sandbox-paths "$RUNNER_TEMP/rauc" \
-            --impure .#raucBundle --out-link result-rauc-bundle
+          nix build --accept-flake-config .#sdImage --out-link result-sd-image
+          nix build --accept-flake-config .#systemClosure --out-link result-system
 
       - name: Assemble release artifacts
         env:
@@ -72,40 +47,35 @@ jobs:
             exit 1
           fi
 
-          nix profile install nixpkgs#python3 nixpkgs#minisign
+          nix profile install nixpkgs#python3 nixpkgs#zstd nixpkgs#minisign
 
           mkdir -p dist
 
           SD_IMAGE_NAME="${ARTIFACT_PREFIX}-${VERSION}.img.zst"
-          BUNDLE_NAME="${ARTIFACT_PREFIX}-${VERSION}.raucb"
+          CLOSURE_NAME="${ARTIFACT_PREFIX}-${VERSION}.closure.zst"
           CHECKSUM_NAME="${ARTIFACT_PREFIX}-${VERSION}.sha256"
           MANIFEST_NAME="${ARTIFACT_PREFIX}-${VERSION}.json"
 
-          SD_IMAGE_SOURCE="$(find -L result-sd-image -maxdepth 1 -type f -name 'manafishrov-*.img.zst' -print -quit)"
-          BUNDLE_SOURCE="$(find -L result-rauc-bundle -maxdepth 1 -type f -name 'manafishrov-*.raucb' -print -quit)"
+          cp result-sd-image/sd-image/*.img.zst "dist/${SD_IMAGE_NAME}"
 
-          if [ -z "$SD_IMAGE_SOURCE" ] || [ -z "$BUNDLE_SOURCE" ]; then
-            echo "::error::Built firmware artifacts were not found." >&2
-            ls -la result-sd-image result-rauc-bundle >&2
-            exit 1
-          fi
-
-          cp "$SD_IMAGE_SOURCE" "dist/${SD_IMAGE_NAME}"
-          cp "$BUNDLE_SOURCE" "dist/${BUNDLE_NAME}"
+          SYSTEM_PATH="$(readlink -f result-system)"
+          mapfile -t CLOSURE_PATHS < <(nix-store --query --requisites "$SYSTEM_PATH" | sort -u)
+          nix-store --export "${CLOSURE_PATHS[@]}" | zstd -19 -T0 -o "dist/${CLOSURE_NAME}"
 
           (
             cd dist
-            sha256sum "${SD_IMAGE_NAME}" "${BUNDLE_NAME}" > "${CHECKSUM_NAME}"
+            sha256sum "${SD_IMAGE_NAME}" "${CLOSURE_NAME}" > "${CHECKSUM_NAME}"
           )
 
           printf '%s' "$FIRMWARE_SIGNING_PRIVATE_KEY" > firmware-signing.key
           chmod 600 firmware-signing.key
           minisign -S -s firmware-signing.key -m "dist/${SD_IMAGE_NAME}" -x "dist/${SD_IMAGE_NAME}.minisig"
-          minisign -S -s firmware-signing.key -m "dist/${BUNDLE_NAME}" -x "dist/${BUNDLE_NAME}.minisig"
+          minisign -S -s firmware-signing.key -m "dist/${CLOSURE_NAME}" -x "dist/${CLOSURE_NAME}.minisig"
           minisign -S -s firmware-signing.key -m "dist/${CHECKSUM_NAME}" -x "dist/${CHECKSUM_NAME}.minisig"
 
+          export SYSTEM_PATH
           export SD_IMAGE_NAME
-          export BUNDLE_NAME
+          export CLOSURE_NAME
           export CHECKSUM_NAME
           export MANIFEST_NAME
 
@@ -121,6 +91,7 @@ jobs:
           prefix = os.environ["ARTIFACT_PREFIX"]
           base_url = os.environ["FIRMWARE_RELEASE_BASE_URL"].rstrip("/")
           release_dir = os.environ["RELEASES_PREFIX"].strip("/")
+          system_path = os.environ["SYSTEM_PATH"]
           def file_sha256(path: Path) -> str:
             digest = hashlib.sha256()
             with path.open("rb") as handle:
@@ -130,8 +101,8 @@ jobs:
 
           artifacts = []
           for file_name, kind, format_name in [
-            (os.environ["SD_IMAGE_NAME"], "sd-image", "manafish-ab-image+zstd"),
-            (os.environ["BUNDLE_NAME"], "rauc-bundle", "rauc-verity"),
+            (os.environ["SD_IMAGE_NAME"], "sd-image", "nixos-sd-image"),
+            (os.environ["CLOSURE_NAME"], "system-closure", "nix-store-export+zstd"),
             (os.environ["CHECKSUM_NAME"], "checksums", "sha256sum"),
           ]:
             path = dist / file_name
@@ -156,8 +127,9 @@ jobs:
             "publishedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
             "releaseUrl": f"{base_url}/{release_dir}/{version}/",
             "offlineInstall": {
-              "bundleFormat": "rauc-verity",
-              "installCommand": f"rauc install /var/lib/manafish-firmware-update/{os.environ['BUNDLE_NAME']}",
+              "systemPath": system_path,
+              "closureFormat": "nix-store --export + zstd",
+              "importCommand": f"zstd -dc {os.environ['CLOSURE_NAME']} | nix-store --import",
             },
             "signing": {
               "enabled": True,
@@ -236,8 +208,8 @@ jobs:
 
           ## Firmware artifacts
 
-          - [${ARTIFACT_PREFIX}-${VERSION}.img.zst](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.img.zst) — factory SD card image (one-shot \`dd\`)
-          - [${ARTIFACT_PREFIX}-${VERSION}.raucb](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.raucb) — RAUC OTA bundle for in-place A/B updates
+          - [${ARTIFACT_PREFIX}-${VERSION}.img.zst](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.img.zst)
+          - [${ARTIFACT_PREFIX}-${VERSION}.closure.zst](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.closure.zst)
           - [${CHECKSUM_NAME}](${BASE_URL}/${CHECKSUM_NAME})
           - [${MANIFEST_NAME}](${BASE_URL}/${MANIFEST_NAME})
           - [latest.json](${FIRMWARE_RELEASE_BASE_URL%/}/${RELEASES_PREFIX}/latest.json)
@@ -245,7 +217,7 @@ jobs:
 
           cat >> release-notes.md <<EOF
           - [${ARTIFACT_PREFIX}-${VERSION}.img.zst.minisig](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.img.zst.minisig)
-          - [${ARTIFACT_PREFIX}-${VERSION}.raucb.minisig](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.raucb.minisig)
+          - [${ARTIFACT_PREFIX}-${VERSION}.closure.zst.minisig](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.closure.zst.minisig)
           - [${CHECKSUM_NAME}.minisig](${BASE_URL}/${CHECKSUM_NAME}.minisig)
           - [${MANIFEST_NAME}.minisig](${BASE_URL}/${MANIFEST_NAME}.minisig)
           - [latest.json.minisig](${FIRMWARE_RELEASE_BASE_URL%/}/${RELEASES_PREFIX}/latest.json.minisig)

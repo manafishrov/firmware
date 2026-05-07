@@ -1,4 +1,4 @@
-"""HTTP firmware update server (RAUC bundle staging + health + rollback)."""
+"""HTTP firmware update upload server."""
 
 import asyncio
 import json
@@ -8,16 +8,14 @@ import tempfile
 from typing import cast
 
 from .constants import (
-    FIRMWARE_UPDATE_BUNDLE_SUFFIX,
     FIRMWARE_UPDATE_CHUNK_SIZE,
     FIRMWARE_UPDATE_DIR,
     FIRMWARE_UPDATE_FREE_SPACE_MARGIN_BYTES,
     FIRMWARE_UPDATE_MAX_HEADER_BYTES,
+    FIRMWARE_UPDATE_NIX_SYSTEM_PATH_RE,
     FIRMWARE_UPDATE_PORT,
-    FIRMWARE_UPDATE_RAUC_BIN,
     FIRMWARE_UPDATE_REQUEST_PATH,
     FIRMWARE_UPDATE_STATUS_PATH,
-    FIRMWARE_UPDATE_SYSTEMCTL_BIN,
     FIRMWARE_UPDATE_TOAST_ID,
 )
 from .log import log_error, log_info, log_warn
@@ -26,47 +24,25 @@ from .rov_state import RovState
 from .toast import toast_error, toast_loading, toast_success
 
 
-_PHASE_MESSAGE_KEYS: dict[str, str] = {
-    "verifying": "toasts_firmware_update_installing",
-    "installing": "toasts_firmware_update_installing",
-    "rebooting": "toasts_firmware_update_rebooting",
-    "awaiting-mark-good": "toasts_firmware_update_awaiting_mark_good",
-}
-
-_PHASE_DESCRIPTION_KEYS: dict[str, str] = {
-    "verifying": "toasts_firmware_update_rover_verifying_description",
-    "installing": "toasts_firmware_update_rover_installing_description",
-    "rebooting": "toasts_firmware_update_rebooting_description",
-    "awaiting-mark-good": "toasts_firmware_update_awaiting_mark_good_description",
-}
-
-_TERMINAL_PHASES: frozenset[str] = frozenset({"completed", "failed", "rolled-back"})
-
-
 class HttpUpdateServer:
-    """HTTP server for staging signed RAUC firmware bundles and exposing health/rollback."""
+    """Small HTTP server for staging signed firmware closure uploads."""
 
     def __init__(self, state: RovState) -> None:
         """Initialize the update upload server."""
         self.state: RovState = state
         self.server: asyncio.Server | None = None
         self._last_status: str | None = None
-        self._background_tasks: set[asyncio.Task[None]] = set()
 
     async def initialize(self) -> None:
-        """Start the HTTP update server bound to all interfaces.
-
-        Bind to 0.0.0.0 so the on-device rauc-mark-good probe (running as root
-        on localhost) and the LAN-attached app share a single listener.
-        """
+        """Start the HTTP update upload server."""
         FIRMWARE_UPDATE_DIR.mkdir(parents=True, exist_ok=True)
         self.server = await asyncio.start_server(
             self._handle_client,
-            host="0.0.0.0",  # noqa: S104
-            port=FIRMWARE_UPDATE_PORT,
+            self.state.rov_config.ip_address,
+            FIRMWARE_UPDATE_PORT,
         )
         log_info(
-            f"Firmware update HTTP server started on 0.0.0.0:{FIRMWARE_UPDATE_PORT}"
+            f"Firmware update HTTP server started on {self.state.rov_config.ip_address}:{FIRMWARE_UPDATE_PORT}"
         )
 
     async def wait_closed(self) -> None:
@@ -75,7 +51,7 @@ class HttpUpdateServer:
             await self.server.serve_forever()
 
     async def watch_status_loop(self) -> None:
-        """Forward installer status changes to the app over the existing toast websocket."""
+        """Forward root installer status changes to the app toast."""
         while True:
             try:
                 await self._emit_status_if_changed()
@@ -117,28 +93,16 @@ class HttpUpdateServer:
             )
             return
 
-        if phase == "rolled-back":
-            toast_error(
-                identifier=FIRMWARE_UPDATE_TOAST_ID,
-                content=ToastContent(
-                    message_key="toasts_firmware_update_rolled_back",
-                    description_key="toasts_firmware_update_rolled_back_description",
-                    description_args={"message": message},
-                ),
-                action=None,
-            )
-            return
-
-        message_key = _PHASE_MESSAGE_KEYS.get(
-            phase, "toasts_firmware_update_installing"
+        message_key = (
+            "toasts_firmware_update_flashing_mcu"
+            if phase == "activated"
+            else "toasts_firmware_update_installing"
         )
-        description_key = _PHASE_DESCRIPTION_KEYS.get(phase)
         toast_loading(
             identifier=FIRMWARE_UPDATE_TOAST_ID,
             content=ToastContent(
                 message_key=message_key,
                 message_args={"percent": percent},
-                description_key=description_key,
             ),
             action=None,
         )
@@ -150,18 +114,13 @@ class HttpUpdateServer:
     ) -> None:
         try:
             method, path, headers = await self._read_request_headers(reader)
-            if method == "POST" and path == "/firmware/update":
-                await self._handle_update_upload(reader, writer, headers)
+            if method != "POST" or path != "/firmware/update":
+                await self._send_response(writer, 404, "Not found")
                 return
-            if method == "GET" and path == "/firmware/health":
-                await self._handle_health(writer)
-                return
-            if method == "POST" and path == "/firmware/rollback":
-                await self._handle_rollback(writer)
-                return
-            await self._send_response(writer, 404, "Not found")
+
+            await self._handle_update_upload(reader, writer, headers)
         except Exception as exc:
-            log_error(f"Firmware update server error: {exc}")
+            log_error(f"Firmware update upload failed: {exc}")
             await self._send_response(writer, 500, str(exc))
         finally:
             writer.close()
@@ -203,85 +162,55 @@ class HttpUpdateServer:
         self.state.firmware_uploading = True
         try:
             file_name = self._require_safe_file_name(headers)
+            system_path = self._require_system_path(headers)
+            signature = self._require_signature(headers)
             content_length = self._require_content_length(headers)
-            bundle_path = FIRMWARE_UPDATE_DIR / file_name
-            partial_path = bundle_path.with_suffix(f"{bundle_path.suffix}.part")
+            closure_path = FIRMWARE_UPDATE_DIR / file_name
+            partial_path = closure_path.with_suffix(f"{closure_path.suffix}.part")
             self._prepare_staging_paths()
             self._require_free_space(content_length)
 
             try:
                 await self._stream_body(reader, partial_path, content_length)
-                _ = partial_path.replace(bundle_path)
-                self._write_request(bundle_path)
+                _ = partial_path.replace(closure_path)
+                signature_path = Path(f"{closure_path}.minisig")
+                _ = signature_path.write_text(signature, encoding="utf-8")
+                self._write_request(closure_path, signature_path, system_path)
             except Exception:
                 partial_path.unlink(missing_ok=True)
                 raise
-
             toast_loading(
                 identifier=FIRMWARE_UPDATE_TOAST_ID,
                 content=ToastContent(message_key="toasts_firmware_update_installing"),
                 action=None,
             )
             await self._send_response(writer, 202, "Firmware update accepted")
-            log_info(f"Firmware update staged at {bundle_path}")
+            log_info(f"Firmware update staged at {closure_path}")
         finally:
             self.state.firmware_uploading = False
 
-    async def _handle_health(self, writer: asyncio.StreamWriter) -> None:
-        """Return 200 only when the firmware service is fully alive.
-
-        Used by the on-device rauc-mark-good service to gate slot promotion.
-        """
-        health = self.state.system_health
-        ready = (
-            health.imu_healthy and health.pressure_sensor_healthy and health.mcu_healthy
-        )
-        if ready:
-            await self._send_response(writer, 200, "ready")
-        else:
-            await self._send_response(writer, 503, "not ready")
-
-    async def _handle_rollback(self, writer: asyncio.StreamWriter) -> None:
-        """Mark the running slot bad and reboot to revert to the previous slot."""
-        proc = await asyncio.create_subprocess_exec(
-            FIRMWARE_UPDATE_RAUC_BIN,
-            "status",
-            "mark-bad",
-            "booted",
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        stdout, stderr = await proc.communicate()
-        if proc.returncode != 0:
-            err = stderr.decode("utf-8", errors="replace").strip()
-            log_error(f"rauc mark-bad failed: {err}")
-            await self._send_response(writer, 500, f"rauc mark-bad failed: {err}")
-            return
-
-        log_info(f"Slot marked bad: {stdout.decode('utf-8', errors='replace').strip()}")
-        await self._send_response(writer, 202, "rollback scheduled")
-
-        async def _reboot() -> None:
-            await asyncio.sleep(1)
-            _ = await asyncio.create_subprocess_exec(
-                FIRMWARE_UPDATE_SYSTEMCTL_BIN,
-                "reboot",
-            )
-
-        task = asyncio.create_task(_reboot())
-        self._background_tasks.add(task)
-        task.add_done_callback(self._background_tasks.discard)
-
-    @staticmethod
-    def _require_safe_file_name(headers: dict[str, str]) -> str:
+    def _require_safe_file_name(self, headers: dict[str, str]) -> str:
         file_name = Path(headers.get("x-firmware-file-name", "")).name
-        if not file_name.endswith(FIRMWARE_UPDATE_BUNDLE_SUFFIX):
-            msg = f"Firmware update file must be a {FIRMWARE_UPDATE_BUNDLE_SUFFIX} artifact"
+        if not file_name.endswith(".closure.zst"):
+            msg = "Firmware update file must be a .closure.zst artifact"
             raise ValueError(msg)
         return file_name
 
-    @staticmethod
-    def _require_content_length(headers: dict[str, str]) -> int:
+    def _require_system_path(self, headers: dict[str, str]) -> str:
+        system_path = headers.get("x-firmware-system-path", "")
+        if not FIRMWARE_UPDATE_NIX_SYSTEM_PATH_RE.match(system_path):
+            msg = "Firmware update system path is invalid"
+            raise ValueError(msg)
+        return system_path
+
+    def _require_signature(self, headers: dict[str, str]) -> str:
+        signature = headers.get("x-firmware-signature", "").replace("\\n", "\n")
+        if "minisign" not in signature or len(signature.strip()) == 0:
+            msg = "Firmware update signature is invalid"
+            raise ValueError(msg)
+        return signature
+
+    def _require_content_length(self, headers: dict[str, str]) -> int:
         content_length = int(headers.get("content-length", "0"))
         if content_length <= 0:
             msg = "Firmware update body is empty"
@@ -291,8 +220,7 @@ class HttpUpdateServer:
     @staticmethod
     def _prepare_staging_paths() -> None:
         FIRMWARE_UPDATE_REQUEST_PATH.unlink(missing_ok=True)
-        FIRMWARE_UPDATE_STATUS_PATH.unlink(missing_ok=True)
-        for pattern in ("*.part", f"*{FIRMWARE_UPDATE_BUNDLE_SUFFIX}"):
+        for pattern in ("*.part", "*.closure.zst", "*.closure.zst.minisig"):
             for path in FIRMWARE_UPDATE_DIR.glob(pattern):
                 path.unlink(missing_ok=True)
 
@@ -334,9 +262,17 @@ class HttpUpdateServer:
                         action=None,
                     )
 
-    @staticmethod
-    def _write_request(bundle_path: Path) -> None:
-        request = {"bundlePath": str(bundle_path)}
+    def _write_request(
+        self,
+        closure_path: Path,
+        signature_path: Path,
+        system_path: str,
+    ) -> None:
+        request = {
+            "closurePath": str(closure_path),
+            "signaturePath": str(signature_path),
+            "systemPath": system_path,
+        }
         _, tmp_name = tempfile.mkstemp(dir=FIRMWARE_UPDATE_DIR, suffix=".json")
         tmp_path = Path(tmp_name)
         _ = tmp_path.write_text(json.dumps(request), encoding="utf-8")
@@ -349,12 +285,10 @@ class HttpUpdateServer:
         body: str,
     ) -> None:
         reason = {
-            200: "OK",
             202: "Accepted",
             404: "Not Found",
             409: "Conflict",
             500: "Internal Server Error",
-            503: "Service Unavailable",
         }.get(status, "OK")
         encoded = body.encode("utf-8")
         response = (

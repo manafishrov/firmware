@@ -1,6 +1,7 @@
 """Constants used throughout the firmware."""
 
 from pathlib import Path
+import re
 from typing import Final
 
 
@@ -77,9 +78,9 @@ FIRMWARE_UPDATE_STATUS_PATH: Final = FIRMWARE_UPDATE_DIR / "status.json"
 FIRMWARE_UPDATE_MAX_HEADER_BYTES: Final = 64 * 1024
 FIRMWARE_UPDATE_CHUNK_SIZE: Final = 1024 * 1024
 FIRMWARE_UPDATE_FREE_SPACE_MARGIN_BYTES: Final = 512 * 1024 * 1024
-FIRMWARE_UPDATE_BUNDLE_SUFFIX: Final = ".raucb"
-FIRMWARE_UPDATE_RAUC_BIN: Final = "/run/current-system/sw/bin/rauc"
-FIRMWARE_UPDATE_SYSTEMCTL_BIN: Final = "/run/current-system/sw/bin/systemctl"
+FIRMWARE_UPDATE_NIX_SYSTEM_PATH_RE: Final[re.Pattern[str]] = re.compile(
+    r"^/nix/store/[a-z0-9]{32}-nixos-system-.+"
+)
 
 # General
 SYSTEM_FAILURE_THRESHOLD: Final = 3
