@@ -23,9 +23,9 @@ from .constants import (
     INTEGRAL_RELAX_THRESHOLD,
     INTEGRAL_WINDUP_CLIP_DEGREES,
     MAX_GYRO_DEG_PER_SEC,
+    MOTOR_DEADZONE,
     PITCH_MAX,
     THRUSTER_SEND_FREQUENCY,
-    MOTOR_DEADZONE,
 )
 from .log import log_error, log_info
 from .models.config import (
@@ -534,7 +534,9 @@ class Regulator:
         )
 
         stabilization_actuation = self._stabilization_actuation_buffer
-        stabilization_actuation[0] = np.float32(u_pitch / 10.0) #Divide by 10 to avoid unsatisfying PID constant values
+        stabilization_actuation[0] = np.float32(
+            u_pitch / 10.0
+        )  # Divide by 10 to avoid unsatisfying PID constant values
         stabilization_actuation[1] = np.float32(u_yaw / 10.0)
         stabilization_actuation[2] = np.float32(u_roll / 10.0)
 
@@ -693,8 +695,12 @@ class Regulator:
         self._scale_regulator_direction_vector(regulator_direction_vector)
         self._scale_direction_vector_with_user_max_power(direction_vector)
 
-        mask_pos = (regulator_direction_vector > 0) & (regulator_direction_vector < MOTOR_DEADZONE)
-        mask_neg = (regulator_direction_vector < 0) & (regulator_direction_vector > -MOTOR_DEADZONE)
+        mask_pos = (regulator_direction_vector > 0) & (
+            regulator_direction_vector < MOTOR_DEADZONE
+        )
+        mask_neg = (regulator_direction_vector < 0) & (
+            regulator_direction_vector > -MOTOR_DEADZONE
+        )
         regulator_direction_vector[mask_pos] = MOTOR_DEADZONE
         regulator_direction_vector[mask_neg] = -MOTOR_DEADZONE
 
