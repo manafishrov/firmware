@@ -48,15 +48,17 @@ for pkg in "${PACKAGES[@]}"; do
 	fi
 done
 
+NIX_PKG_FILE="nix/firmware.nix"
+
 for pkg in "${CUSTOM_VERSION_PACKAGES[@]}"; do
 	echo "  $pkg (custom version)..."
-	version=$(sed -n "/pname = \"$pkg\";/,/version =/p" configuration.nix | grep "version =" | sed -E 's/.*version = "([^"]+)";.*/\1/')
+	version=$(sed -n "/pname = \"$pkg\";/,/version =/p" "$NIX_PKG_FILE" | grep "version =" | sed -E 's/.*version = "([^"]+)";.*/\1/')
 
 	if [ -n "$version" ]; then
 		echo "    $version"
 		sed -i -E "s/\"$pkg==[^\"]+\"/\"$pkg==$version\"/" pyproject.toml
 	else
-		echo "    WARNING: Could not find version for $pkg in configuration.nix"
+		echo "    WARNING: Could not find version for $pkg in $NIX_PKG_FILE"
 	fi
 done
 

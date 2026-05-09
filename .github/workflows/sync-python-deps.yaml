@@ -1,0 +1,89 @@
+name: Sync Python deps
+
+on:
+  pull_request:
+    paths:
+      - flake.lock
+      - flake.nix
+      - nix/**
+      - sync-python-deps.sh
+      - pyproject.toml
+
+permissions:
+  contents: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    # Only run on PRs from the same repo (so we can push back). Forks fall
+    # back to the assertion job below.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout PR branch
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@92148bb48b9a0c5458c53dd0b368fbfbfbaa3210 # main
+        with:
+          diagnostic-endpoint: ""
+
+      - name: Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@b4a9864e3a8ab8179be30f2e70fd71fe9996bb9d # main
+        with:
+          diagnostic-endpoint: ""
+
+      - name: Run sync script
+        run: ./sync-python-deps.sh
+
+      - name: Commit and push if changed
+        run: |
+          set -euo pipefail
+          if [ -z "$(git status --porcelain pyproject.toml)" ]; then
+            echo "pyproject.toml already in sync with nixpkgs."
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add pyproject.toml
+          git commit -m 'chore(deps): sync pyproject.toml with nixpkgs'
+          git push
+
+  verify:
+    # Runs for forks (where the sync job can't push). Fails the PR if
+    # pyproject.toml is out of sync — the PR author has to run the script
+    # locally and push the result.
+    if: github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@92148bb48b9a0c5458c53dd0b368fbfbfbaa3210 # main
+        with:
+          diagnostic-endpoint: ""
+
+      - name: Magic Nix Cache
+        uses: DeterminateSystems/magic-nix-cache-action@b4a9864e3a8ab8179be30f2e70fd71fe9996bb9d # main
+        with:
+          diagnostic-endpoint: ""
+
+      - name: Run sync script
+        run: ./sync-python-deps.sh
+
+      - name: Fail if pyproject.toml is out of sync
+        run: |
+          if [ -n "$(git status --porcelain pyproject.toml)" ]; then
+            echo "::error::pyproject.toml is out of sync with nixpkgs. Run ./sync-python-deps.sh locally and commit the result."
+            git --no-pager diff pyproject.toml
+            exit 1
+          fi

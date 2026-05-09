@@ -2,59 +2,109 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:best-practices",
-    "schedule:earlyMondays",
     ":separateMultipleMajorReleases",
+    "abandonments:recommended",
+    ":maintainLockFilesWeekly",
     ":semanticCommits",
-    ":enablePreCommit",
     ":dependencyDashboard"
   ],
-  "enabledManagers": ["nix", "custom.regex", "github-actions"],
+  "timezone": "Europe/Oslo",
+  "schedule": ["before 09:00 on monday"],
+  "prConcurrentLimit": 10,
+  "prHourlyLimit": 10,
+  "labels": ["dependencies"],
+  "commitMessagePrefix": "chore(deps): ",
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "labels": ["dependencies", "security"]
+  },
+  "enabledManagers": ["nix", "pep621", "github-actions", "custom.regex"],
+  "nix": {
+    "enabled": true
+  },
+  "lockFileMaintenance": {
+    "enabled": true,
+    "schedule": ["before 09:00 on monday"]
+  },
   "postUpgradeTasks": {
-    "fileFilters": ["pyproject.toml", "flake.lock", "configuration.nix"],
+    "fileFilters": ["pyproject.toml", "uv.lock", "flake.lock", "nix/firmware.nix"],
     "executionMode": "update"
   },
   "packageRules": [
     {
+      "matchUpdateTypes": ["digest", "pinDigest"],
+      "groupName": "container & action digests",
+      "automerge": true,
+      "platformAutomerge": true
+    },
+    {
       "matchUpdateTypes": ["patch"],
-      "groupName": "patch updates"
+      "groupName": "all patch dependencies",
+      "automerge": true,
+      "platformAutomerge": true
+    },
+    {
+      "matchUpdateTypes": ["minor"],
+      "groupName": "all minor dependencies"
+    },
+    {
+      "matchUpdateTypes": ["lockFileMaintenance"],
+      "groupName": "lock file maintenance",
+      "automerge": true,
+      "platformAutomerge": true
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "groupName": "github actions",
+      "automerge": true,
+      "platformAutomerge": true
     },
     {
       "matchManagers": ["nix"],
-      "groupName": "nix dependencies"
+      "groupName": "nix flake updates",
+      "automerge": true,
+      "platformAutomerge": true
     },
     {
       "matchPackageNames": [
         "numpydantic",
+        "bmi270",
         "CoRoLab-Berlin/bmi270_python",
         "bluerobotics/ms5837-python"
       ],
       "groupName": "custom python packages"
+    },
+    {
+      "matchDepNames": ["python"],
+      "groupName": "python toolchain"
     }
   ],
   "customManagers": [
     {
-      "description": "Update version strings for custom python packages in configuration.nix",
+      "description": "Update version strings for custom python packages in nix/firmware.nix",
       "customType": "regex",
-      "managerFilePatterns": ["^configuration\\.nix$"],
+      "managerFilePatterns": ["/^nix/firmware\\.nix$/"],
       "matchStrings": [
         "pname = \"(?<depName>numpydantic|bmi270)\";\\s+version = \"(?<currentValue>[0-9\\.]+)\";"
       ],
       "datasourceTemplate": "pypi"
     },
     {
-      "description": "Sync python version from configuration.nix to pyproject.toml",
+      "description": "Sync python version from nix/firmware.nix to pyproject.toml",
       "customType": "regex",
-      "managerFilePatterns": ["^configuration\\.nix$"],
+      "managerFilePatterns": ["/^nix/firmware\\.nix$/"],
       "matchStrings": ["pkgs\\.python(?<currentValue>3[0-9]+)"],
       "depNameTemplate": "python",
       "datasourceTemplate": "python-version",
       "versioningTemplate": "regex:^3(?<minor>[0-9]+)$"
     },
     {
-      "description": "Update python version in pyproject.toml",
+      "description": "Update python version pin in pyproject.toml",
       "customType": "regex",
-      "managerFilePatterns": ["^pyproject\\.toml$"],
-      "matchStrings": ["requires-python = \"==(?<currentValue>3\\.[0-9]+)(\\.[0-9]+|(\\.\\*))?\""],
+      "managerFilePatterns": ["/^pyproject\\.toml$/"],
+      "matchStrings": [
+        "requires-python = \"==(?<currentValue>3\\.[0-9]+)(\\.[0-9]+|(\\.\\*))?\""
+      ],
       "depNameTemplate": "python",
       "datasourceTemplate": "python-version",
       "versioningTemplate": "regex:^3\\.(?<minor>[0-9]+)$"
