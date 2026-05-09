@@ -10,6 +10,7 @@ from ..constants import (
     LOG_LEVEL_WARN,
     LOG_PACKET_HEADER_SIZE,
     LOG_PACKET_START_BYTE,
+    MCU_AUTO_UPDATE_WINDOW_S,
     MCU_PROTOCOL_DSHOT,
     MCU_TELEMETRY_BATCH_ENTRY_SIZE,
     MCU_TELEMETRY_BATCH_MAX_ITEMS,
@@ -34,6 +35,7 @@ from ..rov_state import RovState
 from ..serial import SerialManager
 from ..websocket.message import Config
 from ..websocket.queue import get_message_queue
+from ..websocket.receive.mcu import flash_mcu_firmware, resolve_mcu_firmware
 
 
 _MAX_READ_BUFFER_SIZE = 512
@@ -70,6 +72,7 @@ class McuSensor:
         self.state: RovState = state
         self.serial_manager: SerialManager = serial_manager
         self._last_telemetry_time: list[float] = [0.0] * NUM_MOTORS
+        self._startup_time: float = time.monotonic()
 
     async def read_loop(self) -> None:
         """Read telemetry data from the MCU in a loop."""
@@ -302,6 +305,48 @@ class McuSensor:
         if changed:
             self._reset_telemetry()
             get_message_queue().put_nowait(Config(payload=self.state.rov_config))
+
+        expected = self._get_expected_version()
+        self._auto_update_mcu_if_needed(version, expected)
+
+    def _get_expected_version(self) -> str | None:
+        resolved = resolve_mcu_firmware(self.state.rov_config.mcu_board)
+        if resolved is None:
+            return None
+        return resolved[1]
+
+    def _auto_update_mcu_if_needed(
+        self, current_version: str, expected_version: str | None
+    ) -> None:
+        if expected_version is None:
+            return
+
+        if current_version == expected_version:
+            return
+
+        if self.state.mcu_flashing:
+            return
+
+        if time.monotonic() - self._startup_time > MCU_AUTO_UPDATE_WINDOW_S:
+            log_warn(
+                f"MCU firmware mismatch ({current_version} != {expected_version}) detected, "
+                f"but skipping auto-flash because the service has been running for more than {MCU_AUTO_UPDATE_WINDOW_S} seconds."
+            )
+            return
+
+        log_warn(
+            f"MCU firmware mismatch: current is {current_version}, expected is {expected_version}. Auto-flashing."
+        )
+        _ = asyncio.get_running_loop().create_task(self._flash_mcu())
+
+    async def _flash_mcu(self) -> None:
+        succeeded = await flash_mcu_firmware(
+            self.state,
+            self.state.rov_config.mcu_board,
+            show_toasts=True,
+        )
+        if not succeeded:
+            log_error("Auto-flash of MCU firmware failed.")
 
     def _reset_telemetry(self) -> None:
         for i in range(NUM_MOTORS):
