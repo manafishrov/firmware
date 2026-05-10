@@ -79,7 +79,7 @@ wheels = [
 
 [[package]]
 name = "manafish-firmware"
-version = "1.0.21"
+version = "1.0.22"
 source = { editable = "." }
 dependencies = [
     { name = "bmi270" },
