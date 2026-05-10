@@ -154,8 +154,6 @@ jobs:
 
           echo "Uploading to $TARGET_DIR..."
           rclone copy dist "remote:${TARGET_DIR}" --progress
-          rclone copyto "dist/${ARTIFACT_PREFIX}-${VERSION}.json" "remote:${RELEASES_PREFIX}/latest.json"
-          rclone copyto "dist/${ARTIFACT_PREFIX}-${VERSION}.json.minisig" "remote:${RELEASES_PREFIX}/latest.json.minisig"
 
       - name: Prune old cloud releases
         env:
@@ -179,70 +177,6 @@ jobs:
             rclone purge "remote:${RELEASES_PREFIX}/${OLD_RELEASE}"
           done
 
-      - name: Publish versions index
-        env:
-          RCLONE_CONF_CONTENT: ${{ secrets.RCLONE_CONF }}
-          FIRMWARE_SIGNING_PRIVATE_KEY: ${{ secrets.FIRMWARE_SIGNING_PRIVATE_KEY }}
-        run: |
-          set -euo pipefail
-
-          if [ -z "$RCLONE_CONF_CONTENT" ] || [ -z "$FIRMWARE_SIGNING_PRIVATE_KEY" ]; then
-            echo "::error::Missing RCLONE_CONF or FIRMWARE_SIGNING_PRIVATE_KEY secret."
-            exit 1
-          fi
-
-          nix profile install nixpkgs#rclone nixpkgs#minisign nixpkgs#python3
-
-          mkdir -p ~/.config/rclone
-          printf '%s' "$RCLONE_CONF_CONTENT" > ~/.config/rclone/rclone.conf
-
-          mapfile -t RETAINED < <(rclone lsf "remote:${RELEASES_PREFIX}" --dirs-only | tr -d '/' | awk '/^v/' | sort -Vr)
-
-          mkdir -p index
-          export ARTIFACT_PREFIX
-          export FIRMWARE_RELEASE_BASE_URL
-          export RELEASES_PREFIX
-          printf '%s\n' "${RETAINED[@]}" > index/versions.txt
-
-          python3 <<'PY'
-          import json
-          import os
-          from datetime import datetime, timezone
-          from pathlib import Path
-
-          versions_file = Path("index/versions.txt")
-          retained = [line.strip() for line in versions_file.read_text().splitlines() if line.strip()]
-          prefix = os.environ["ARTIFACT_PREFIX"]
-          base_url = os.environ["FIRMWARE_RELEASE_BASE_URL"].rstrip("/")
-          release_dir = os.environ["RELEASES_PREFIX"].strip("/")
-
-          versions = [
-            {
-              "version": version,
-              "manifestUrl": f"{base_url}/{release_dir}/{version}/{prefix}-{version}.json",
-            }
-            for version in retained
-          ]
-
-          index = {
-            "publishedAt": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            "product": prefix,
-            "versions": versions,
-          }
-
-          Path("index/versions.json").write_text(
-            json.dumps(index, indent=2) + "\n", encoding="utf-8"
-          )
-          PY
-
-          printf '%s' "$FIRMWARE_SIGNING_PRIVATE_KEY" > firmware-signing.key
-          chmod 600 firmware-signing.key
-          minisign -S -s firmware-signing.key -m index/versions.json -x index/versions.json.minisig
-          rm -f firmware-signing.key
-
-          rclone copyto index/versions.json "remote:${RELEASES_PREFIX}/versions.json"
-          rclone copyto index/versions.json.minisig "remote:${RELEASES_PREFIX}/versions.json.minisig"
-
       - name: Generate release notes
         run: |
           set -euo pipefail
@@ -259,14 +193,9 @@ jobs:
           - [${ARTIFACT_PREFIX}-${VERSION}.img.zst](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.img.zst)
           - [${CHECKSUM_NAME}](${BASE_URL}/${CHECKSUM_NAME})
           - [${MANIFEST_NAME}](${BASE_URL}/${MANIFEST_NAME})
-          - [latest.json](${FIRMWARE_RELEASE_BASE_URL%/}/${RELEASES_PREFIX}/latest.json)
-          EOF
-
-          cat >> release-notes.md <<EOF
           - [${ARTIFACT_PREFIX}-${VERSION}.img.zst.minisig](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.img.zst.minisig)
           - [${CHECKSUM_NAME}.minisig](${BASE_URL}/${CHECKSUM_NAME}.minisig)
           - [${MANIFEST_NAME}.minisig](${BASE_URL}/${MANIFEST_NAME}.minisig)
-          - [latest.json.minisig](${FIRMWARE_RELEASE_BASE_URL%/}/${RELEASES_PREFIX}/latest.json.minisig)
           EOF
 
       - name: Create or update draft release
