@@ -1,6 +1,6 @@
 """WebSocket message handler for the ROV firmware."""
 
-from typing import cast
+from typing import Any, cast
 
 from websockets import ServerConnection
 
@@ -19,7 +19,7 @@ from .receive.actions import (
     handle_direction_vector,
     handle_start_thruster_test,
 )
-from .receive.config import handle_get_config, handle_set_config
+from .receive.config import handle_get_config, handle_import_config, handle_set_config
 from .receive.mcu import handle_flash_mcu_firmware
 from .receive.regulator import (
     handle_cancel_regulator_auto_tuning,
@@ -41,6 +41,8 @@ async def _handle_payload_message(
     match message.type:
         case MessageType.SET_CONFIG:
             await handle_set_config(state, cast(PartialRovConfig, payload))
+        case MessageType.IMPORT_CONFIG:
+            await handle_import_config(state, cast(dict[str, Any], payload))
         case MessageType.FLASH_MCU_FIRMWARE:
             await handle_flash_mcu_firmware(state, cast(McuBoard, payload))
         case MessageType.DIRECTION_VECTOR:

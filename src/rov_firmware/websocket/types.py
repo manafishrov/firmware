@@ -9,6 +9,7 @@ class MessageType(StrEnum):
     DIRECTION_VECTOR = "directionVector"
     GET_CONFIG = "getConfig"
     SET_CONFIG = "setConfig"
+    IMPORT_CONFIG = "importConfig"
     CONFIG = "config"
     START_THRUSTER_TEST = "startThrusterTest"
     CANCEL_THRUSTER_TEST = "cancelThrusterTest"

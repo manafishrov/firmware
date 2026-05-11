@@ -1,6 +1,6 @@
 """WebSocket message models for the ROV firmware."""
 
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
@@ -42,6 +42,13 @@ class SetConfig(CamelCaseModel):
 
     type: Literal[MessageType.SET_CONFIG] = MessageType.SET_CONFIG
     payload: PartialRovConfig
+
+
+class ImportConfig(CamelCaseModel):
+    """WebSocket message for importing a raw, validation-free config snapshot."""
+
+    type: Literal[MessageType.IMPORT_CONFIG] = MessageType.IMPORT_CONFIG
+    payload: dict[str, Any]
 
 
 class Config(CamelCaseModel):
@@ -140,6 +147,7 @@ WebsocketMessage = Annotated[
     DirectionVector
     | GetConfig
     | SetConfig
+    | ImportConfig
     | Config
     | StartThrusterTest
     | CancelThrusterTest

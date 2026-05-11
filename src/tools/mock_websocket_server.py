@@ -487,6 +487,28 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         },
                     }
                     await websocket.send(json.dumps(toast_msg))
+                elif msg_type == "importConfig":
+                    if isinstance(payload, dict):
+                        raw = cast(dict[str, Any], dict(payload))
+                        raw.pop("firmwareVersion", None)
+                        raw.pop("mcuFirmwareVersion", None)
+                        MOCK_CONFIG.update(raw)
+                    config_msg = {"type": "config", "payload": MOCK_CONFIG}
+                    await websocket.send(json.dumps(config_msg))
+                    toast_msg = {
+                        "type": "showToast",
+                        "payload": {
+                            "identifier": None,
+                            "variant": "success",
+                            "content": {
+                                "messageKey": "toasts_rov_config_imported",
+                                "descriptionKey": None,
+                                "descriptionArgs": None,
+                            },
+                            "action": None,
+                        },
+                    }
+                    await websocket.send(json.dumps(toast_msg))
                 elif msg_type == "toggleAutoStabilization":
                     SYSTEM_STATUS["autoStabilization"] = not SYSTEM_STATUS[
                         "autoStabilization"
