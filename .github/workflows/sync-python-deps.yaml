@@ -32,12 +32,12 @@ jobs:
           fetch-depth: 0
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@92148bb48b9a0c5458c53dd0b368fbfbfbaa3210 # main
+        uses: DeterminateSystems/nix-installer-action@b6e4494ddccc51b56de1189099089a3514a69245 # main
         with:
           diagnostic-endpoint: ""
 
       - name: Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@b4a9864e3a8ab8179be30f2e70fd71fe9996bb9d # main
+        uses: DeterminateSystems/magic-nix-cache-action@5626df0a8b8f16cb060538f6d3041500a2d10cb0 # main
         with:
           diagnostic-endpoint: ""
 
@@ -68,12 +68,12 @@ jobs:
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Install Nix
-        uses: DeterminateSystems/nix-installer-action@92148bb48b9a0c5458c53dd0b368fbfbfbaa3210 # main
+        uses: DeterminateSystems/nix-installer-action@b6e4494ddccc51b56de1189099089a3514a69245 # main
         with:
           diagnostic-endpoint: ""
 
       - name: Magic Nix Cache
-        uses: DeterminateSystems/magic-nix-cache-action@b4a9864e3a8ab8179be30f2e70fd71fe9996bb9d # main
+        uses: DeterminateSystems/magic-nix-cache-action@5626df0a8b8f16cb060538f6d3041500a2d10cb0 # main
         with:
           diagnostic-endpoint: ""
 
