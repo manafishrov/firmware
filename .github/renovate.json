@@ -18,7 +18,7 @@
   "vulnerabilityAlerts": {
     "labels": ["dependencies", "security"]
   },
-  "enabledManagers": ["nix", "pep621", "github-actions", "custom.regex"],
+  "enabledManagers": ["nix", "github-actions", "custom.regex"],
   "nix": {
     "enabled": true
   },
@@ -75,7 +75,7 @@
       "groupName": "custom python packages"
     },
     {
-      "description": "Python version is governed by nixpkgs (synced via sync-python-deps.sh). Don't let Renovate bump it.",
+      "description": "Python deps (incl. python itself) are governed by nixpkgs and synced via sync-python-deps.sh. The pep621 manager is disabled globally; this rule is a belt-and-braces guard for any other manager that might still try to bump Python.",
       "matchDepNames": ["python"],
       "enabled": false
     }

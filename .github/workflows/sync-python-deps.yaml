@@ -44,17 +44,20 @@ jobs:
       - name: Run sync script
         run: ./sync-python-deps.sh
 
+      - name: Regenerate uv.lock to match
+        run: nix develop --command uv lock
+
       - name: Commit and push if changed
         run: |
           set -euo pipefail
-          if [ -z "$(git status --porcelain pyproject.toml)" ]; then
-            echo "pyproject.toml already in sync with nixpkgs."
+          if [ -z "$(git status --porcelain pyproject.toml uv.lock)" ]; then
+            echo "pyproject.toml and uv.lock already in sync with nixpkgs."
             exit 0
           fi
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
-          git add pyproject.toml
-          git commit -m 'chore(deps): sync pyproject.toml with nixpkgs'
+          git add pyproject.toml uv.lock
+          git commit -m 'chore(deps): sync pyproject.toml and uv.lock with nixpkgs'
           git push
 
   verify:
@@ -80,10 +83,13 @@ jobs:
       - name: Run sync script
         run: ./sync-python-deps.sh
 
-      - name: Fail if pyproject.toml is out of sync
+      - name: Regenerate uv.lock to match
+        run: nix develop --command uv lock
+
+      - name: Fail if pyproject.toml or uv.lock is out of sync
         run: |
-          if [ -n "$(git status --porcelain pyproject.toml)" ]; then
-            echo "::error::pyproject.toml is out of sync with nixpkgs. Run ./sync-python-deps.sh locally and commit the result."
-            git --no-pager diff pyproject.toml
+          if [ -n "$(git status --porcelain pyproject.toml uv.lock)" ]; then
+            echo "::error::pyproject.toml or uv.lock is out of sync with nixpkgs. Run ./sync-python-deps.sh && uv lock locally and commit the result."
+            git --no-pager diff pyproject.toml uv.lock
             exit 1
           fi
