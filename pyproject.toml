@@ -5,12 +5,12 @@ description = "Firmware for the Manafish ROV"
 license = "AGPL-3.0-or-later"
 requires-python = "==3.13.12"
 dependencies = [
-  "numpy==2.4.4",
+  "numpy==2.3.4",
   "websockets==15.0.1",
-  "pydantic==2.13.4",
+  "pydantic==2.11.7",
   "numpydantic==1.8.1",
-  "smbus2==0.6.1",
-  "scipy==1.17.1",
+  "smbus2==0.5.0",
+  "scipy==1.16.3",
   "pyserial-asyncio-fast==0.16",
   "bmi270==0.4.3",
   "ms5837 @ git+https://github.com/bluerobotics/ms5837-python.git@02996d71d2f08339b3d317b3f4da0a83781c706e",
