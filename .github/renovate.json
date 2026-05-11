@@ -66,6 +66,14 @@
       "platformAutomerge": true
     },
     {
+      "description": "Delay nixos-raspberrypi bumps so nixos-raspberrypi.cachix.org has time to populate aarch64 substitutes. The flake pulls in rpi-patched kernel, zfs, opencv, ffmpeg-rpi, gtk4 and friends; if the cachix lacks substitutes for the new rev the release build falls back to source compilation on the GHA aarch64 runner (multi-hour). 14d gives the upstream cache time to warm.",
+      "matchPackageNames": ["nvmd/nixos-raspberrypi"],
+      "groupName": "nixos-raspberrypi",
+      "minimumReleaseAge": "14 days",
+      "automerge": true,
+      "platformAutomerge": true
+    },
+    {
       "matchPackageNames": [
         "numpydantic",
         "bmi270",
