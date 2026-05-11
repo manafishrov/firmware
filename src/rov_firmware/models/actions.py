@@ -1,12 +1,16 @@
 """Data models for actions in the ROV firmware."""
 
+from typing import Annotated
+
 import numpy as np
 from numpy.typing import NDArray as NumpyNDArray
-from numpydantic import NDArray, Shape
+from numpydantic import NDArraySchema
 from pydantic import RootModel, model_validator
 
 
-class DirectionVector(RootModel[NDArray[Shape["8"], np.float32]]):  # ty: ignore[invalid-type-form]
+class DirectionVector(
+    RootModel[Annotated[np.ndarray, NDArraySchema((8,), np.float32)]]
+):
     """A direction vector for ROV movement."""
 
     @model_validator(mode="before")

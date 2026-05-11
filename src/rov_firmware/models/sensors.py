@@ -1,7 +1,9 @@
 """Sensor data models for the ROV firmware."""
 
+from typing import Annotated
+
 import numpy as np
-from numpydantic import NDArray, Shape
+from numpydantic import NDArraySchema
 from pydantic import BaseModel
 
 
@@ -18,10 +20,10 @@ class McuData(BaseModel):
 class ImuData(BaseModel):
     """Model for IMU data."""
 
-    acceleration: NDArray[Shape["3"], np.float32] = np.array(  # ty: ignore[invalid-type-form]
+    acceleration: Annotated[np.ndarray, NDArraySchema((3,), np.float32)] = np.array(
         [0.0, 0.0, 0.0], dtype=np.float32
     )
-    gyroscope: NDArray[Shape["3"], np.float32] = np.array(  # ty: ignore[invalid-type-form]
+    gyroscope: Annotated[np.ndarray, NDArraySchema((3,), np.float32)] = np.array(
         [0.0, 0.0, 0.0], dtype=np.float32
     )
     temperature: float = 0.0

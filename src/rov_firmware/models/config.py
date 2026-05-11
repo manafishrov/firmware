@@ -6,11 +6,11 @@ from pathlib import Path
 import secrets
 import tempfile
 import tomllib
-from typing import Any, ClassVar
+from typing import Annotated, Any, ClassVar
 
 import numpy as np
 from numpy.typing import NDArray as NumpyNDArray
-from numpydantic import NDArray, Shape
+from numpydantic import NDArraySchema
 from pydantic import Field, field_validator
 
 from .base import CamelCaseModel
@@ -95,8 +95,8 @@ class FluidType(StrEnum):
 class ThrusterPinSetup(CamelCaseModel):
     """Model for thruster pin setup."""
 
-    identifiers: NDArray[Shape["8"], np.int8]  # ty: ignore[invalid-type-form]
-    spin_directions: NDArray[Shape["8"], np.int8]  # ty: ignore[invalid-type-form]
+    identifiers: Annotated[np.ndarray, NDArraySchema((8,), np.int8)]
+    spin_directions: Annotated[np.ndarray, NDArraySchema((8,), np.int8)]
 
     @field_validator("identifiers", mode="before")
     @classmethod
@@ -183,18 +183,20 @@ class RovConfig(CamelCaseModel):
         identifiers=np.array([0, 1, 2, 3, 4, 5, 6, 7], dtype=np.int8),
         spin_directions=np.array([1, 1, 1, 1, 1, 1, 1, 1], dtype=np.int8),
     )
-    thruster_allocation: NDArray[Shape["8, 8"], np.float32] = np.array(  # ty: ignore[invalid-type-form]
-        (
-            (1, 1, 0, 0, -1, 0, 0, 0),
-            (1, -1, 0, 0, 1, 0, 0, 0),
-            (0, 0, 1, 1, 0, 1, 0, 0),
-            (0, 0, 1, 1, 0, -1, 0, 0),
-            (0, 0, 1, -1, 0, 1, 0, 0),
-            (0, 0, 1, -1, 0, -1, 0, 0),
-            (-1, -1, 0, 0, 1, 0, 0, 0),
-            (-1, 1, 0, 0, -1, 0, 0, 0),
-        ),
-        dtype=np.float32,
+    thruster_allocation: Annotated[np.ndarray, NDArraySchema((8, 8), np.float32)] = (
+        np.array(
+            (
+                (1, 1, 0, 0, -1, 0, 0, 0),
+                (1, -1, 0, 0, 1, 0, 0, 0),
+                (0, 0, 1, 1, 0, 1, 0, 0),
+                (0, 0, 1, 1, 0, -1, 0, 0),
+                (0, 0, 1, -1, 0, 1, 0, 0),
+                (0, 0, 1, -1, 0, -1, 0, 0),
+                (-1, -1, 0, 0, 1, 0, 0, 0),
+                (-1, 1, 0, 0, -1, 0, 0, 0),
+            ),
+            dtype=np.float32,
+        )
     )
     regulator: Regulator = Regulator(
         pitch=AxisConfig(kp=3, ki=2, kd=0.5, rate=100.0),
@@ -290,7 +292,9 @@ class PartialRovConfig(CamelCaseModel):
     fluid_type: FluidType | None = None
     smoothing_factor: float | None = None
     thruster_pin_setup: ThrusterPinSetup | None = None
-    thruster_allocation: NDArray[Shape["8, 8"], np.float32] | None = None  # ty: ignore[invalid-type-form]
+    thruster_allocation: (
+        Annotated[np.ndarray, NDArraySchema((8, 8), np.float32)] | None
+    ) = None
     regulator: Regulator | None = None
     direction_coefficients: DirectionCoefficients | None = None
     power: Power | None = None

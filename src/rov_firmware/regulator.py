@@ -372,9 +372,9 @@ class Regulator:
 
         imu_data = self.state.imu
         accel = self._accel_buffer
-        accel[:] = cast(np.ndarray, imu_data.acceleration)
+        accel[:] = imu_data.acceleration
         gyr = self._gyro_buffer
-        gyr[:] = cast(np.ndarray, imu_data.gyroscope)
+        gyr[:] = imu_data.gyroscope
 
         self.gyro_rad_s[:] = gyr
 
