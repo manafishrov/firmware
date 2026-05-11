@@ -104,7 +104,7 @@ requires-dist = [
     { name = "bmi270", specifier = "==0.4.3" },
     { name = "ms5837", git = "https://github.com/bluerobotics/ms5837-python.git?rev=02996d71d2f08339b3d317b3f4da0a83781c706e" },
     { name = "numpy", specifier = "==2.3.4" },
-    { name = "numpydantic", specifier = "==1.7.0" },
+    { name = "numpydantic", specifier = "==1.8.1" },
     { name = "pydantic", specifier = "==2.11.7" },
     { name = "pyserial-asyncio-fast", specifier = "==0.16" },
     { name = "scipy", specifier = "==1.16.3" },
@@ -167,15 +167,15 @@ wheels = [
 
 [[package]]
 name = "numpydantic"
-version = "1.7.0"
+version = "1.8.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/59/ba/6bf5e0a7cc3fbfbb02a7824926cad73c58df374322eb7728b378023a76dc/numpydantic-1.7.0.tar.gz", hash = "sha256:268285bee026d9dfdf23efeee13f60c3b75d47de2ffdf2e58b4f0c17a6824e3b", size = 80412, upload-time = "2025-10-11T05:23:56.654Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/53/28/fb2fa636e777d3a0636697b59e0c3310dbfa5a4126ba3515bb0848e20032/numpydantic-1.8.1.tar.gz", hash = "sha256:e5192efee5784df5cb70f99937e3538fdcbe58ed445c53935f39e5ab2b3f8ea6", size = 82121, upload-time = "2026-04-14T00:01:18.931Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/21/e0/42f0ea229a8b5ada24a1eae4f5522b80ab65b4083f5cea4c7372bc894af3/numpydantic-1.7.0-py3-none-any.whl", hash = "sha256:81314ed00423efa954a711a48003dba5382156e899f677f405ce043f5296b090", size = 86734, upload-time = "2025-10-11T05:23:55.003Z" },
+    { url = "https://files.pythonhosted.org/packages/99/e1/9af63cd9a101ac1c1362200705fb3fa5aabe80a5d63674d0253b18a1072b/numpydantic-1.8.1-py3-none-any.whl", hash = "sha256:f3170b44cdcb168d3799eccbbbe8993f146e90211db9d9903f62b56006e8baca", size = 87926, upload-time = "2026-04-14T00:01:17.388Z" },
 ]
 
 [[package]]
