@@ -199,10 +199,10 @@ class RovConfig(CamelCaseModel):
         )
     )
     regulator: Regulator = Regulator(
-        pitch=AxisConfig(kp=3, ki=2, kd=0.5, rate=100.0),
-        roll=AxisConfig(kp=3, ki=2, kd=0.5, rate=100.0),
-        yaw=AxisConfig(kp=3, ki=2, kd=0.5, rate=100.0),
-        depth=AxisConfig(kp=2, ki=0.5, kd=0.1, rate=0.5),
+        pitch=AxisConfig(kp=1, ki=0.5, kd=0.1, rate=120.0),
+        roll=AxisConfig(kp=1, ki=0.5, kd=0.1, rate=120.0),
+        yaw=AxisConfig(kp=1, ki=0.5, kd=0.1, rate=120.0),
+        depth=AxisConfig(kp=0.6, ki=0, kd=0.1, rate=0.5),
         fpv_mode=False,
     )
     direction_coefficients: DirectionCoefficients = DirectionCoefficients(
@@ -212,10 +212,10 @@ class RovConfig(CamelCaseModel):
     )
     power: Power = Power(
         thrusters_limit=30,
-        actions_limit=30,
+        actions_limit=50,
         regulator_limit=30,
-        min_battery_voltage=14,
-        max_battery_voltage=21.5,
+        min_battery_voltage=16,
+        max_battery_voltage=20.5,
     )
     ip_address: str = "10.10.10.10"
     websocket_port: int = 9000
