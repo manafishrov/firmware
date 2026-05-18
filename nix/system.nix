@@ -26,6 +26,7 @@ in {
   environment.systemPackages = with pkgs; [
     neovim
     nano
+    helix
   ];
 
   # Deploy firmware files and MCU firmware to the user's home directory
