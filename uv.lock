@@ -114,7 +114,7 @@ source = { editable = "." }
 dependencies = [
     { name = "bmi270" },
     { name = "gpiozero" },
-    { name = "lgpio" },
+    { name = "lgpio", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
     { name = "ms5837" },
     { name = "numpy" },
     { name = "numpydantic" },
@@ -136,7 +136,7 @@ dev = [
 requires-dist = [
     { name = "bmi270", specifier = "==0.4.3" },
     { name = "gpiozero", specifier = "==2.0.1" },
-    { name = "lgpio", specifier = "==0.2.2" },
+    { name = "lgpio", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'", specifier = "==0.2.2" },
     { name = "ms5837", git = "https://github.com/bluerobotics/ms5837-python.git?rev=02996d71d2f08339b3d317b3f4da0a83781c706e" },
     { name = "numpy", specifier = "==2.3.4" },
     { name = "numpydantic", specifier = "==1.8.1" },

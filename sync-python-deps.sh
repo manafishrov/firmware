@@ -45,7 +45,9 @@ for pkg in "${PACKAGES[@]}"; do
 
 	if [ -n "$version" ]; then
 		echo "    $version"
-		sed -i -E "s/\"$pkg==[^\"]+\"/\"$pkg==$version\"/" pyproject.toml
+		# Match only the version chars so any trailing PEP 508 marker
+		# (e.g. `; sys_platform == 'linux' ...`) is preserved.
+		sed -i -E "s/\"$pkg==[0-9][0-9a-zA-Z.+-]*/\"$pkg==$version/" pyproject.toml
 	else
 		echo "    WARNING: Could not find version for $pkg in nixpkgs"
 	fi

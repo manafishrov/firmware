@@ -18,7 +18,7 @@ in {
 
   users.users.${username} = {
     isNormalUser = true;
-    extraGroups = ["wheel" "networkmanager" "video" "i2c" "plugdev"];
+    extraGroups = ["wheel" "networkmanager" "video" "i2c" "gpio" "plugdev"];
     password = "manafish";
     home = homeDir;
   };

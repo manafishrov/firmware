@@ -7,7 +7,6 @@
   python-env = pkgs.python313.withPackages (pypkgs:
     with pypkgs;
       [
-        pip
         numpy
         websockets
         pydantic
