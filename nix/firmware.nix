@@ -14,6 +14,9 @@
         smbus2
         scipy
         pyserial-asyncio-fast
+        gpiozero
+        lgpio
+        psutil
       ]
       ++ [
         (pkgs.python313Packages.buildPythonPackage {

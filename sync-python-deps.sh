@@ -15,6 +15,9 @@ PACKAGES=(
 	"smbus2"
 	"scipy"
 	"pyserial-asyncio-fast"
+	"gpiozero"
+	"lgpio"
+	"psutil"
 )
 
 # Custom packages from flake inputs
