@@ -122,7 +122,13 @@
         buildInputs = [
           pkgs.minisign
           pkgs.uv
+          pkgs.python313
         ];
+        env = {
+          UV_PYTHON_DOWNLOADS = "never";
+          UV_PYTHON = nixpkgs.lib.getExe pkgs.python313;
+          LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib pkgs.zlib];
+        };
       };
     });
   };
