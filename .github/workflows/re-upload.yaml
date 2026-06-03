@@ -26,12 +26,12 @@ jobs:
           fi
 
       - name: Checkout firmware source at tag
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
         with:
           ref: ${{ inputs.version }}
 
       - name: Build, sign and force-upload firmware artifacts
-        uses: manafishrov/firmware/.github/actions/build-and-upload@a7600d02a7e23e43971d177a7227a8e6febec42d # main
+        uses: manafishrov/firmware/.github/actions/build-and-upload@33781599d4c5d1886bc24028b23c7182510a1b3f # main
         with:
           version: ${{ inputs.version }}
           signing-key: ${{ secrets.FIRMWARE_SIGNING_PRIVATE_KEY }}
