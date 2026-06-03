@@ -3,6 +3,14 @@
     withSubmodules = true;
   };
 in {
+  # Expose the Pico's USB CDC serial interface as /dev/ttyACM*.
+  boot.kernelModules = ["cdc_acm"];
+
+  # Grant pi user access to the MCU and RP-series BOOTSEL devices.
+  services.udev.extraRules = ''
+    ATTRS{manufacturer}=="Raspberry Pi", MODE="660", GROUP="plugdev", TAG+="uaccess"
+  '';
+
   environment = {
     systemPackages = with pkgs; [
       cmake

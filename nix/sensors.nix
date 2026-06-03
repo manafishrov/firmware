@@ -13,6 +13,9 @@
     };
   };
 
+  # Expose /dev/i2c-* devices for I2C sensors.
+  boot.kernelModules = ["i2c-dev"];
+
   environment.systemPackages = with pkgs; [
     i2c-tools
   ];
