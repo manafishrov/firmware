@@ -44,10 +44,6 @@
       "platformAutomerge": true
     },
     {
-      "matchUpdateTypes": ["minor"],
-      "groupName": "all minor dependencies"
-    },
-    {
       "matchUpdateTypes": ["lockFileMaintenance"],
       "groupName": "lock file maintenance",
       "automerge": true,
