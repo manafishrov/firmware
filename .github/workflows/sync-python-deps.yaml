@@ -5,9 +5,8 @@ on:
     paths:
       - flake.lock
       - flake.nix
-      - nix/**
+      - nix/firmware.nix
       - sync-python-deps.sh
-      - pyproject.toml
 
 permissions:
   contents: write
