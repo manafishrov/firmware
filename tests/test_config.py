@@ -180,3 +180,51 @@ def test_rov_config_defaults_are_sensible():
     assert config.websocket_port == 9000
     assert config.dshot_speed == 300
     assert config.thruster_protocol == "dshot"
+
+
+_NULLSPACE_VECTORS = [[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
+
+
+@pytest.mark.parametrize("model_cls", [RovConfig, PartialRovConfig])
+def test_nullspace_vectors_validator_converts_nested_list_to_float32_array(model_cls):
+    config = model_cls.model_validate({"nullspaceVectors": _NULLSPACE_VECTORS})
+
+    assert isinstance(config.nullspace_vectors, np.ndarray)
+    assert config.nullspace_vectors.dtype == np.float32
+    assert config.nullspace_vectors.shape == (2, 8)
+    assert np.array_equal(config.nullspace_vectors, np.array(_NULLSPACE_VECTORS, dtype=np.float32))
+
+
+@pytest.mark.parametrize("model_cls", [RovConfig, PartialRovConfig])
+def test_nullspace_vectors_validator_passes_none_unchanged(model_cls):
+    config = model_cls.model_validate({"nullspaceVectors": None})
+
+    assert config.nullspace_vectors is None
+
+
+def test_rov_config_round_trip_nullspace_vectors_none():
+    config = RovConfig()
+    assert config.nullspace_vectors is None
+
+    serialized = json.loads(config.model_dump_json(by_alias=True))
+
+    assert "nullspaceVectors" in serialized
+    assert serialized["nullspaceVectors"] is None
+
+    round_tripped = RovConfig.model_validate(serialized)
+    assert round_tripped.nullspace_vectors is None
+
+
+def test_rov_config_round_trip_nullspace_vectors_populated():
+    config = RovConfig(nullspace_vectors=np.array(_NULLSPACE_VECTORS, dtype=np.float32))
+
+    serialized = json.loads(config.model_dump_json(by_alias=True))
+
+    assert "nullspaceVectors" in serialized
+    assert len(serialized["nullspaceVectors"]) == 2
+    assert len(serialized["nullspaceVectors"][0]) == 8
+
+    round_tripped = RovConfig.model_validate(serialized)
+    assert isinstance(round_tripped.nullspace_vectors, np.ndarray)
+    assert round_tripped.nullspace_vectors.dtype == np.float32
+    assert np.array_equal(round_tripped.nullspace_vectors, np.array(_NULLSPACE_VECTORS, dtype=np.float32))
