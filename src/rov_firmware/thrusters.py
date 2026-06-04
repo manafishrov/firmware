@@ -10,6 +10,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from .constants import (
+    MAX_ALLOWED_NULLSPACE_VECTOR_ACTIVATION,
     MCU_CONFIG_START_BYTE,
     MCU_PROTOCOL_DSHOT,
     MCU_PROTOCOL_PWM,
@@ -113,6 +114,62 @@ class Thrusters:
         np.matmul(allocation_matrix, direction_vector, out=out)
         return out
 
+    def _remove_deadzone_using_nullspace(
+        self,
+        thrust_vector: NDArray[np.float32]
+    ) -> None:
+        # First, we determine wha
+        nullspace_vectors = self.state.rov_config.nullspace_vectors
+        motor_deadzone = self.state.rov_config.motor_deadzone
+
+        it should also have access to following variables from previous iteration:
+        - previous_nv_activation
+        - previous_deadzones_under_activation 
+        both of these above variables should be saved for each nullspace vector
+
+        for nv in nullspace_vectors:
+
+            active_nv = only the fields in nullspace_vector that are not 0
+            active_nv_indices = indices of the non-zero fields in nullspace_vector
+            active_thrust_vector = only the fields in thrust_vector that correspond to the non-zero fields in nullspace_vector
+
+            # Make array with start and stop for the deadzone of each thruster
+            make a new array thruster_deadzones with one element for each active_thrust_vector field, where each element is a tuple of (value-motor_deadzone, value, value+motor_deadzone) for the corresponding field in active_thrust_vector
+        
+            # Use the nullspace vector to transform the thruster_deadzones into a new set of deadzones in the nullspace vector space
+            divide each element in thruster_deadzones by the corresponding field in active_nullspace_vector to get nullspace_deadzones
+            sort each nullspace_deadzone so first element in tuple is the smallest
+
+            # Find available intervals
+            make a list of intervals between -MAX_ALLOWED_NULLSPACE_VECTOR_ACTIVATION and MAX_ALLOWED_NULLSPACE_VECTOR_ACTIVATION that are outside of the nullspace_deadzones called available_intervals
+            if there are no available intervals, set nv_activation to 0, and send a warning toast message and exit loop and move to next nullspace vector
+
+            # Check what available interval requires the least amount of deadzone crossing
+            for each available_interval, make a list deadzones_under_activation of indicies of deadzones under the midpoint of the available inteval
+            calculate deazone crossing as the number of indicies in that list that are not in the previous_deadzones_under_activation
+            find the minimum possible deadzone crossing, remove all intervals that have more than the minimum amount of deadzone crossings
+
+            # If there are multiple intervals left, choose the closest one to the previous_nv_activation
+            If there are multiple intervals in avaialble_intervals left, calculate the distance between the previous_nv_activation and the CLOSEST POINT inside the available interval, only keep the interval with the smallest distance in available_intervals. Don't use midpoint, closest point.
+        
+            # Move nv_activation to closest point in available interval, decay if available interval contains previous_nv_activation
+            if previous_nv_activation is within the available interval:
+                set nv_activation to previous nc_activation
+                move nv_activation towards 0 by NV_DECAY_RATE
+                check that this did not bring it outside the available interval, if it did, set it to the closest point in the available interval
+            else:
+                set nv_activation to the closest point in the available interval
+
+            # Apply nullspace vector with nv_activation to the thrust vector
+            do something like thrust_vector += nullspace_vector * nv_activation, make sure thrust_vector updates globally
+            when it runs for the next nullspace vector if there are multiple, 
+
+
+
+
+        pass
+
+
     def _correct_thrust_vector_spin_directions(
         self, thrust_vector: NDArray[np.float32]
     ) -> None:
@@ -151,6 +208,7 @@ class Thrusters:
             thrust_vector
         )
 
+    # This is the main functopn for creating thrust vector when Manafish is running.
     def _create_thrust_vector(self) -> NDArray[np.float32]:
         """Create the final thrust vector for the MCU from the current thruster direction vector.
 
@@ -179,6 +237,8 @@ class Thrusters:
         thrust_vector = self._create_thrust_vector_from_direction_vector(
             direction_vector, self._thrust_vector_buffer
         )
+
+        # Using nullspace to remove deadzone - implement here
 
         self._reorder_thrust_vector(thrust_vector)
         self._correct_thrust_vector_spin_directions(thrust_vector)
@@ -283,6 +343,7 @@ class Thrusters:
         self._last_sent_protocol_config = current
         self._last_config_generation = generation
 
+    # This function calculates the thrust vector ONLY when doing auto-tuning.
     def _determine_thrust_vector(
         self, current_time: float, last_send_time: float
     ) -> tuple[NDArray[np.float32] | None, float]:
@@ -293,6 +354,9 @@ class Thrusters:
                 thrust_vector = self._create_thrust_vector_from_direction_vector(
                     direction_vector
                 )
+
+
+
                 self._correct_thrust_vector_spin_directions(thrust_vector)
                 self._reorder_thrust_vector(thrust_vector)
                 self._clip_thrust_vector(thrust_vector)
