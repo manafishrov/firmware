@@ -225,6 +225,17 @@ uv sync
 uv run pre-commit install
 ```
 
+> [!NOTE]
+> The development shell (`nix develop` or direnv) provides the exact Python
+> interpreter the project pins in `pyproject.toml`. If you don't use `nix`
+> (for example on Windows), `uv` may fail with an error like
+> `No interpreter found for Python ==3.13.12`. Install the pinned interpreter
+> first so `uv` can find it:
+>
+> ```sh
+> uv python install 3.13.12
+> ```
+
 The pre-commit hook runs Ruff on committed Python files before each commit. To
 run the same checks across the repository manually:
 
