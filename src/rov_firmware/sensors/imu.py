@@ -5,11 +5,11 @@ import time
 
 from bmi270.BMI270 import (
     ACC_BWP_NORMAL,
-    ACC_ODR_100,
+    ACC_ODR_200,
     ACC_RANGE_2G,
     BMI270,
     GYR_BWP_NORMAL,
-    GYR_ODR_100,
+    GYR_ODR_200,
     GYR_RANGE_1000,
     I2C_PRIM_ADDR,
     PERFORMANCE_MODE,
@@ -47,8 +47,8 @@ class Imu:
             await asyncio.to_thread(imu_instance.set_mode, PERFORMANCE_MODE)
             await asyncio.to_thread(imu_instance.set_acc_range, ACC_RANGE_2G)
             await asyncio.to_thread(imu_instance.set_gyr_range, GYR_RANGE_1000)
-            await asyncio.to_thread(imu_instance.set_acc_odr, ACC_ODR_100)
-            await asyncio.to_thread(imu_instance.set_gyr_odr, GYR_ODR_100)
+            await asyncio.to_thread(imu_instance.set_acc_odr, ACC_ODR_200)
+            await asyncio.to_thread(imu_instance.set_gyr_odr, GYR_ODR_200)
             await asyncio.to_thread(imu_instance.set_acc_bwp, ACC_BWP_NORMAL)
             await asyncio.to_thread(imu_instance.set_gyr_bwp, GYR_BWP_NORMAL)
             await asyncio.to_thread(imu_instance.disable_fifo_header)
