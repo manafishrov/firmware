@@ -20,7 +20,7 @@ from ..constants import IMU_READ_FREQUENCY, SYSTEM_FAILURE_THRESHOLD
 from ..log import log_error, log_info
 from ..models.sensors import ImuData
 from ..rov_state import RovState
-from ..toast import ToastContent, toast_error
+from ..toast import ToastContent, toast_error, toast_info
 
 
 class Imu:
@@ -34,6 +34,8 @@ class Imu:
         """
         self.state: RovState = state
         self.imu: BMI270 | None = None
+        self._read_rate_counter: int = 0
+        self._read_rate_window_start: float = 0.0
 
     async def initialize(self) -> None:
         """Initialize the BMI270 IMU sensor with performance settings."""
@@ -103,21 +105,45 @@ class Imu:
             log_error(f"Error reading IMU data: {e}")
             return None
 
-    async def read_loop(self) -> None:
-        """Continuously read IMU data in a loop."""
+    def _blocking_read_loop(self) -> None:
+        """IMU read loop running in a dedicated background thread.
+
+        Runs entirely outside the asyncio event loop so the read rate is
+        determined by OS thread scheduling, not by event-loop callback latency.
+        State writes (self.state.imu = data) are safe without a lock because
+        CPython's GIL makes single object-reference assignments atomic.
+        """
         failure_count = 0
         interval = 1.0 / IMU_READ_FREQUENCY
         next_tick = time.perf_counter() + interval
         while True:
             if not self.state.system_health.imu_healthy:
-                await asyncio.sleep(1)
+                time.sleep(1)
                 next_tick = time.perf_counter() + interval
+                failure_count = 0
                 continue
             try:
-                data = await asyncio.to_thread(self.read_data)
+                data = self.read_data()
                 if data:
                     self.state.imu = data
                     failure_count = 0
+                    now = time.time()
+                    self._read_rate_counter += 1
+                    if self._read_rate_window_start == 0.0:
+                        self._read_rate_window_start = now
+                    elif now - self._read_rate_window_start >= 1.0:
+                        elapsed = now - self._read_rate_window_start
+                        hz = round(self._read_rate_counter / elapsed)
+                        toast_info(
+                            "imu_read_rate",
+                            ToastContent(
+                                message_key="toasts_recording_saved_path",
+                                message_args={"path": f"IMU read loop: {hz} Hz"},
+                            ),
+                            None,
+                        )
+                        self._read_rate_counter = 0
+                        self._read_rate_window_start = now
                 else:
                     failure_count += 1
             except Exception as e:
@@ -129,8 +155,12 @@ class Imu:
                 log_error("IMU failed 3 times, disabling IMU")
             sleep_time = next_tick - time.perf_counter()
             if sleep_time > 0:
-                await asyncio.sleep(sleep_time)
+                time.sleep(sleep_time)
             next_tick += interval
             now = time.perf_counter()
             if next_tick < now:
                 next_tick = now + interval
+
+    async def read_loop(self) -> None:
+        """Run the IMU read loop in a dedicated background thread."""
+        await asyncio.to_thread(self._blocking_read_loop)

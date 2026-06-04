@@ -524,8 +524,7 @@ class Thrusters:
                 )
 
             sleep_time = next_tick - time.perf_counter()
-            if sleep_time > 0:
-                await asyncio.sleep(sleep_time)
+            await asyncio.sleep(max(0.0, sleep_time))
             next_tick += interval
             now = time.perf_counter()
             if next_tick < now:
