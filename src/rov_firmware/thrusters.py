@@ -497,9 +497,12 @@ class Thrusters:
         """Send thruster commands in a continuous loop."""
         thrust_vector = np.zeros(NUM_MOTORS, dtype=np.float32)
         last_send_time = time.time()
+        interval = 1.0 / THRUSTER_SEND_FREQUENCY
+        next_tick = time.perf_counter() + interval
         while True:
             if not await self.serial_manager.ensure_connection():
                 await asyncio.sleep(1)
+                next_tick = time.perf_counter() + interval
                 continue
             writer = self.serial_manager.get_writer()
             await self._ensure_config_sent(writer)
@@ -520,4 +523,10 @@ class Thrusters:
                     "Thruster send failed 3 times, disabling MCU"
                 )
 
-            await asyncio.sleep(1 / THRUSTER_SEND_FREQUENCY)
+            sleep_time = next_tick - time.perf_counter()
+            if sleep_time > 0:
+                await asyncio.sleep(sleep_time)
+            next_tick += interval
+            now = time.perf_counter()
+            if next_tick < now:
+                next_tick = now + interval

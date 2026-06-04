@@ -1,6 +1,7 @@
 """Pressure sensor interface for the ROV firmware."""
 
 import asyncio
+import time
 
 from ms5837 import DENSITY_FRESHWATER, DENSITY_SALTWATER, MS5837_30BA
 
@@ -88,11 +89,14 @@ class PressureSensor:
     async def read_loop(self) -> None:
         """Continuously read pressure data in a loop."""
         failure_count = 0
+        interval = 1.0 / PRESSURE_SENSOR_READ_FREQUENCY
+        next_tick = time.perf_counter() + interval
         while True:
             if self.state.rov_config.fluid_type != self.current_fluid_type:
                 self._update_fluid_density()
             if not self.state.system_health.pressure_sensor_healthy:
                 await asyncio.sleep(1)
+                next_tick = time.perf_counter() + interval
                 continue
             try:
                 data = await asyncio.to_thread(self.read_data)
@@ -108,4 +112,10 @@ class PressureSensor:
                 self.state.system_health.pressure_sensor_healthy = False
                 failure_count = 0
                 log_error("Pressure sensor failed 3 times, disabling pressure sensor")
-            await asyncio.sleep(1 / PRESSURE_SENSOR_READ_FREQUENCY)
+            sleep_time = next_tick - time.perf_counter()
+            if sleep_time > 0:
+                await asyncio.sleep(sleep_time)
+            next_tick += interval
+            now = time.perf_counter()
+            if next_tick < now:
+                next_tick = now + interval

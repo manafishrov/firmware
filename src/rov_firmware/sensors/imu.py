@@ -1,6 +1,7 @@
 """IMU sensor interface for the ROV firmware."""
 
 import asyncio
+import time
 
 from bmi270.BMI270 import (
     ACC_BWP_NORMAL,
@@ -105,9 +106,12 @@ class Imu:
     async def read_loop(self) -> None:
         """Continuously read IMU data in a loop."""
         failure_count = 0
+        interval = 1.0 / IMU_READ_FREQUENCY
+        next_tick = time.perf_counter() + interval
         while True:
             if not self.state.system_health.imu_healthy:
                 await asyncio.sleep(1)
+                next_tick = time.perf_counter() + interval
                 continue
             try:
                 data = await asyncio.to_thread(self.read_data)
@@ -123,4 +127,10 @@ class Imu:
                 self.state.system_health.imu_healthy = False
                 failure_count = 0
                 log_error("IMU failed 3 times, disabling IMU")
-            await asyncio.sleep(1 / IMU_READ_FREQUENCY)
+            sleep_time = next_tick - time.perf_counter()
+            if sleep_time > 0:
+                await asyncio.sleep(sleep_time)
+            next_tick += interval
+            now = time.perf_counter()
+            if next_tick < now:
+                next_tick = now + interval
