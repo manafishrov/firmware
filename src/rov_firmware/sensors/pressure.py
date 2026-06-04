@@ -1,11 +1,12 @@
 """Pressure sensor interface for the ROV firmware."""
 
 import asyncio
+import math
 import time
 
 from ms5837 import DENSITY_FRESHWATER, DENSITY_SALTWATER, MS5837_30BA
 
-from ..constants import PRESSURE_SENSOR_READ_FREQUENCY, SYSTEM_FAILURE_THRESHOLD
+from ..constants import DEPTH_DERIVATIVE_EMA_TAU, PRESSURE_SENSOR_READ_FREQUENCY, SYSTEM_FAILURE_THRESHOLD
 from ..log import log_error, log_info
 from ..models.config import FluidType
 from ..models.sensors import PressureData
@@ -98,20 +99,35 @@ class PressureSensor:
         failure_count = 0
         interval = 1.0 / PRESSURE_SENSOR_READ_FREQUENCY
         next_tick = time.perf_counter() + interval
+        previous_depth: float = 0.0
+        filtered_depth_change: float = 0.0
+        previous_read_time: float = 0.0
         while True:
             if self.state.rov_config.fluid_type != self.current_fluid_type:
                 self._update_fluid_density()
             if not self.state.system_health.pressure_sensor_healthy:
                 time.sleep(1)
                 next_tick = time.perf_counter() + interval
+                previous_read_time = 0.0
                 failure_count = 0
                 continue
             try:
                 data = self.read_data()
                 if data:
+                    now = time.time()
+                    if previous_read_time > 0.0:
+                        dt = now - previous_read_time
+                        raw_depth_change = (data.depth - previous_depth) / dt
+                        alpha = math.exp(-dt / DEPTH_DERIVATIVE_EMA_TAU)
+                        filtered_depth_change = (
+                            alpha * filtered_depth_change
+                            + (1.0 - alpha) * raw_depth_change
+                        )
+                    previous_depth = data.depth
+                    previous_read_time = now
+                    data.depth_change = filtered_depth_change
                     self.state.pressure = data
                     failure_count = 0
-                    now = time.time()
                     self._read_rate_counter += 1
                     if self._read_rate_window_start == 0.0:
                         self._read_rate_window_start = now
