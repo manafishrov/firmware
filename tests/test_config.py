@@ -186,37 +186,45 @@ _NULLSPACE_VECTORS = [[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 
 
 
 @pytest.mark.parametrize("model_cls", [RovConfig, PartialRovConfig])
-def test_nullspace_vectors_validator_converts_nested_list_to_float32_array(model_cls):
+def test_nullspace_vectors_validator_converts_nested_list_to_list_of_float32_arrays(model_cls):
     config = model_cls.model_validate({"nullspaceVectors": _NULLSPACE_VECTORS})
 
-    assert isinstance(config.nullspace_vectors, np.ndarray)
-    assert config.nullspace_vectors.dtype == np.float32
-    assert config.nullspace_vectors.shape == (2, 8)
-    assert np.array_equal(config.nullspace_vectors, np.array(_NULLSPACE_VECTORS, dtype=np.float32))
+    assert isinstance(config.nullspace_vectors, list)
+    assert len(config.nullspace_vectors) == 2
+    for i, row in enumerate(config.nullspace_vectors):
+        assert isinstance(row, np.ndarray)
+        assert row.dtype == np.float32
+        assert row.shape == (8,)
+        assert np.array_equal(row, np.array(_NULLSPACE_VECTORS[i], dtype=np.float32))
 
 
-@pytest.mark.parametrize("model_cls", [RovConfig, PartialRovConfig])
-def test_nullspace_vectors_validator_passes_none_unchanged(model_cls):
-    config = model_cls.model_validate({"nullspaceVectors": None})
+def test_nullspace_vectors_validator_none_gives_empty_list_for_rov_config():
+    config = RovConfig.model_validate({"nullspaceVectors": None})
+
+    assert config.nullspace_vectors == []
+
+
+def test_nullspace_vectors_validator_none_passes_unchanged_for_partial_rov_config():
+    config = PartialRovConfig.model_validate({"nullspaceVectors": None})
 
     assert config.nullspace_vectors is None
 
 
-def test_rov_config_round_trip_nullspace_vectors_none():
+def test_rov_config_round_trip_nullspace_vectors_empty():
     config = RovConfig()
-    assert config.nullspace_vectors is None
+    assert config.nullspace_vectors == []
 
     serialized = json.loads(config.model_dump_json(by_alias=True))
 
     assert "nullspaceVectors" in serialized
-    assert serialized["nullspaceVectors"] is None
+    assert serialized["nullspaceVectors"] == []
 
     round_tripped = RovConfig.model_validate(serialized)
-    assert round_tripped.nullspace_vectors is None
+    assert round_tripped.nullspace_vectors == []
 
 
 def test_rov_config_round_trip_nullspace_vectors_populated():
-    config = RovConfig(nullspace_vectors=np.array(_NULLSPACE_VECTORS, dtype=np.float32))
+    config = RovConfig(nullspace_vectors=[np.array(row, dtype=np.float32) for row in _NULLSPACE_VECTORS])
 
     serialized = json.loads(config.model_dump_json(by_alias=True))
 
@@ -225,6 +233,9 @@ def test_rov_config_round_trip_nullspace_vectors_populated():
     assert len(serialized["nullspaceVectors"][0]) == 8
 
     round_tripped = RovConfig.model_validate(serialized)
-    assert isinstance(round_tripped.nullspace_vectors, np.ndarray)
-    assert round_tripped.nullspace_vectors.dtype == np.float32
-    assert np.array_equal(round_tripped.nullspace_vectors, np.array(_NULLSPACE_VECTORS, dtype=np.float32))
+    assert isinstance(round_tripped.nullspace_vectors, list)
+    assert len(round_tripped.nullspace_vectors) == 2
+    for i, row in enumerate(round_tripped.nullspace_vectors):
+        assert isinstance(row, np.ndarray)
+        assert row.dtype == np.float32
+        assert np.array_equal(row, np.array(_NULLSPACE_VECTORS[i], dtype=np.float32))

@@ -58,7 +58,7 @@ def apply_migrations(raw: dict[str, Any]) -> dict[str, Any]:
     firmware_version = raw.get("firmwareVersion", "0.0.0")
 
     if compare_semver(firmware_version, "1.1.0") == -1:
-        raw.setdefault("nullspaceVectors", None)
+        raw.setdefault("nullspaceVectors", [])
         raw["firmwareVersion"] = "1.1.0"
 
     return raw
@@ -199,7 +199,7 @@ class RovConfig(CamelCaseModel):
         )
     )
 
-    nullspace_vectors: Annotated[np.ndarray, NDArraySchema("*, 8", np.float32)] | None = None
+    nullspace_vectors: list[Annotated[np.ndarray, NDArraySchema((8,), np.float32)]] = Field(default_factory=list)
 
     regulator: Regulator = Regulator(
         pitch=AxisConfig(kp=1, ki=0.5, kd=0.1, rate=120.0),
@@ -243,11 +243,13 @@ class RovConfig(CamelCaseModel):
     @field_validator("nullspace_vectors", mode="before")
     @classmethod
     def validate_nullspace_vectors(
-        cls, v: list[list[float]] | None,
-    ) -> NumpyNDArray[np.float32] | None:
+        cls, v: list[list[float]] | np.ndarray | None,
+    ) -> list[list[float]]:
         if v is None:
-            return None
-        return np.array(v, dtype=np.float32)
+            return []
+        if isinstance(v, np.ndarray):
+            return [row.tolist() for row in v]
+        return v
 
     _config_path: ClassVar[Path] = Path(__file__).parents[1] / "config.json"
 
@@ -307,7 +309,7 @@ class PartialRovConfig(CamelCaseModel):
     thruster_allocation: (
         Annotated[np.ndarray, NDArraySchema((8, 8), np.float32)] | None
     ) = None
-    nullspace_vectors: Annotated[np.ndarray, NDArraySchema("*, 8", np.float32)] | None = None
+    nullspace_vectors: list[Annotated[np.ndarray, NDArraySchema((8,), np.float32)]] | None = None
     regulator: Regulator | None = None
     direction_coefficients: DirectionCoefficients | None = None
     power: Power | None = None
@@ -327,11 +329,13 @@ class PartialRovConfig(CamelCaseModel):
     @field_validator("nullspace_vectors", mode="before")
     @classmethod
     def validate_nullspace_vectors(
-        cls, v: list[list[float]] | None,
-    ) -> NumpyNDArray[np.float32] | None:
+        cls, v: list[list[float]] | np.ndarray | None,
+    ) -> list[list[float]] | None:
         if v is None:
             return None
-        return np.array(v, dtype=np.float32)
+        if isinstance(v, np.ndarray):
+            return [row.tolist() for row in v]
+        return v
 
     @field_validator("dshot_speed", mode="after")
     @classmethod

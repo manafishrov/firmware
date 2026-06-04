@@ -128,7 +128,7 @@ class Thrusters:
 
         nullspace_vectors = self.state.rov_config.nullspace_vectors
 
-        if nullspace_vectors is None or len(nullspace_vectors) == 0:
+        if len(nullspace_vectors) == 0:
             return
 
         # previous_nv_activation and previous_deadzones_under_activation are saved
