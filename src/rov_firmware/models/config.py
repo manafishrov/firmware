@@ -57,10 +57,10 @@ def apply_migrations(raw: dict[str, Any]) -> dict[str, Any]:
     """Apply config migrations based on firmware version."""
     firmware_version = raw.get("firmwareVersion", "0.0.0")
 
-    # Example: migrate config when firmware_version < "1.0.0"
-    if compare_semver(firmware_version, "1.0.0") == -1:
-        # Add migration logic here
-        pass
+    if compare_semver(firmware_version, "1.1.0") == -1:
+        raw.setdefault("nullspaceVectors", None)
+        raw["firmwareVersion"] = "1.1.0"
+
     return raw
 
 
@@ -198,6 +198,9 @@ class RovConfig(CamelCaseModel):
             dtype=np.float32,
         )
     )
+
+    nullspace_vectors: Annotated[NumpyNDArray[np.float32], NDArraySchema((None, 8), np.float32 | None)] = None
+
     regulator: Regulator = Regulator(
         pitch=AxisConfig(kp=1, ki=0.5, kd=0.1, rate=120.0),
         roll=AxisConfig(kp=1, ki=0.5, kd=0.1, rate=120.0),
@@ -295,6 +298,7 @@ class PartialRovConfig(CamelCaseModel):
     thruster_allocation: (
         Annotated[np.ndarray, NDArraySchema((8, 8), np.float32)] | None
     ) = None
+    nullspace_vectors: (Annotated[NumpyNDArray[np.float32], NDArraySchema((None, 8), np.float32)] | None) = None
     regulator: Regulator | None = None
     direction_coefficients: DirectionCoefficients | None = None
     power: Power | None = None
