@@ -88,8 +88,13 @@ class PressureSensor:
             log_error(f"Error reading pressure sensor data: {e}")
             return None
 
-    async def read_loop(self) -> None:
-        """Continuously read pressure data in a loop."""
+    def _blocking_read_loop(self) -> None:
+        """Pressure sensor read loop running in a dedicated background thread.
+
+        Runs entirely outside the asyncio event loop so the read rate is not
+        affected by event-loop callback latency. State writes are safe without
+        a lock because CPython's GIL makes single object-reference assignments atomic.
+        """
         failure_count = 0
         interval = 1.0 / PRESSURE_SENSOR_READ_FREQUENCY
         next_tick = time.perf_counter() + interval
@@ -97,11 +102,12 @@ class PressureSensor:
             if self.state.rov_config.fluid_type != self.current_fluid_type:
                 self._update_fluid_density()
             if not self.state.system_health.pressure_sensor_healthy:
-                await asyncio.sleep(1)
+                time.sleep(1)
                 next_tick = time.perf_counter() + interval
+                failure_count = 0
                 continue
             try:
-                data = await asyncio.to_thread(self.read_data)
+                data = self.read_data()
                 if data:
                     self.state.pressure = data
                     failure_count = 0
@@ -132,8 +138,13 @@ class PressureSensor:
                 failure_count = 0
                 log_error("Pressure sensor failed 3 times, disabling pressure sensor")
             sleep_time = next_tick - time.perf_counter()
-            await asyncio.sleep(max(0.0, sleep_time))
+            if sleep_time > 0:
+                time.sleep(sleep_time)
             next_tick += interval
             now = time.perf_counter()
             if next_tick < now:
                 next_tick = now + interval
+
+    async def read_loop(self) -> None:
+        """Run the pressure sensor read loop in a dedicated background thread."""
+        await asyncio.to_thread(self._blocking_read_loop)
