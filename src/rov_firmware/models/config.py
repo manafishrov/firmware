@@ -199,7 +199,7 @@ class RovConfig(CamelCaseModel):
         )
     )
 
-    nullspace_vectors: NumpyNDArray[np.float32] | None = None
+    nullspace_vectors: Annotated[np.ndarray, NDArraySchema("*, 8", np.float32)] | None = None
 
     regulator: Regulator = Regulator(
         pitch=AxisConfig(kp=1, ki=0.5, kd=0.1, rate=120.0),
@@ -307,7 +307,7 @@ class PartialRovConfig(CamelCaseModel):
     thruster_allocation: (
         Annotated[np.ndarray, NDArraySchema((8, 8), np.float32)] | None
     ) = None
-    nullspace_vectors: NumpyNDArray[np.float32] | None = None
+    nullspace_vectors: Annotated[np.ndarray, NDArraySchema("*, 8", np.float32)] | None = None
     regulator: Regulator | None = None
     direction_coefficients: DirectionCoefficients | None = None
     power: Power | None = None
