@@ -122,7 +122,10 @@ class Thrusters:
         self,
         thrust_vector: NDArray[np.float32]
     ) -> None:
-        # First, we determine wha
+        # Return if auto-stabilization is disabled
+        if not self.state.system_status.auto_stabilization:
+            return
+
         nullspace_vectors = self.state.rov_config.nullspace_vectors
 
         if nullspace_vectors is None or len(nullspace_vectors) == 0:
