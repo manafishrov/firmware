@@ -14,7 +14,9 @@ from .constants import (
     MCU_CONFIG_START_BYTE,
     MCU_PROTOCOL_DSHOT,
     MCU_PROTOCOL_PWM,
+    MOTOR_DEADZONE,
     NUM_MOTORS,
+    NV_DECAY_RATE,
     THRUSTER_FORWARD_PULSE_RANGE,
     THRUSTER_INPUT_START_BYTE,
     THRUSTER_NEUTRAL_PULSE_WIDTH,
@@ -24,7 +26,7 @@ from .constants import (
     THRUSTER_TEST_TOAST_ID,
     THRUSTER_TIMEOUT_MS,
 )
-from .log import log_error
+from .log import log_error, log_warn
 from .models.toast import ToastVariant
 from .regulator import Regulator
 from .rov_state import RovState
@@ -76,6 +78,8 @@ class Thrusters:
         self._reorder_buffer: NDArray[np.float32] = np.zeros(
             NUM_MOTORS, dtype=np.float32
         )
+        self._previous_nv_activations: list[float] = []
+        self._previous_deadzones_under_activations: list[set[int]] = []
 
     def _smooth_direction_vector(
         self,
@@ -120,54 +124,144 @@ class Thrusters:
     ) -> None:
         # First, we determine wha
         nullspace_vectors = self.state.rov_config.nullspace_vectors
-        motor_deadzone = self.state.rov_config.motor_deadzone
 
-        it should also have access to following variables from previous iteration:
-        - previous_nv_activation
-        - previous_deadzones_under_activation 
-        both of these above variables should be saved for each nullspace vector
+        if nullspace_vectors is None or len(nullspace_vectors) == 0:
+            return
 
-        for nv in nullspace_vectors:
+        # previous_nv_activation and previous_deadzones_under_activation are saved
+        # for each nullspace vector between iterations. Resize when config changes.
+        if len(self._previous_nv_activations) != len(nullspace_vectors):
+            self._previous_nv_activations = [0.0] * len(nullspace_vectors)
+            self._previous_deadzones_under_activations = [set() for _ in nullspace_vectors]
 
-            active_nv = only the fields in nullspace_vector that are not 0
-            active_nv_indices = indices of the non-zero fields in nullspace_vector
-            active_thrust_vector = only the fields in thrust_vector that correspond to the non-zero fields in nullspace_vector
+        for nv_index, nv in enumerate(nullspace_vectors):
+            previous_nv_activation = self._previous_nv_activations[nv_index]
+            previous_deadzones_under_activation = self._previous_deadzones_under_activations[nv_index]
+
+            active_nv_indices = np.nonzero(nv)[0]
+            if len(active_nv_indices) == 0:
+                continue
+            active_nv = nv[active_nv_indices]
+            active_thrust_vector = thrust_vector[active_nv_indices]
 
             # Make array with start and stop for the deadzone of each thruster
-            make a new array thruster_deadzones with one element for each active_thrust_vector field, where each element is a tuple of (value-motor_deadzone, value, value+motor_deadzone) for the corresponding field in active_thrust_vector
-        
+            # shape: (n_active, 2) — each row is [lower_bound, upper_bound] in thrust space
+            thruster_deadzones = np.stack([
+                active_thrust_vector - MOTOR_DEADZONE,
+                active_thrust_vector + MOTOR_DEADZONE,
+            ], axis=1)
+
             # Use the nullspace vector to transform the thruster_deadzones into a new set of deadzones in the nullspace vector space
-            divide each element in thruster_deadzones by the corresponding field in active_nullspace_vector to get nullspace_deadzones
-            sort each nullspace_deadzone so first element in tuple is the smallest
+            # divide each element in thruster_deadzones by the corresponding field in active_nv and flip the sign
+            nullspace_deadzones = -(thruster_deadzones / active_nv[:, np.newaxis])
+            # sort each nullspace_deadzone so first element in tuple is the smallest
+            nullspace_deadzones = np.sort(nullspace_deadzones, axis=1)  # shape: (n_active, 2)
 
             # Find available intervals
-            make a list of intervals between -MAX_ALLOWED_NULLSPACE_VECTOR_ACTIVATION and MAX_ALLOWED_NULLSPACE_VECTOR_ACTIVATION that are outside of the nullspace_deadzones called available_intervals
-            if there are no available intervals, set nv_activation to 0, and send a warning toast message and exit loop and move to next nullspace vector
+            # Build list of forbidden intervals by clipping each nullspace_deadzone to the allowed activation range
+            forbidden_intervals: list[tuple[float, float]] = []
+            for i in range(len(active_nv_indices)):
+                lower_bound = max(float(nullspace_deadzones[i, 0]), -MAX_ALLOWED_NULLSPACE_VECTOR_ACTIVATION)
+                upper_bound = min(float(nullspace_deadzones[i, 1]), MAX_ALLOWED_NULLSPACE_VECTOR_ACTIVATION)
+                if lower_bound < upper_bound:
+                    forbidden_intervals.append((lower_bound, upper_bound))
+            forbidden_intervals.sort()
+
+            # Merge overlapping forbidden intervals so gaps between them are clean
+            merged_forbidden_intervals: list[list[float]] = []
+            for lower_bound, upper_bound in forbidden_intervals:
+                if merged_forbidden_intervals and lower_bound <= merged_forbidden_intervals[-1][1]:
+                    merged_forbidden_intervals[-1][1] = max(merged_forbidden_intervals[-1][1], upper_bound)
+                else:
+                    merged_forbidden_intervals.append([lower_bound, upper_bound])
+
+            # Find the gaps between merged forbidden intervals — these are the available_intervals
+            available_intervals: list[tuple[float, float]] = []
+            cursor = -MAX_ALLOWED_NULLSPACE_VECTOR_ACTIVATION
+            for lower_bound, upper_bound in merged_forbidden_intervals:
+                if cursor < lower_bound:
+                    available_intervals.append((cursor, lower_bound))
+                cursor = max(cursor, upper_bound)
+            if cursor < MAX_ALLOWED_NULLSPACE_VECTOR_ACTIVATION:
+                available_intervals.append((cursor, MAX_ALLOWED_NULLSPACE_VECTOR_ACTIVATION))
+
+            if not available_intervals:
+                nv_activation = 0.0
+                # send a warning toast message and move to next nullspace vector
+                log_warn(f"No available nullspace activation intervals for nullspace vector {nv_index}")
+                self._previous_nv_activations[nv_index] = nv_activation
+                self._previous_deadzones_under_activations[nv_index] = set()
+                continue
 
             # Check what available interval requires the least amount of deadzone crossing
-            for each available_interval, make a list deadzones_under_activation of indicies of deadzones under the midpoint of the available inteval
-            calculate deazone crossing as the number of indicies in that list that are not in the previous_deadzones_under_activation
-            find the minimum possible deadzone crossing, remove all intervals that have more than the minimum amount of deadzone crossings
+            # deadzone i is considered "under" a value when its upper bound is at or below that value
+            n_active = len(active_nv_indices)
+            interval_crossing_scores: list[tuple[tuple[float, float], set[int], int]] = []
+            for available_interval in available_intervals:
+                midpoint = (available_interval[0] + available_interval[1]) / 2.0
+                # make a list deadzones_under_activation of indices of deadzones under the midpoint of the available interval
+                deadzones_under_activation = {
+                    i for i in range(n_active)
+                    if float(nullspace_deadzones[i, 1]) <= midpoint
+                }
+                # calculate deadzone crossing as the symmetric difference: both entering and exiting a deadzone count
+                deadzone_crossing = len(
+                    deadzones_under_activation.symmetric_difference(previous_deadzones_under_activation)
+                )
+                interval_crossing_scores.append((available_interval, deadzones_under_activation, deadzone_crossing))
+
+            # find the minimum possible deadzone crossing, remove all intervals that have more than the minimum amount of deadzone crossings
+            minimum_deadzone_crossings = min(crossing for _, _, crossing in interval_crossing_scores)
+            available_intervals_with_minimum_crossings = [
+                (interval, deadzones_under_activation)
+                for interval, deadzones_under_activation, crossing in interval_crossing_scores
+                if crossing == minimum_deadzone_crossings
+            ]
 
             # If there are multiple intervals left, choose the closest one to the previous_nv_activation
-            If there are multiple intervals in avaialble_intervals left, calculate the distance between the previous_nv_activation and the CLOSEST POINT inside the available interval, only keep the interval with the smallest distance in available_intervals. Don't use midpoint, closest point.
-        
+            if len(available_intervals_with_minimum_crossings) > 1:
+                def distance_to_closest_point_in_interval(interval: tuple[float, float]) -> float:
+                    lower_bound, upper_bound = interval
+                    if lower_bound <= previous_nv_activation <= upper_bound:
+                        return 0.0
+                    return float(min(
+                        abs(previous_nv_activation - lower_bound),
+                        abs(previous_nv_activation - upper_bound),
+                    ))
+
+                minimum_distance_to_previous_activation = min(
+                    distance_to_closest_point_in_interval(interval)
+                    for interval, _ in available_intervals_with_minimum_crossings
+                )
+                available_intervals_with_minimum_crossings = [
+                    (interval, deadzones_under_activation)
+                    for interval, deadzones_under_activation in available_intervals_with_minimum_crossings
+                    if distance_to_closest_point_in_interval(interval) == minimum_distance_to_previous_activation
+                ]
+
+            chosen_interval, chosen_deadzones_under_activation = available_intervals_with_minimum_crossings[0]
+            interval_lower_bound, interval_upper_bound = chosen_interval
+
             # Move nv_activation to closest point in available interval, decay if available interval contains previous_nv_activation
-            if previous_nv_activation is within the available interval:
-                set nv_activation to previous nc_activation
-                move nv_activation towards 0 by NV_DECAY_RATE
-                check that this did not bring it outside the available interval, if it did, set it to the closest point in the available interval
+            if interval_lower_bound <= previous_nv_activation <= interval_upper_bound:
+                nv_activation = previous_nv_activation
+                # move nv_activation towards 0 by NV_DECAY_RATE
+                if nv_activation > 0.0:
+                    nv_activation = max(nv_activation - NV_DECAY_RATE, 0.0)
+                elif nv_activation < 0.0:
+                    nv_activation = min(nv_activation + NV_DECAY_RATE, 0.0)
+                # check that this did not bring it outside the available interval, if it did, set it to the closest point in the available interval
+                nv_activation = float(np.clip(nv_activation, interval_lower_bound, interval_upper_bound))
             else:
-                set nv_activation to the closest point in the available interval
+                # set nv_activation to the closest point in the available interval
+                nv_activation = float(np.clip(previous_nv_activation, interval_lower_bound, interval_upper_bound))
 
             # Apply nullspace vector with nv_activation to the thrust vector
-            do something like thrust_vector += nullspace_vector * nv_activation, make sure thrust_vector updates globally
-            when it runs for the next nullspace vector if there are multiple, 
+            # thrust_vector is modified in-place so subsequent nullspace vectors see the updated values
+            thrust_vector[:] += nv * nv_activation
 
-
-
-
-        pass
+            self._previous_nv_activations[nv_index] = nv_activation
+            self._previous_deadzones_under_activations[nv_index] = chosen_deadzones_under_activation
 
 
     def _correct_thrust_vector_spin_directions(
@@ -238,7 +332,7 @@ class Thrusters:
             direction_vector, self._thrust_vector_buffer
         )
 
-        # Using nullspace to remove deadzone - implement here
+        self._remove_deadzone_using_nullspace(thrust_vector)
 
         self._reorder_thrust_vector(thrust_vector)
         self._correct_thrust_vector_spin_directions(thrust_vector)
