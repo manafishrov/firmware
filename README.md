@@ -12,7 +12,7 @@ the caches for the `nixos-raspberrypi` flake to the build system so the build
 finishes in a reasonable time:
 
 ```sh
-nix build .#pi3-imx477
+nix build .
 ```
 
 When you have built the image you can list it out with the following command:
