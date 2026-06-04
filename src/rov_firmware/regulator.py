@@ -34,7 +34,7 @@ from .models.config import (
 )
 from .models.toast import ToastVariant
 from .rov_state import RovState
-from .toast import ToastContent, toast_content
+from .toast import ToastContent, toast_content, toast_info
 from .websocket.message import RegulatorSuggestions
 from .websocket.queue import get_message_queue
 
@@ -234,6 +234,9 @@ class Regulator:
         self.delta_t_update_ahrs: float = 1 / THRUSTER_SEND_FREQUENCY
         self.last_run_regulator_time: float = 0.0
         self.delta_t_run_regulator: float = 1 / THRUSTER_SEND_FREQUENCY
+
+        self._loop_rate_counter: int = 0
+        self._loop_rate_window_start: float = 0.0
 
         self.previous_depth: float = 0.0
         self.current_dt_depth: float = 0.0
@@ -661,6 +664,23 @@ class Regulator:
             self.delta_t_run_regulator = 1 / THRUSTER_SEND_FREQUENCY
         self.last_run_regulator_time = now
 
+        self._loop_rate_counter += 1
+        if self._loop_rate_window_start == 0.0:
+            self._loop_rate_window_start = now
+        elif now - self._loop_rate_window_start >= 1.0:
+            elapsed = now - self._loop_rate_window_start
+            hz = round(self._loop_rate_counter / elapsed)
+            toast_info(
+                "regulator_loop_rate",
+                ToastContent(
+                    message_key="toasts_recording_saved_path",
+                    message_args={"path": f"Control loop: {hz} Hz"},
+                ),
+                None,
+            )
+            self._loop_rate_counter = 0
+            self._loop_rate_window_start = now
+
         self._update_desired_from_direction_vector(direction_vector)
         self._handle_edges()
 
@@ -694,15 +714,6 @@ class Regulator:
 
         self._scale_regulator_direction_vector(regulator_direction_vector)
         self._scale_direction_vector_with_user_max_power(direction_vector)
-
-        mask_pos = (regulator_direction_vector > 0) & (
-            regulator_direction_vector < MOTOR_DEADZONE
-        )
-        mask_neg = (regulator_direction_vector < 0) & (
-            regulator_direction_vector > -MOTOR_DEADZONE
-        )
-        regulator_direction_vector[mask_pos] = MOTOR_DEADZONE
-        regulator_direction_vector[mask_neg] = -MOTOR_DEADZONE
 
         direction_vector += regulator_direction_vector
 
