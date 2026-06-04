@@ -240,6 +240,15 @@ class RovConfig(CamelCaseModel):
         """Validate and convert thruster allocation to numpy array."""
         return np.array(v, dtype=np.float32)
 
+    @field_validator("nullspace_vectors", mode="before")
+    @classmethod
+    def validate_nullspace_vectors(
+        cls, v: list[list[float]] | None,
+    ) -> NumpyNDArray[np.float32] | None:
+        if v is None:
+            return None
+        return np.array(v, dtype=np.float32)
+
     _config_path: ClassVar[Path] = Path(__file__).parents[1] / "config.json"
 
     @classmethod
@@ -311,6 +320,15 @@ class PartialRovConfig(CamelCaseModel):
         cls, v: list[list[float]] | None
     ) -> NumpyNDArray[np.float32] | None:
         """Validate and convert thruster allocation to numpy array if present."""
+        if v is None:
+            return None
+        return np.array(v, dtype=np.float32)
+
+    @field_validator("nullspace_vectors", mode="before")
+    @classmethod
+    def validate_nullspace_vectors(
+        cls, v: list[list[float]] | None,
+    ) -> NumpyNDArray[np.float32] | None:
         if v is None:
             return None
         return np.array(v, dtype=np.float32)
