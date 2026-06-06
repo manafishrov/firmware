@@ -290,7 +290,7 @@ class Thrusters:
             )
         return nv_activation
 
-    def _remove_deadzone_using_nullspace(  
+    def _remove_deadzone_using_nullspace(
         self,
         thrust_vector: NDArray[np.float32],
     ) -> None:
