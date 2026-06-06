@@ -60,15 +60,7 @@ async def handle_set_config(
     """
     old_ip = state.rov_config.ip_address
     current_data = state.rov_config.model_dump(by_alias=False)
-    # Build update from model_fields_set to correctly handle empty lists (e.g. nullspace_vectors=[]).
-    # model_dump(exclude_none=True) may omit them if numpydantic serializes [] as None.
-    full_dump = payload.model_dump(by_alias=False)
-    update_data = {}
-    for field_name in payload.model_fields_set:
-        serialized = full_dump.get(field_name)
-        value = serialized if serialized is not None else getattr(payload, field_name)
-        if value is not None:
-            update_data[field_name] = value
+    update_data = payload.model_dump(by_alias=False, include=payload.model_fields_set)
     current_data.update(update_data)
     state.rov_config = RovConfig.model_validate(current_data)
     state.rov_config.save()

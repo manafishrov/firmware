@@ -123,6 +123,8 @@
           pkgs.minisign
           pkgs.uv
           pkgs.python313
+          pkgs.ruff
+          pkgs.ty
         ];
         env = {
           UV_PYTHON_DOWNLOADS = "never";
