@@ -196,9 +196,7 @@ class Thrusters:
         # Check what available interval requires the least amount of deadzone crossing
         # deadzone i is considered "under" a value when its upper bound is at or below that value
         n_active = len(active_nv_indices)
-        interval_crossing_scores: list[
-            tuple[tuple[float, float], set[int], int]
-        ] = []
+        interval_crossing_scores: list[tuple[tuple[float, float], set[int], int]] = []
         for available_interval in available_intervals:
             midpoint = (available_interval[0] + available_interval[1]) / 2.0
             # make a list deadzones_under_activation of indices of deadzones under the midpoint of the available interval
