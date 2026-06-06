@@ -244,12 +244,12 @@ class RovConfig(CamelCaseModel):
     @classmethod
     def validate_nullspace_vectors(
         cls, v: list[list[float]] | np.ndarray | None,
-    ) -> list[list[float]]:
+    ) -> list[np.ndarray]:
         if v is None:
             return []
         if isinstance(v, np.ndarray):
-            return [row.tolist() for row in v]
-        return v
+            return [row for row in v]
+        return [np.array(item, dtype=np.float32) for item in v]
 
     _config_path: ClassVar[Path] = Path(__file__).parents[1] / "config.json"
 
@@ -330,12 +330,12 @@ class PartialRovConfig(CamelCaseModel):
     @classmethod
     def validate_nullspace_vectors(
         cls, v: list[list[float]] | np.ndarray | None,
-    ) -> list[list[float]] | None:
+    ) -> list[np.ndarray] | None:
         if v is None:
             return None
         if isinstance(v, np.ndarray):
-            return [row.tolist() for row in v]
-        return v
+            return [row for row in v]
+        return [np.array(item, dtype=np.float32) for item in v]
 
     @field_validator("dshot_speed", mode="after")
     @classmethod
