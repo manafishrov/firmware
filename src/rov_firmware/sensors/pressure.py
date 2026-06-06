@@ -6,7 +6,11 @@ import time
 
 from ms5837 import DENSITY_FRESHWATER, DENSITY_SALTWATER, MS5837_30BA
 
-from ..constants import DEPTH_DERIVATIVE_EMA_TAU, PRESSURE_SENSOR_READ_FREQUENCY, SYSTEM_FAILURE_THRESHOLD
+from ..constants import (
+    DEPTH_DERIVATIVE_EMA_TAU,
+    PRESSURE_SENSOR_READ_FREQUENCY,
+    SYSTEM_FAILURE_THRESHOLD,
+)
 from ..log import log_error, log_info
 from ..models.config import FluidType
 from ..models.sensors import PressureData
@@ -26,7 +30,6 @@ class PressureSensor:
         self.state: RovState = state
         self.sensor: MS5837_30BA | None = None
         self.current_fluid_type: FluidType | None = None
-
 
     async def initialize(self) -> None:
         """Asynchronously initialize the pressure sensor."""

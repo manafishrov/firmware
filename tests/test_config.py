@@ -182,11 +182,16 @@ def test_rov_config_defaults_are_sensible():
     assert config.thruster_protocol == "dshot"
 
 
-_NULLSPACE_VECTORS = [[1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]]
+_NULLSPACE_VECTORS = [
+    [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+    [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+]
 
 
 @pytest.mark.parametrize("model_cls", [RovConfig, PartialRovConfig])
-def test_nullspace_vectors_validator_converts_nested_list_to_list_of_float32_arrays(model_cls):
+def test_nullspace_vectors_validator_converts_nested_list_to_list_of_float32_arrays(
+    model_cls,
+):
     config = model_cls.model_validate({"nullspaceVectors": _NULLSPACE_VECTORS})
 
     assert isinstance(config.nullspace_vectors, list)
@@ -224,7 +229,11 @@ def test_rov_config_round_trip_nullspace_vectors_empty():
 
 
 def test_rov_config_round_trip_nullspace_vectors_populated():
-    config = RovConfig(nullspace_vectors=[np.array(row, dtype=np.float32) for row in _NULLSPACE_VECTORS])
+    config = RovConfig(
+        nullspace_vectors=[
+            np.array(row, dtype=np.float32) for row in _NULLSPACE_VECTORS
+        ]
+    )
 
     serialized = json.loads(config.model_dump_json(by_alias=True))
 

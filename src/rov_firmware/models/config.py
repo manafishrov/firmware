@@ -199,7 +199,9 @@ class RovConfig(CamelCaseModel):
         )
     )
 
-    nullspace_vectors: list[Annotated[np.ndarray, NDArraySchema((8,), np.float32)]] = Field(default_factory=list)
+    nullspace_vectors: list[Annotated[np.ndarray, NDArraySchema((8,), np.float32)]] = (
+        Field(default_factory=list)
+    )
 
     regulator: Regulator = Regulator(
         pitch=AxisConfig(kp=1, ki=0.5, kd=0.1, rate=120.0),
@@ -243,12 +245,14 @@ class RovConfig(CamelCaseModel):
     @field_validator("nullspace_vectors", mode="before")
     @classmethod
     def validate_nullspace_vectors(
-        cls, v: list[list[float]] | np.ndarray | None,
+        cls,
+        v: list[list[float]] | np.ndarray | None,
     ) -> list[np.ndarray]:
+        """Validate and convert nullspace vectors to list of float32 arrays."""
         if v is None:
             return []
         if isinstance(v, np.ndarray):
-            return [row for row in v]
+            return list(v)
         return [np.array(item, dtype=np.float32) for item in v]
 
     _config_path: ClassVar[Path] = Path(__file__).parents[1] / "config.json"
@@ -309,7 +313,9 @@ class PartialRovConfig(CamelCaseModel):
     thruster_allocation: (
         Annotated[np.ndarray, NDArraySchema((8, 8), np.float32)] | None
     ) = None
-    nullspace_vectors: list[Annotated[np.ndarray, NDArraySchema((8,), np.float32)]] | None = None
+    nullspace_vectors: (
+        list[Annotated[np.ndarray, NDArraySchema((8,), np.float32)]] | None
+    ) = None
     regulator: Regulator | None = None
     direction_coefficients: DirectionCoefficients | None = None
     power: Power | None = None
@@ -329,12 +335,14 @@ class PartialRovConfig(CamelCaseModel):
     @field_validator("nullspace_vectors", mode="before")
     @classmethod
     def validate_nullspace_vectors(
-        cls, v: list[list[float]] | np.ndarray | None,
+        cls,
+        v: list[list[float]] | np.ndarray | None,
     ) -> list[np.ndarray] | None:
+        """Validate and convert nullspace vectors to list of float32 arrays."""
         if v is None:
             return None
         if isinstance(v, np.ndarray):
-            return [row for row in v]
+            return list(v)
         return [np.array(item, dtype=np.float32) for item in v]
 
     @field_validator("dshot_speed", mode="after")

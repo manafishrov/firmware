@@ -118,9 +118,9 @@ class Thrusters:
         np.matmul(allocation_matrix, direction_vector, out=out)
         return out
 
-    def _remove_deadzone_using_nullspace(
+    def _remove_deadzone_using_nullspace(  # noqa: C901, PLR0912, PLR0915
         self,
-        thrust_vector: NDArray[np.float32]
+        thrust_vector: NDArray[np.float32],
     ) -> None:
         # Return if auto-stabilization is disabled
         if not self.state.system_status.auto_stabilization:
@@ -135,11 +135,15 @@ class Thrusters:
         # for each nullspace vector between iterations. Resize when config changes.
         if len(self._previous_nv_activations) != len(nullspace_vectors):
             self._previous_nv_activations = [0.0] * len(nullspace_vectors)
-            self._previous_deadzones_under_activations = [set() for _ in nullspace_vectors]
+            self._previous_deadzones_under_activations = [
+                set() for _ in nullspace_vectors
+            ]
 
         for nv_index, nv in enumerate(nullspace_vectors):
             previous_nv_activation = self._previous_nv_activations[nv_index]
-            previous_deadzones_under_activation = self._previous_deadzones_under_activations[nv_index]
+            previous_deadzones_under_activation = (
+                self._previous_deadzones_under_activations[nv_index]
+            )
 
             active_nv_indices = np.nonzero(nv)[0]
             if len(active_nv_indices) == 0:
@@ -149,23 +153,34 @@ class Thrusters:
 
             # Make array with start and stop for the deadzone of each thruster
             # shape: (n_active, 2) — each row is [lower_bound, upper_bound] in thrust space
-            thruster_deadzones = np.stack([
-                active_thrust_vector - MOTOR_DEADZONE,
-                active_thrust_vector + MOTOR_DEADZONE,
-            ], axis=1)
+            thruster_deadzones = np.stack(
+                [
+                    active_thrust_vector - MOTOR_DEADZONE,
+                    active_thrust_vector + MOTOR_DEADZONE,
+                ],
+                axis=1,
+            )
 
             # Use the nullspace vector to transform the thruster_deadzones into a new set of deadzones in the nullspace vector space
             # divide each element in thruster_deadzones by the corresponding field in active_nv and flip the sign
             nullspace_deadzones = -(thruster_deadzones / active_nv[:, np.newaxis])
             # sort each nullspace_deadzone so first element in tuple is the smallest
-            nullspace_deadzones = np.sort(nullspace_deadzones, axis=1)  # shape: (n_active, 2)
+            nullspace_deadzones = np.sort(
+                nullspace_deadzones, axis=1
+            )  # shape: (n_active, 2)
 
             # Find available intervals
             # Build list of forbidden intervals by clipping each nullspace_deadzone to the allowed activation range
             forbidden_intervals: list[tuple[float, float]] = []
             for i in range(len(active_nv_indices)):
-                lower_bound = max(float(nullspace_deadzones[i, 0]), -MAX_ALLOWED_NULLSPACE_VECTOR_ACTIVATION)
-                upper_bound = min(float(nullspace_deadzones[i, 1]), MAX_ALLOWED_NULLSPACE_VECTOR_ACTIVATION)
+                lower_bound = max(
+                    float(nullspace_deadzones[i, 0]),
+                    -MAX_ALLOWED_NULLSPACE_VECTOR_ACTIVATION,
+                )
+                upper_bound = min(
+                    float(nullspace_deadzones[i, 1]),
+                    MAX_ALLOWED_NULLSPACE_VECTOR_ACTIVATION,
+                )
                 if lower_bound < upper_bound:
                     forbidden_intervals.append((lower_bound, upper_bound))
             forbidden_intervals.sort()
@@ -173,8 +188,13 @@ class Thrusters:
             # Merge overlapping forbidden intervals so gaps between them are clean
             merged_forbidden_intervals: list[list[float]] = []
             for lower_bound, upper_bound in forbidden_intervals:
-                if merged_forbidden_intervals and lower_bound <= merged_forbidden_intervals[-1][1]:
-                    merged_forbidden_intervals[-1][1] = max(merged_forbidden_intervals[-1][1], upper_bound)
+                if (
+                    merged_forbidden_intervals
+                    and lower_bound <= merged_forbidden_intervals[-1][1]
+                ):
+                    merged_forbidden_intervals[-1][1] = max(
+                        merged_forbidden_intervals[-1][1], upper_bound
+                    )
                 else:
                     merged_forbidden_intervals.append([lower_bound, upper_bound])
 
@@ -186,12 +206,16 @@ class Thrusters:
                     available_intervals.append((cursor, lower_bound))
                 cursor = max(cursor, upper_bound)
             if cursor < MAX_ALLOWED_NULLSPACE_VECTOR_ACTIVATION:
-                available_intervals.append((cursor, MAX_ALLOWED_NULLSPACE_VECTOR_ACTIVATION))
+                available_intervals.append(
+                    (cursor, MAX_ALLOWED_NULLSPACE_VECTOR_ACTIVATION)
+                )
 
             if not available_intervals:
                 nv_activation = 0.0
                 # send a warning toast message and move to next nullspace vector
-                log_warn(f"No available nullspace activation intervals for nullspace vector {nv_index}")
+                log_warn(
+                    f"No available nullspace activation intervals for nullspace vector {nv_index}"
+                )
                 self._previous_nv_activations[nv_index] = nv_activation
                 self._previous_deadzones_under_activations[nv_index] = set()
                 continue
@@ -199,22 +223,31 @@ class Thrusters:
             # Check what available interval requires the least amount of deadzone crossing
             # deadzone i is considered "under" a value when its upper bound is at or below that value
             n_active = len(active_nv_indices)
-            interval_crossing_scores: list[tuple[tuple[float, float], set[int], int]] = []
+            interval_crossing_scores: list[
+                tuple[tuple[float, float], set[int], int]
+            ] = []
             for available_interval in available_intervals:
                 midpoint = (available_interval[0] + available_interval[1]) / 2.0
                 # make a list deadzones_under_activation of indices of deadzones under the midpoint of the available interval
                 deadzones_under_activation = {
-                    i for i in range(n_active)
+                    i
+                    for i in range(n_active)
                     if float(nullspace_deadzones[i, 1]) <= midpoint
                 }
                 # calculate deadzone crossing as the symmetric difference: both entering and exiting a deadzone count
                 deadzone_crossing = len(
-                    deadzones_under_activation.symmetric_difference(previous_deadzones_under_activation)
+                    deadzones_under_activation.symmetric_difference(
+                        previous_deadzones_under_activation
+                    )
                 )
-                interval_crossing_scores.append((available_interval, deadzones_under_activation, deadzone_crossing))
+                interval_crossing_scores.append(
+                    (available_interval, deadzones_under_activation, deadzone_crossing)
+                )
 
             # find the minimum possible deadzone crossing, remove all intervals that have more than the minimum amount of deadzone crossings
-            minimum_deadzone_crossings = min(crossing for _, _, crossing in interval_crossing_scores)
+            minimum_deadzone_crossings = min(
+                crossing for _, _, crossing in interval_crossing_scores
+            )
             available_intervals_with_minimum_crossings = [
                 (interval, deadzones_under_activation)
                 for interval, deadzones_under_activation, crossing in interval_crossing_scores
@@ -223,14 +256,20 @@ class Thrusters:
 
             # If there are multiple intervals left, choose the closest one to the previous_nv_activation
             if len(available_intervals_with_minimum_crossings) > 1:
-                def distance_to_closest_point_in_interval(interval: tuple[float, float]) -> float:
+
+                def distance_to_closest_point_in_interval(
+                    interval: tuple[float, float],
+                    previous_nv_activation: float = previous_nv_activation,
+                ) -> float:
                     lower_bound, upper_bound = interval
                     if lower_bound <= previous_nv_activation <= upper_bound:
                         return 0.0
-                    return float(min(
-                        abs(previous_nv_activation - lower_bound),
-                        abs(previous_nv_activation - upper_bound),
-                    ))
+                    return float(
+                        min(
+                            abs(previous_nv_activation - lower_bound),
+                            abs(previous_nv_activation - upper_bound),
+                        )
+                    )
 
                 minimum_distance_to_previous_activation = min(
                     distance_to_closest_point_in_interval(interval)
@@ -239,10 +278,13 @@ class Thrusters:
                 available_intervals_with_minimum_crossings = [
                     (interval, deadzones_under_activation)
                     for interval, deadzones_under_activation in available_intervals_with_minimum_crossings
-                    if distance_to_closest_point_in_interval(interval) == minimum_distance_to_previous_activation
+                    if distance_to_closest_point_in_interval(interval)
+                    == minimum_distance_to_previous_activation
                 ]
 
-            chosen_interval, chosen_deadzones_under_activation = available_intervals_with_minimum_crossings[0]
+            chosen_interval, chosen_deadzones_under_activation = (
+                available_intervals_with_minimum_crossings[0]
+            )
             interval_lower_bound, interval_upper_bound = chosen_interval
 
             # Move nv_activation to closest point in available interval, decay if available interval contains previous_nv_activation
@@ -254,18 +296,27 @@ class Thrusters:
                 elif nv_activation < 0.0:
                     nv_activation = min(nv_activation + NV_DECAY_RATE, 0.0)
                 # check that this did not bring it outside the available interval, if it did, set it to the closest point in the available interval
-                nv_activation = float(np.clip(nv_activation, interval_lower_bound, interval_upper_bound))
+                nv_activation = float(
+                    np.clip(nv_activation, interval_lower_bound, interval_upper_bound)
+                )
             else:
                 # set nv_activation to the closest point in the available interval
-                nv_activation = float(np.clip(previous_nv_activation, interval_lower_bound, interval_upper_bound))
+                nv_activation = float(
+                    np.clip(
+                        previous_nv_activation,
+                        interval_lower_bound,
+                        interval_upper_bound,
+                    )
+                )
 
             # Apply nullspace vector with nv_activation to the thrust vector
             # thrust_vector is modified in-place so subsequent nullspace vectors see the updated values
             thrust_vector[:] += nv * nv_activation
 
             self._previous_nv_activations[nv_index] = nv_activation
-            self._previous_deadzones_under_activations[nv_index] = chosen_deadzones_under_activation
-
+            self._previous_deadzones_under_activations[nv_index] = (
+                chosen_deadzones_under_activation
+            )
 
     def _correct_thrust_vector_spin_directions(
         self, thrust_vector: NDArray[np.float32]
@@ -305,7 +356,6 @@ class Thrusters:
             thrust_vector
         )
 
-    # This is the main functopn for creating thrust vector when Manafish is running.
     def _create_thrust_vector(self) -> NDArray[np.float32]:
         """Create the final thrust vector for the MCU from the current thruster direction vector.
 
@@ -440,7 +490,6 @@ class Thrusters:
         self._last_sent_protocol_config = current
         self._last_config_generation = generation
 
-    # This function calculates the thrust vector ONLY when doing auto-tuning.
     def _determine_thrust_vector(
         self, current_time: float, last_send_time: float
     ) -> tuple[NDArray[np.float32] | None, float]:
@@ -451,9 +500,6 @@ class Thrusters:
                 thrust_vector = self._create_thrust_vector_from_direction_vector(
                     direction_vector
                 )
-
-
-
                 self._correct_thrust_vector_spin_directions(thrust_vector)
                 self._reorder_thrust_vector(thrust_vector)
                 self._clip_thrust_vector(thrust_vector)

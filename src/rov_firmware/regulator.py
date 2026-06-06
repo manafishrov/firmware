@@ -22,7 +22,6 @@ from .constants import (
     INTEGRAL_RELAX_THRESHOLD,
     INTEGRAL_WINDUP_CLIP_DEGREES,
     MAX_GYRO_DEG_PER_SEC,
-    MOTOR_DEADZONE,
     PITCH_MAX,
     THRUSTER_SEND_FREQUENCY,
 )
@@ -233,8 +232,6 @@ class Regulator:
         self.delta_t_update_ahrs: float = 1 / THRUSTER_SEND_FREQUENCY
         self.last_run_regulator_time: float = 0.0
         self.delta_t_run_regulator: float = 1 / THRUSTER_SEND_FREQUENCY
-
-
 
         # Quaternion attitude estimator
         self.ahrs: _MahonyAhrs = _MahonyAhrs(kp=AHRS_MAHONY_KP, ki=AHRS_MAHONY_KI)

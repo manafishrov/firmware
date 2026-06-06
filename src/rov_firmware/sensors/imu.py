@@ -35,7 +35,6 @@ class Imu:
         self.state: RovState = state
         self.imu: BMI270 | None = None
 
-
     async def initialize(self) -> None:
         """Initialize the BMI270 IMU sensor with performance settings."""
         try:
@@ -87,16 +86,22 @@ class Imu:
         if self.imu is None:
             return None
         try:
-            # Burst read: registers 0x0C–0x17 (12 bytes) → accel XYZ + gyro XYZ
+            # Burst read: registers 0x0C-0x17 (12 bytes) -> accel XYZ + gyro XYZ
             raw = self.imu.bus.read_i2c_block_data(self.imu.address, 0x0C, 12)
-            raw_arr = np.frombuffer(bytes(raw), dtype="<i2")  # 6 signed int16, little-endian
+            raw_arr = np.frombuffer(
+                bytes(raw), dtype="<i2"
+            )  # 6 signed int16, little-endian
 
             accel = (raw_arr[:3] / 32768.0 * self.imu.acc_range).astype(np.float32)
-            gyr = (np.deg2rad(1.0) * raw_arr[3:] / 32768.0 * self.imu.gyr_range).astype(np.float32)
+            gyr = (np.deg2rad(1.0) * raw_arr[3:] / 32768.0 * self.imu.gyr_range).astype(
+                np.float32
+            )
 
-            # Burst read: registers 0x22–0x23 (2 bytes) → temperature
+            # Burst read: registers 0x22-0x23 (2 bytes) -> temperature
             temp_raw = self.imu.bus.read_i2c_block_data(self.imu.address, 0x22, 2)
-            temp_int16 = int.from_bytes(bytes(temp_raw), byteorder="little", signed=True)
+            temp_int16 = int.from_bytes(
+                bytes(temp_raw), byteorder="little", signed=True
+            )
             temperature = temp_int16 * 0.001952594 + 23.0
 
             # Change convention from ENU to NED
@@ -134,7 +139,6 @@ class Imu:
                 if data:
                     self.state.imu = data
                     failure_count = 0
-                    now = time.time()
                 else:
                     failure_count += 1
             except Exception as e:
