@@ -252,7 +252,7 @@ class RovConfig(CamelCaseModel):
         if v is None:
             return []
         if isinstance(v, np.ndarray):
-            return list(v)
+            return [np.array(item, dtype=np.float32) for item in v]
         return [np.array(item, dtype=np.float32) for item in v]
 
     _config_path: ClassVar[Path] = Path(__file__).parents[1] / "config.json"
@@ -342,7 +342,7 @@ class PartialRovConfig(CamelCaseModel):
         if v is None:
             return None
         if isinstance(v, np.ndarray):
-            return list(v)
+            return [np.array(item, dtype=np.float32) for item in v]
         return [np.array(item, dtype=np.float32) for item in v]
 
     @field_validator("dshot_speed", mode="after")

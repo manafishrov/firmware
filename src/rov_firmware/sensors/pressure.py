@@ -116,7 +116,7 @@ class PressureSensor:
             try:
                 data = self.read_data()
                 if data:
-                    now = time.time()
+                    now = time.perf_counter()
                     if previous_read_time > 0.0:
                         dt = now - previous_read_time
                         raw_depth_change = (data.depth - previous_depth) / dt
