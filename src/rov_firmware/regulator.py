@@ -33,7 +33,7 @@ from .models.config import (
 )
 from .models.toast import ToastVariant
 from .rov_state import RovState
-from .toast import ToastContent, toast_content, toast_info
+from .toast import ToastContent, toast_content
 from .websocket.message import RegulatorSuggestions
 from .websocket.queue import get_message_queue
 
@@ -234,8 +234,7 @@ class Regulator:
         self.last_run_regulator_time: float = 0.0
         self.delta_t_run_regulator: float = 1 / THRUSTER_SEND_FREQUENCY
 
-        self._loop_rate_counter: int = 0
-        self._loop_rate_window_start: float = 0.0
+
 
         # Quaternion attitude estimator
         self.ahrs: _MahonyAhrs = _MahonyAhrs(kp=AHRS_MAHONY_KP, ki=AHRS_MAHONY_KI)
@@ -648,23 +647,6 @@ class Regulator:
         else:
             self.delta_t_run_regulator = 1 / THRUSTER_SEND_FREQUENCY
         self.last_run_regulator_time = now
-
-        self._loop_rate_counter += 1
-        if self._loop_rate_window_start == 0.0:
-            self._loop_rate_window_start = now
-        elif now - self._loop_rate_window_start >= 1.0:
-            elapsed = now - self._loop_rate_window_start
-            hz = round(self._loop_rate_counter / elapsed)
-            toast_info(
-                "regulator_loop_rate",
-                ToastContent(
-                    message_key="toasts_recording_saved_path",
-                    message_args={"path": f"Control loop: {hz} Hz"},
-                ),
-                None,
-            )
-            self._loop_rate_counter = 0
-            self._loop_rate_window_start = now
 
         self._update_desired_from_direction_vector(direction_vector)
         self._handle_edges()

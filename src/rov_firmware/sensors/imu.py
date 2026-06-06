@@ -20,7 +20,7 @@ from ..constants import IMU_READ_FREQUENCY, SYSTEM_FAILURE_THRESHOLD
 from ..log import log_error, log_info
 from ..models.sensors import ImuData
 from ..rov_state import RovState
-from ..toast import ToastContent, toast_error, toast_info
+from ..toast import ToastContent, toast_error
 
 
 class Imu:
@@ -34,8 +34,7 @@ class Imu:
         """
         self.state: RovState = state
         self.imu: BMI270 | None = None
-        self._read_rate_counter: int = 0
-        self._read_rate_window_start: float = 0.0
+
 
     async def initialize(self) -> None:
         """Initialize the BMI270 IMU sensor with performance settings."""
@@ -136,22 +135,6 @@ class Imu:
                     self.state.imu = data
                     failure_count = 0
                     now = time.time()
-                    self._read_rate_counter += 1
-                    if self._read_rate_window_start == 0.0:
-                        self._read_rate_window_start = now
-                    elif now - self._read_rate_window_start >= 1.0:
-                        elapsed = now - self._read_rate_window_start
-                        hz = round(self._read_rate_counter / elapsed)
-                        toast_info(
-                            "imu_read_rate",
-                            ToastContent(
-                                message_key="toasts_recording_saved_path",
-                                message_args={"path": f"IMU read loop: {hz} Hz"},
-                            ),
-                            None,
-                        )
-                        self._read_rate_counter = 0
-                        self._read_rate_window_start = now
                 else:
                     failure_count += 1
             except Exception as e:
