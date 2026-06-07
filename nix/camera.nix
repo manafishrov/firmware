@@ -32,7 +32,9 @@
   services.go2rtc = {
     enable = true;
     settings = {
-      streams.cam = "exec:${lib.getExe' pkgs.rpi.rpicam-apps "rpicam-vid"} -t 0 -n --inline -o -";
+      # Low-latency WebRTC encode: Constrained Baseline (no B-frames), 20 Mbps,
+      # one keyframe per second for fast recovery on late join / packet loss.
+      streams.cam = "exec:${lib.getExe' pkgs.rpi.rpicam-apps "rpicam-vid"} -t 0 -n --inline --profile baseline --level 4.2 -b 20000000 --framerate 30 -g 30 -o -";
       api = {
         listen = ":1984";
         origin = "*";
