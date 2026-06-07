@@ -3,7 +3,6 @@ import pytest
 from scipy.spatial.transform import Rotation
 
 from rov_firmware.constants import (
-    DEPTH_DERIVATIVE_EMA_TAU,
     DEPTH_INTEGRAL_WINDUP_CLIP,
     INTEGRAL_RELAX_THRESHOLD,
     MAX_GYRO_DEG_PER_SEC,
@@ -94,28 +93,23 @@ def test_mahony_quaternion_stays_normalized_after_many_updates():
     assert np.linalg.norm(ahrs.current_attitude.as_quat()) == pytest.approx(1.0)
 
 
-def test_handle_depth_hold_computes_pid_and_updates_filtered_derivative(rov_state):
+def test_handle_depth_hold_computes_pid(rov_state):
     state = rov_state
     state.rov_config.regulator.depth = AxisConfig(kp=2.0, ki=3.0, kd=4.0, rate=1.0)
     state.pressure.depth = 7.0
+    state.pressure.depth_change = 1.2
     state.regulator.desired_depth = 10.0
     regulator = RegulatorController(state)
     regulator.delta_t_run_regulator = 0.1
     regulator.integral_depth = 0.5
-    regulator.previous_depth = 6.0
-    regulator.current_dt_depth = 1.2
 
     actuation = regulator._handle_depth_hold(np.float32(0.25))
 
     error = 3.0
     expected_integral = 0.5 + error * 0.1 * 0.75
-    alpha = float(np.exp(-0.1 / DEPTH_DERIVATIVE_EMA_TAU))
-    expected_rate = alpha * 1.2 + (1.0 - alpha) * 10.0
-    expected_actuation = 2.0 * error + 3.0 * expected_integral + 4.0 * expected_rate
+    expected_actuation = 2.0 * error + 3.0 * expected_integral + 4.0 * 1.2
 
     assert regulator.integral_depth == pytest.approx(expected_integral)
-    assert regulator.current_dt_depth == pytest.approx(expected_rate)
-    assert regulator.previous_depth == pytest.approx(7.0)
     assert actuation == pytest.approx(expected_actuation)
 
 

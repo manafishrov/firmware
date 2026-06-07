@@ -18,12 +18,10 @@ from .constants import (
     AUTO_TUNING_TOAST_ID,
     AUTO_TUNING_ZERO_THRESHOLD_DEGREES,
     AUTO_TUNING_ZERO_THRESHOLD_DEPTH_METERS,
-    DEPTH_DERIVATIVE_EMA_TAU,
     DEPTH_INTEGRAL_WINDUP_CLIP,
     INTEGRAL_RELAX_THRESHOLD,
     INTEGRAL_WINDUP_CLIP_DEGREES,
     MAX_GYRO_DEG_PER_SEC,
-    MOTOR_DEADZONE,
     PITCH_MAX,
     THRUSTER_SEND_FREQUENCY,
 )
@@ -235,9 +233,6 @@ class Regulator:
         self.last_run_regulator_time: float = 0.0
         self.delta_t_run_regulator: float = 1 / THRUSTER_SEND_FREQUENCY
 
-        self.previous_depth: float = 0.0
-        self.current_dt_depth: float = 0.0
-
         # Quaternion attitude estimator
         self.ahrs: _MahonyAhrs = _MahonyAhrs(kp=AHRS_MAHONY_KP, ki=AHRS_MAHONY_KI)
 
@@ -415,10 +410,7 @@ class Regulator:
     def _depth_hold_enable_edge(
         self,
     ) -> None:  # Note to Michael: I know this is done in another script too, but it is better to do here because we have to change the integral terms which are only in this class, and in future we might need to have more complex behaviour on edges.
-        current_depth = self.state.pressure.depth
         self.integral_depth = 0.0
-        self.current_dt_depth = 0.0
-        self.previous_depth = current_depth
 
     def _handle_depth_hold(self, heave_input: np.float32) -> float:
         """Compute PID depth actuation using current and desired depth, with integral relaxation based on user heave input.
@@ -449,19 +441,11 @@ class Regulator:
             dtype=np.float32,
         )
 
-        # Update derivative term (using EMA filter)
-        alpha = cast(
-            float, np.exp(-self.delta_t_run_regulator / DEPTH_DERIVATIVE_EMA_TAU)
-        )
-        raw_rate = (current_depth - self.previous_depth) / self.delta_t_run_regulator
-        self.current_dt_depth = alpha * self.current_dt_depth + (1.0 - alpha) * raw_rate
-        self.previous_depth = current_depth
-
         config = self.state.rov_config.regulator
         depth_regulator_actuation = (
             float(config.depth.kp) * error
             + float(config.depth.ki) * float(self.integral_depth)
-            + float(config.depth.kd) * float(self.current_dt_depth)
+            + float(config.depth.kd) * self.state.pressure.depth_change
         )
 
         return depth_regulator_actuation
@@ -694,15 +678,6 @@ class Regulator:
 
         self._scale_regulator_direction_vector(regulator_direction_vector)
         self._scale_direction_vector_with_user_max_power(direction_vector)
-
-        mask_pos = (regulator_direction_vector > 0) & (
-            regulator_direction_vector < MOTOR_DEADZONE
-        )
-        mask_neg = (regulator_direction_vector < 0) & (
-            regulator_direction_vector > -MOTOR_DEADZONE
-        )
-        regulator_direction_vector[mask_pos] = MOTOR_DEADZONE
-        regulator_direction_vector[mask_neg] = -MOTOR_DEADZONE
 
         direction_vector += regulator_direction_vector
 

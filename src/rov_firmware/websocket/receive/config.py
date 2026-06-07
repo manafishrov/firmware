@@ -60,7 +60,7 @@ async def handle_set_config(
     """
     old_ip = state.rov_config.ip_address
     current_data = state.rov_config.model_dump(by_alias=False)
-    update_data = payload.model_dump(exclude_none=True, by_alias=False)
+    update_data = payload.model_dump(by_alias=False, include=payload.model_fields_set)
     current_data.update(update_data)
     state.rov_config = RovConfig.model_validate(current_data)
     state.rov_config.save()

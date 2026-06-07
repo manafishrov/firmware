@@ -57,10 +57,10 @@ def apply_migrations(raw: dict[str, Any]) -> dict[str, Any]:
     """Apply config migrations based on firmware version."""
     firmware_version = raw.get("firmwareVersion", "0.0.0")
 
-    # Example: migrate config when firmware_version < "1.0.0"
-    if compare_semver(firmware_version, "1.0.0") == -1:
-        # Add migration logic here
-        pass
+    if compare_semver(firmware_version, "1.1.0") == -1:
+        raw.setdefault("nullspaceVectors", [])
+        raw["firmwareVersion"] = "1.1.0"
+
     return raw
 
 
@@ -198,6 +198,11 @@ class RovConfig(CamelCaseModel):
             dtype=np.float32,
         )
     )
+
+    nullspace_vectors: list[Annotated[np.ndarray, NDArraySchema((8,), np.float32)]] = (
+        Field(default_factory=list)
+    )
+
     regulator: Regulator = Regulator(
         pitch=AxisConfig(kp=1, ki=0.5, kd=0.1, rate=120.0),
         roll=AxisConfig(kp=1, ki=0.5, kd=0.1, rate=120.0),
@@ -236,6 +241,19 @@ class RovConfig(CamelCaseModel):
     ) -> NumpyNDArray[np.float32]:
         """Validate and convert thruster allocation to numpy array."""
         return np.array(v, dtype=np.float32)
+
+    @field_validator("nullspace_vectors", mode="before")
+    @classmethod
+    def validate_nullspace_vectors(
+        cls,
+        v: list[list[float]] | np.ndarray | None,
+    ) -> list[np.ndarray]:
+        """Validate and convert nullspace vectors to list of float32 arrays."""
+        if v is None:
+            return []
+        if isinstance(v, np.ndarray):
+            return [np.array(item, dtype=np.float32) for item in v]
+        return [np.array(item, dtype=np.float32) for item in v]
 
     _config_path: ClassVar[Path] = Path(__file__).parents[1] / "config.json"
 
@@ -295,6 +313,9 @@ class PartialRovConfig(CamelCaseModel):
     thruster_allocation: (
         Annotated[np.ndarray, NDArraySchema((8, 8), np.float32)] | None
     ) = None
+    nullspace_vectors: (
+        list[Annotated[np.ndarray, NDArraySchema((8,), np.float32)]] | None
+    ) = None
     regulator: Regulator | None = None
     direction_coefficients: DirectionCoefficients | None = None
     power: Power | None = None
@@ -310,6 +331,19 @@ class PartialRovConfig(CamelCaseModel):
         if v is None:
             return None
         return np.array(v, dtype=np.float32)
+
+    @field_validator("nullspace_vectors", mode="before")
+    @classmethod
+    def validate_nullspace_vectors(
+        cls,
+        v: list[list[float]] | np.ndarray | None,
+    ) -> list[np.ndarray] | None:
+        """Validate and convert nullspace vectors to list of float32 arrays."""
+        if v is None:
+            return None
+        if isinstance(v, np.ndarray):
+            return [np.array(item, dtype=np.float32) for item in v]
+        return [np.array(item, dtype=np.float32) for item in v]
 
     @field_validator("dshot_speed", mode="after")
     @classmethod

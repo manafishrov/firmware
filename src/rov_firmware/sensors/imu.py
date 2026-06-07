@@ -1,14 +1,15 @@
 """IMU sensor interface for the ROV firmware."""
 
 import asyncio
+import time
 
 from bmi270.BMI270 import (
     ACC_BWP_NORMAL,
-    ACC_ODR_100,
+    ACC_ODR_200,
     ACC_RANGE_2G,
     BMI270,
     GYR_BWP_NORMAL,
-    GYR_ODR_100,
+    GYR_ODR_200,
     GYR_RANGE_1000,
     I2C_PRIM_ADDR,
     PERFORMANCE_MODE,
@@ -44,8 +45,8 @@ class Imu:
             await asyncio.to_thread(imu_instance.set_mode, PERFORMANCE_MODE)
             await asyncio.to_thread(imu_instance.set_acc_range, ACC_RANGE_2G)
             await asyncio.to_thread(imu_instance.set_gyr_range, GYR_RANGE_1000)
-            await asyncio.to_thread(imu_instance.set_acc_odr, ACC_ODR_100)
-            await asyncio.to_thread(imu_instance.set_gyr_odr, GYR_ODR_100)
+            await asyncio.to_thread(imu_instance.set_acc_odr, ACC_ODR_200)
+            await asyncio.to_thread(imu_instance.set_gyr_odr, GYR_ODR_200)
             await asyncio.to_thread(imu_instance.set_acc_bwp, ACC_BWP_NORMAL)
             await asyncio.to_thread(imu_instance.set_gyr_bwp, GYR_BWP_NORMAL)
             await asyncio.to_thread(imu_instance.disable_fifo_header)
@@ -73,10 +74,9 @@ class Imu:
     def read_data(self) -> ImuData | None:
         """Read the current IMU sample and return sensor measurements in NED coordinates.
 
-        Reads accelerometer, gyroscope, and temperature from the BMI270. The BMI270 library
-        automatically converts raw data to SI units (accel in m/s², gyro in rad/s). Applies
-        ENU to NED axis convention transform. Returns None if the IMU is not initialized or
-        a read error occurs.
+        Replaces the bmi270 library's 14 individual register reads with two burst reads
+        (accel+gyro in one transaction, temperature in another), reducing I2C overhead
+        from ~14ms to ~2ms per call.
 
         Returns:
             ImuData | None: An ImuData instance containing `acceleration` (m/s²), `gyroscope`
@@ -86,8 +86,23 @@ class Imu:
         if self.imu is None:
             return None
         try:
-            accel = self.imu.get_acc_data().astype(np.float32)
-            gyr = self.imu.get_gyr_data().astype(np.float32)
+            # Burst read: registers 0x0C-0x17 (12 bytes) -> accel XYZ + gyro XYZ
+            raw = self.imu.bus.read_i2c_block_data(self.imu.address, 0x0C, 12)
+            raw_arr = np.frombuffer(
+                bytes(raw), dtype="<i2"
+            )  # 6 signed int16, little-endian
+
+            accel = (raw_arr[:3] / 32768.0 * self.imu.acc_range).astype(np.float32)
+            gyr = (np.deg2rad(1.0) * raw_arr[3:] / 32768.0 * self.imu.gyr_range).astype(
+                np.float32
+            )
+
+            # Burst read: registers 0x22-0x23 (2 bytes) -> temperature
+            temp_raw = self.imu.bus.read_i2c_block_data(self.imu.address, 0x22, 2)
+            temp_int16 = int.from_bytes(
+                bytes(temp_raw), byteorder="little", signed=True
+            )
+            temperature = temp_int16 * 0.001952594 + 23.0
 
             # Change convention from ENU to NED
             accel *= np.array([1.0, -1.0, -1.0], dtype=np.float32)
@@ -96,21 +111,31 @@ class Imu:
             return ImuData(
                 acceleration=accel,
                 gyroscope=gyr,
-                temperature=self.imu.get_temp_data(),
+                temperature=temperature,
             )
         except Exception as e:
             log_error(f"Error reading IMU data: {e}")
             return None
 
-    async def read_loop(self) -> None:
-        """Continuously read IMU data in a loop."""
+    def _blocking_read_loop(self) -> None:
+        """IMU read loop running in a dedicated background thread.
+
+        Runs entirely outside the asyncio event loop so the read rate is
+        determined by OS thread scheduling, not by event-loop callback latency.
+        State writes (self.state.imu = data) are safe without a lock because
+        CPython's GIL makes single object-reference assignments atomic.
+        """
         failure_count = 0
+        interval = 1.0 / IMU_READ_FREQUENCY
+        next_tick = time.perf_counter() + interval
         while True:
             if not self.state.system_health.imu_healthy:
-                await asyncio.sleep(1)
+                time.sleep(1)
+                next_tick = time.perf_counter() + interval
+                failure_count = 0
                 continue
             try:
-                data = await asyncio.to_thread(self.read_data)
+                data = self.read_data()
                 if data:
                     self.state.imu = data
                     failure_count = 0
@@ -123,4 +148,14 @@ class Imu:
                 self.state.system_health.imu_healthy = False
                 failure_count = 0
                 log_error("IMU failed 3 times, disabling IMU")
-            await asyncio.sleep(1 / IMU_READ_FREQUENCY)
+            sleep_time = next_tick - time.perf_counter()
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+            next_tick += interval
+            now = time.perf_counter()
+            if next_tick < now:
+                next_tick = now + interval
+
+    async def read_loop(self) -> None:
+        """Run the IMU read loop in a dedicated background thread."""
+        await asyncio.to_thread(self._blocking_read_loop)

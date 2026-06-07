@@ -1,18 +1,31 @@
-minimum_pre_commit_version: "4.5.0"
+minimum_pre_commit_version: "4.3.0"
 default_install_hook_types:
   - pre-commit
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.7
+  - repo: local
     hooks:
       - id: ruff-check
+        name: ruff check
+        entry: uv run ruff check --fix --exit-non-zero-on-fix
+        language: system
         types_or:
           - python
           - pyi
-        args:
-          - --fix
-          - --exit-non-zero-on-fix
+        require_serial: true
       - id: ruff-format
+        name: ruff format
+        entry: uv run ruff format
+        language: system
         types_or:
           - python
           - pyi
+        require_serial: true
+      - id: ty
+        name: ty check
+        entry: uv run ty check
+        language: system
+        types_or:
+          - python
+          - pyi
+        pass_filenames: false
+        require_serial: true
