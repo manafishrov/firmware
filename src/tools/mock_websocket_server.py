@@ -37,6 +37,7 @@ MOCK_CONFIG: dict[str, Any] = {
         [-1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0],
         [-1.0, 1.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0],
     ],
+    "nullspaceVectors": [],
     "regulator": {
         "pitch": {"kp": 2, "ki": 0, "kd": 0.1, "rate": 5.0},
         "roll": {"kp": 1, "ki": 0, "kd": 0.1, "rate": 5.0},
