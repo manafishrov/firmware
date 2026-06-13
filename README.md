@@ -12,7 +12,7 @@ the caches for the `nixos-raspberrypi` flake to the build system so the build
 finishes in a reasonable time:
 
 ```sh
-nix build .#pi3-imx477
+nix build .
 ```
 
 When you have built the image you can list it out with the following command:
@@ -115,22 +115,21 @@ is 10.10.10.10). We recommend setting it to 10.10.10.100 for simplicity.
 
 ### Linux
 
-1. For Ubuntu/Debian GUI:
-   - Open Settings > Network
-   - Click the gear icon next to your Ethernet connection
-   - Go to IPv4 tab
-   - Select "Manual"
-   - Add Address: 10.10.10.100
-   - Netmask: 255.255.255.0
-   - Click "Apply"
+Most Linux distributions use NetworkManager. Find your Ethernet connection name
+with `nmcli device status` (often "Wired connection 1"), then:
 
-2. For command line:
+1. Set a static IP (replace the connection name if different):
 
    ```sh
-   sudo ip addr add 10.10.10.100/24 dev eth0
+   nmcli connection modify "Wired connection 1" \
+     ipv4.method manual ipv4.addresses 10.10.10.100/24
    ```
 
-   Replace `eth0` with your Ethernet interface name if different.
+2. Apply the changes:
+
+   ```sh
+   nmcli connection up "Wired connection 1"
+   ```
 
 ## Raspberry Pi
 
@@ -145,11 +144,21 @@ Command to connect via SSH:
 ssh pi@10.10.10.10
 ```
 
+The Pi also advertises itself over mDNS as `manafish.local`, so if your system
+has mDNS resolution enabled (most Linux distros with Avahi, plus macOS) you can
+use the hostname instead of the IP:
+
+```sh
+ssh pi@manafish.local
+```
+
 If you have reflashed the SD card, you may need to delete the known hosts entry
 for the Pi before connecting:
 
 ```sh
 ssh-keygen -R 10.10.10.10
+# or, if you connected via the hostname:
+ssh-keygen -R manafish.local
 ```
 
 ### WiFi Connection
@@ -224,6 +233,17 @@ Install the development dependencies and Git hook once per clone:
 uv sync
 uv run pre-commit install
 ```
+
+> [!NOTE]
+> The development shell (`nix develop` or direnv) provides the exact Python
+> interpreter the project pins in `pyproject.toml`. If you don't use `nix`
+> (for example on Windows), `uv` may fail with an error like
+> `No interpreter found for Python ==3.13.12`. Install the pinned interpreter
+> first so `uv` can find it:
+>
+> ```sh
+> uv python install 3.13.12
+> ```
 
 The pre-commit hook runs Ruff on committed Python files before each commit. To
 run the same checks across the repository manually:

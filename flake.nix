@@ -17,7 +17,7 @@
     # nix manager bumps this string, gated by minimumReleaseAge in
     # .github/renovate.json so nixos-raspberrypi.cachix.org has time to
     # populate aarch64 substitutes before we move.
-    nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi/d567e94380c2911ca9fd623ee1bef35ddd6157d9";
+    nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi/b45a9502a3e86ddda40bb13ef3dd7fcedf5c40a9";
     nixpkgs.follows = "nixos-raspberrypi/nixpkgs";
     impermanence = {
       url = "github:nix-community/impermanence";
@@ -129,6 +129,25 @@
           UV_PYTHON = nixpkgs.lib.getExe pkgs.python313;
           LD_LIBRARY_PATH = nixpkgs.lib.makeLibraryPath [pkgs.stdenv.cc.cc.lib pkgs.zlib];
         };
+        # uv installs ruff and ty (pinned in pyproject.toml) as prebuilt PyPI
+        # wheels whose ELF interpreter is /lib64/ld-linux-x86-64.so.2, which
+        # NixOS lacks. Patch the venv binaries to the nix loader so `uv run
+        # ruff` / `uv run ty` work the same on NixOS as on every other OS — one
+        # invocation path everywhere (local, pre-commit, CI). No-op off NixOS.
+        shellHook = ''
+          if [ -e /etc/NIXOS ] && [ -f pyproject.toml ]; then
+            ${pkgs.lib.getExe pkgs.uv} sync --quiet
+            _loader="${pkgs.stdenv.cc.libc}/lib/ld-linux-x86-64.so.2"
+            for _bin in ruff ty; do
+              _path=".venv/bin/$_bin"
+              if [ -f "$_path" ] && \
+                 [ "$(${pkgs.patchelf}/bin/patchelf --print-interpreter "$_path" 2>/dev/null)" != "$_loader" ]; then
+                ${pkgs.patchelf}/bin/patchelf --set-interpreter "$_loader" "$_path" || true
+              fi
+            done
+            unset _loader _bin _path
+          fi
+        '';
       };
     });
   };

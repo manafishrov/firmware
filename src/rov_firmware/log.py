@@ -1,6 +1,8 @@
 """Logging utilities for the ROV firmware."""
 
 import asyncio
+from collections.abc import Callable, Coroutine
+import concurrent.futures
 import logging
 
 from .models.log import LogEntry, LogLevel, LogOrigin
@@ -20,6 +22,42 @@ if not _logger.handlers:
 
 _MAX_PENDING_LOGS = 100
 _pending_logs: list[LogMessage] = []
+
+
+def _log_future_failure(future: concurrent.futures.Future[None], label: str) -> None:
+    try:
+        _ = future.result()
+    except concurrent.futures.CancelledError:
+        pass
+    except Exception:
+        # Local logger, not log_error, to avoid recursion on logging failures.
+        _logger.exception("Background coroutine failed: %s", label)
+
+
+def submit_to_main_loop(
+    coro_factory: Callable[[], Coroutine[object, object, None]], label: str
+) -> bool:
+    """Schedule a coroutine on the main loop, logging any failure.
+
+    Args:
+        coro_factory: Builds the coroutine; called only once the loop is running.
+        label: Label used in failure logs.
+
+    Returns:
+        True if the coroutine was scheduled, False otherwise.
+    """
+    loop = websocket_state.main_event_loop
+    if loop is None or not loop.is_running():
+        return False
+
+    try:
+        future = asyncio.run_coroutine_threadsafe(coro_factory(), loop)
+    except Exception:
+        _logger.exception("Failed to submit %s", label)
+        return False
+
+    future.add_done_callback(lambda f: _log_future_failure(f, label))
+    return True
 
 
 async def flush_pending_logs() -> None:
@@ -47,12 +85,11 @@ async def _log_message_async(
 def _log_message(
     level: LogLevel, message: str, origin: LogOrigin = LogOrigin.FIRMWARE
 ) -> None:
-    if websocket_state.main_event_loop and websocket_state.main_event_loop.is_running():
-        _ = asyncio.run_coroutine_threadsafe(
-            _log_message_async(level, message, origin),
-            websocket_state.main_event_loop,
-        )
-    else:
+    scheduled = submit_to_main_loop(
+        lambda: _log_message_async(level, message, origin),
+        f"log_message[{level}]",
+    )
+    if not scheduled:
         _logger.log(_map_log_level(level), message)
 
 

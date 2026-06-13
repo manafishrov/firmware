@@ -18,6 +18,7 @@ PACKAGES=(
 	"gpiozero"
 	"lgpio"
 	"psutil"
+	"ruff"
 )
 
 # Custom packages from flake inputs
@@ -52,6 +53,16 @@ for pkg in "${PACKAGES[@]}"; do
 		echo "    WARNING: Could not find version for $pkg in nixpkgs"
 	fi
 done
+
+echo "  ty..."
+ty_version=$(nix eval --raw --inputs-from . "nixpkgs#ty.version" 2>/dev/null)
+if [ -n "$ty_version" ]; then
+	ty_pep440=$(echo "$ty_version" | sed -E 's/-alpha\.?/a/; s/-beta\.?/b/; s/-rc\.?/rc/')
+	echo "    $ty_version -> $ty_pep440"
+	sed -i -E "s/\"ty==[^\"]+\"/\"ty==$ty_pep440\"/" pyproject.toml
+else
+	echo "    WARNING: Could not find version for ty in nixpkgs"
+fi
 
 NIX_PKG_FILE="nix/firmware.nix"
 
