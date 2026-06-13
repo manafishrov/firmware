@@ -70,5 +70,8 @@ THRUSTER_TEST_TOAST_ID: Final = "thruster-test"
 AUTO_TUNING_TOAST_ID: Final = "regulator-auto-tuning"
 FLASH_TOAST_ID: Final = "flash-mcu-firmware"
 
+# Logging
+CRASH_LOG_SEND_TIMEOUT_S: Final = 0.5
+
 # General
 SYSTEM_FAILURE_THRESHOLD: Final = 3

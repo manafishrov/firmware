@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import logging
 from typing import cast
 
 from pydantic import TypeAdapter
@@ -9,16 +10,20 @@ import websockets
 from websockets import Server, ServerConnection
 from websockets.exceptions import ConnectionClosed
 
+from ..constants import CRASH_LOG_SEND_TIMEOUT_S
 from ..log import flush_pending_logs, log_error, log_info, log_warn
+from ..models.log import LogEntry, LogLevel, LogOrigin
 from ..rov_state import RovState
 from .handler import handle_message
-from .message import WebsocketMessage
+from .message import LogMessage, WebsocketMessage
 from .queue import get_message_queue
 from .send.config import handle_send_config
 from .send.status import handle_status_update
 from .send.telemetry import handle_telemetry
 from .state import websocket_state
 
+
+_logger = logging.getLogger(__name__)
 
 websocket_message_adapter = TypeAdapter(WebsocketMessage)
 
@@ -35,6 +40,7 @@ class WebsocketServer:
         self.state: RovState = state
         self.server: Server | None = None
         self.client: ServerConnection | None = None
+        self._send_lock: asyncio.Lock = asyncio.Lock()
 
     async def handler(self, websocket: ServerConnection) -> None:
         """Handle WebSocket connection.
@@ -110,13 +116,33 @@ class WebsocketServer:
             f"Websocket server started on {self.state.rov_config.ip_address}:{self.state.rov_config.websocket_port}"
         )
 
+    async def send_log_now(self, level: LogLevel, message: str) -> None:
+        """Send a single log frame directly, bypassing the message queue.
+
+        Args:
+            level: The log level for the frame.
+            message: The log message body.
+        """
+        client = self.client
+        if client is None:
+            return
+
+        payload = LogEntry(origin=LogOrigin.FIRMWARE, level=level, message=message)
+        frame = LogMessage(payload=payload).model_dump_json(by_alias=True)
+        try:
+            async with self._send_lock:
+                await asyncio.wait_for(client.send(frame), CRASH_LOG_SEND_TIMEOUT_S)
+        except Exception:
+            _logger.exception("Failed to send final websocket crash log")
+
     async def _send_from_queue(self, websocket: ServerConnection) -> None:
         try:
             while True:
                 message = await get_message_queue().get()
                 try:
                     json_msg = message.model_dump_json(by_alias=True)
-                    await websocket.send(json_msg)
+                    async with self._send_lock:
+                        await websocket.send(json_msg)
                 except Exception as e:
                     log_error(f"Error sending queued message: {e}")
         except asyncio.CancelledError:

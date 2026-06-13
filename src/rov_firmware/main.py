@@ -1,9 +1,13 @@
 """Main entry point for the ROV firmware."""
 
 import asyncio
+import contextlib
+import traceback
 
 from serial import SerialException
 
+from .log import log_error
+from .models.log import LogLevel
 from .regulator import Regulator
 from .rov_state import RovState
 from .sensors.imu import Imu
@@ -20,7 +24,22 @@ def _exception_handler(
     exception = context.get("exception")
     if isinstance(exception, SerialException):
         return
+    with contextlib.suppress(Exception):
+        log_error(_format_asyncio_context(context))
     loop.default_exception_handler(context)
+
+
+def _format_asyncio_context(context: dict[str, object]) -> str:
+    message = str(context.get("message", "Unhandled exception in asyncio task"))
+    exception = context.get("exception")
+    if isinstance(exception, BaseException):
+        tb = "".join(
+            traceback.format_exception(
+                type(exception), exception, exception.__traceback__
+            )
+        )
+        return f"{message}\n{tb}"
+    return message
 
 
 async def main() -> None:
@@ -36,18 +55,31 @@ async def main() -> None:
     mcu: McuSensor = McuSensor(state, serial_manager)
     thrusters: Thrusters = Thrusters(state, serial_manager, regulator)
 
-    await ws_server.initialize()
-    _ = await serial_manager.initialize()
-    await imu.initialize()
-    await pressure.initialize()
+    tasks: list[asyncio.Task[None]] = []
+    try:
+        await ws_server.initialize()
+        _ = await serial_manager.initialize()
+        await imu.initialize()
+        await pressure.initialize()
 
-    tasks = [
-        imu.read_loop(),
-        pressure.read_loop(),
-        mcu.read_loop(),
-        thrusters.send_loop(),
-        ws_server.wait_closed(),
-    ]
-    _ = await asyncio.gather(*tasks)
-
-    await serial_manager.shutdown()
+        tasks = [
+            asyncio.create_task(imu.read_loop(), name="imu.read_loop"),
+            asyncio.create_task(pressure.read_loop(), name="pressure.read_loop"),
+            asyncio.create_task(mcu.read_loop(), name="mcu.read_loop"),
+            asyncio.create_task(thrusters.send_loop(), name="thrusters.send_loop"),
+            asyncio.create_task(ws_server.wait_closed(), name="ws_server.wait_closed"),
+        ]
+        _ = await asyncio.gather(*tasks)
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:
+        # Send the crash to the app log before tearing down the connection.
+        tb = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__))
+        await ws_server.send_log_now(LogLevel.ERROR, tb)
+        raise
+    finally:
+        for task in tasks:
+            _ = task.cancel()
+        if tasks:
+            _ = await asyncio.gather(*tasks, return_exceptions=True)
+        await serial_manager.shutdown()

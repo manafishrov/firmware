@@ -1,11 +1,9 @@
 """Toast notification utilities for the ROV firmware."""
 
-import asyncio
-
+from .log import submit_to_main_loop
 from .models.toast import Toast, ToastAction, ToastArgs, ToastContent, ToastVariant
 from .websocket.message import ShowToast
 from .websocket.queue import get_message_queue
-from .websocket.state import websocket_state
 
 
 def toast_action(
@@ -47,11 +45,7 @@ async def _toast_message_async(payload: Toast) -> None:
 
 
 def _toast_message(payload: Toast) -> None:
-    if websocket_state.main_event_loop and websocket_state.main_event_loop.is_running():
-        _ = asyncio.run_coroutine_threadsafe(
-            _toast_message_async(payload),
-            websocket_state.main_event_loop,
-        )
+    _ = submit_to_main_loop(lambda: _toast_message_async(payload), "toast_message")
 
 
 def toast_content(
