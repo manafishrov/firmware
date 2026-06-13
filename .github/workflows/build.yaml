@@ -14,7 +14,8 @@ jobs:
     env:
       ARTIFACT_PREFIX: pi3-imx477
       RELEASES_PREFIX: releases
-      RETAIN_RELEASES: "5"
+      RETAIN_STABLE: "4"
+      RETAIN_PRERELEASE: "3"
       VERSION: ${{ github.ref_name }}
       FIRMWARE_RELEASE_BASE_URL: https://s3.manafishrov.com/manafishrov-firmware
     steps:
@@ -42,16 +43,34 @@ jobs:
           mkdir -p ~/.config/rclone
           printf '%s' "$RCLONE_CONF_CONTENT" > ~/.config/rclone/rclone.conf
 
-          mapfile -t RELEASE_DIRS < <(rclone lsf "remote:${RELEASES_PREFIX}" --dirs-only | tr -d '/' | awk '/^v/' | sort -V)
+          # Stable and prerelease versions are retained independently so a long
+          # run of prereleases never purges a stable version the app still
+          # shows. A prerelease tag carries a '-' suffix (e.g. v1.2.0-rc.1);
+          # everything else is stable. Each list is sorted oldest-first so the
+          # oldest entries beyond the retention count are the ones deleted.
+          mapfile -t STABLE_DIRS < <(rclone lsf "remote:${RELEASES_PREFIX}" --dirs-only | tr -d '/' | awk '/^v/ && !/-/' | sort -V)
+          mapfile -t PRERELEASE_DIRS < <(rclone lsf "remote:${RELEASES_PREFIX}" --dirs-only | tr -d '/' | awk '/^v/ && /-/' | sort -V)
 
-          if [ "${#RELEASE_DIRS[@]}" -le "$RETAIN_RELEASES" ]; then
-            exit 0
+          prune_kind() {
+            local retain="$1"
+            shift
+            local dirs=("$@")
+            if [ "${#dirs[@]}" -le "$retain" ]; then
+              return 0
+            fi
+            local delete_count=$(( ${#dirs[@]} - retain ))
+            local old_release
+            for old_release in "${dirs[@]:0:${delete_count}}"; do
+              rclone purge "remote:${RELEASES_PREFIX}/${old_release}"
+            done
+          }
+
+          if [ "${#STABLE_DIRS[@]}" -gt 0 ]; then
+            prune_kind "$RETAIN_STABLE" "${STABLE_DIRS[@]}"
           fi
-
-          DELETE_COUNT=$((${#RELEASE_DIRS[@]} - RETAIN_RELEASES))
-          for OLD_RELEASE in "${RELEASE_DIRS[@]:0:${DELETE_COUNT}}"; do
-            rclone purge "remote:${RELEASES_PREFIX}/${OLD_RELEASE}"
-          done
+          if [ "${#PRERELEASE_DIRS[@]}" -gt 0 ]; then
+            prune_kind "$RETAIN_PRERELEASE" "${PRERELEASE_DIRS[@]}"
+          fi
 
       - name: Generate release notes
         run: |
@@ -61,10 +80,14 @@ jobs:
           MANIFEST_NAME="${ARTIFACT_PREFIX}-${VERSION}.json"
           CHECKSUM_NAME="${ARTIFACT_PREFIX}-${VERSION}.sha256"
 
+          # The block between the <!-- assets:start --> / <!-- assets:end -->
+          # markers is the auto-generated artifact list. The desktop app strips
+          # everything between these markers from the release notes it shows, so
+          # the markers must stay exactly as-is (the visible heading text can
+          # change freely without breaking the app).
           cat > release-notes.md <<EOF
-          Release assets for ${VERSION}.
-
-          ## Firmware artifacts
+          <!-- assets:start -->
+          ## Downloads
 
           - [${ARTIFACT_PREFIX}-${VERSION}.img.zst](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.img.zst)
           - [${CHECKSUM_NAME}](${BASE_URL}/${CHECKSUM_NAME})
@@ -72,6 +95,7 @@ jobs:
           - [${ARTIFACT_PREFIX}-${VERSION}.img.zst.minisig](${BASE_URL}/${ARTIFACT_PREFIX}-${VERSION}.img.zst.minisig)
           - [${CHECKSUM_NAME}.minisig](${BASE_URL}/${CHECKSUM_NAME}.minisig)
           - [${MANIFEST_NAME}.minisig](${BASE_URL}/${MANIFEST_NAME}.minisig)
+          <!-- assets:end -->
           EOF
 
       - name: Create or update draft release
