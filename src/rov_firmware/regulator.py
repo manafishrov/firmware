@@ -445,7 +445,7 @@ class Regulator:
         depth_regulator_actuation = (
             float(config.depth.kp) * error
             + float(config.depth.ki) * float(self.integral_depth)
-            + float(config.depth.kd) * self.state.pressure.depth_change
+            - float(config.depth.kd) * self.state.pressure.depth_change
         )
 
         return depth_regulator_actuation

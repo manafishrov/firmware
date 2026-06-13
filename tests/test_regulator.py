@@ -107,7 +107,7 @@ def test_handle_depth_hold_computes_pid(rov_state):
 
     error = 3.0
     expected_integral = 0.5 + error * 0.1 * 0.75
-    expected_actuation = 2.0 * error + 3.0 * expected_integral + 4.0 * 1.2
+    expected_actuation = 2.0 * error + 3.0 * expected_integral - 4.0 * 1.2
 
     assert regulator.integral_depth == pytest.approx(expected_integral)
     assert actuation == pytest.approx(expected_actuation)
