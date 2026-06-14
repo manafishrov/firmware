@@ -1,22 +1,19 @@
 """WebSocket telemetry send handlers for the ROV firmware."""
 
-from websockets import ServerConnection
-
 from ...constants import THRUSTER_POLES
 from ...models.rov_telemetry import RovTelemetry
 from ...rov_state import RovState
 from ..message import Telemetry
 
 
-async def handle_telemetry(
-    websocket: ServerConnection,
-    state: RovState,
-) -> None:
-    """Handle sending telemetry data.
+def build_telemetry(state: RovState) -> Telemetry:
+    """Build a telemetry message from the current ROV state.
 
     Args:
-        websocket: The WebSocket connection.
         state: The ROV state.
+
+    Returns:
+        The telemetry message ready to be sent.
     """
     valid_esc_temperatures = [
         temperature
@@ -53,5 +50,4 @@ async def handle_telemetry(
         thruster_signal_qualities=list(state.mcu_telemetry.signal_quality),
         work_indicator_percentage=state.thrusters.work_indicator_percentage,
     )
-    message = Telemetry(payload=payload).model_dump_json(by_alias=True)
-    await websocket.send(message)
+    return Telemetry(payload=payload)

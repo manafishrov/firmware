@@ -1,20 +1,16 @@
 """WebSocket config send handlers for the ROV firmware."""
 
-from websockets import ServerConnection
-
 from ...rov_state import RovState
 from ..message import Config
 
 
-async def handle_send_config(
-    websocket: ServerConnection,
-    state: RovState,
-) -> None:
-    """Handle sending ROV config.
+def build_config(state: RovState) -> Config:
+    """Build a config message from the current ROV state.
 
     Args:
-        websocket: The WebSocket connection.
         state: The ROV state.
+
+    Returns:
+        The config message ready to be sent.
     """
-    message = Config(payload=state.rov_config).model_dump_json(by_alias=True)
-    await websocket.send(message)
+    return Config(payload=state.rov_config)

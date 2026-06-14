@@ -1,21 +1,18 @@
 """WebSocket status send handlers for the ROV firmware."""
 
-from websockets import ServerConnection
-
 from ...models.rov_status import RovStatus
 from ...rov_state import RovState
 from ..message import StatusUpdate
 
 
-async def handle_status_update(
-    websocket: ServerConnection,
-    state: RovState,
-) -> None:
-    """Handle sending status update.
+def build_status_update(state: RovState) -> StatusUpdate:
+    """Build a status update message from the current ROV state.
 
     Args:
-        websocket: The WebSocket connection.
         state: The ROV state.
+
+    Returns:
+        The status update message ready to be sent.
     """
     voltages_v = [v for v in state.mcu_telemetry.voltage if v > 0]
     average_voltage_v = sum(voltages_v) / len(voltages_v) if voltages_v else 0
@@ -35,5 +32,4 @@ async def handle_status_update(
         current_draw=current_draw,
         health=state.system_health,
     )
-    message = StatusUpdate(payload=payload).model_dump_json(by_alias=True)
-    await websocket.send(message)
+    return StatusUpdate(payload=payload)

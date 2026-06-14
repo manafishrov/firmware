@@ -17,9 +17,9 @@ from ..rov_state import RovState
 from .handler import handle_message
 from .message import LogMessage, WebsocketMessage
 from .queue import get_message_queue
-from .send.config import handle_send_config
-from .send.status import handle_status_update
-from .send.telemetry import handle_telemetry
+from .send.config import build_config
+from .send.status import build_status_update
+from .send.telemetry import build_telemetry
 from .state import websocket_state
 
 
@@ -54,19 +54,15 @@ class WebsocketServer:
             f"Client connected: {cast(tuple[str, int] | None, websocket.remote_address)}."
         )
 
-        send_task = asyncio.create_task(self._send_from_queue(websocket))
+        send_task = asyncio.create_task(self._send_from_queue())
         await flush_pending_logs()
-        status_task = asyncio.create_task(
-            self._send_status_periodically(websocket, self.state)
-        )
-        telemetry_task = asyncio.create_task(
-            self._send_telemetry_periodically(websocket, self.state)
-        )
+        status_task = asyncio.create_task(self._send_status_periodically())
+        telemetry_task = asyncio.create_task(self._send_telemetry_periodically())
 
         async def send_config_on_connect() -> None:
             await asyncio.sleep(5)
             try:
-                await handle_send_config(websocket, self.state)
+                await self.send_frame(build_config(self.state))
                 log_info(
                     f"Sent config to {cast(tuple[str, int] | None, websocket.remote_address)}"
                 )
@@ -84,7 +80,7 @@ class WebsocketServer:
                 try:
                     data = json.loads(message)
                     deserialized_msg = websocket_message_adapter.validate_python(data)
-                    await handle_message(self.state, websocket, deserialized_msg)
+                    await handle_message(self.state, deserialized_msg)
                 except json.JSONDecodeError:
                     log_warn(
                         f"Failed to deserialize message from {cast(tuple[str, int] | None, websocket.remote_address)}"
@@ -116,54 +112,69 @@ class WebsocketServer:
             f"Websocket server started on {self.state.rov_config.ip_address}:{self.state.rov_config.websocket_port}"
         )
 
-    async def send_log_now(self, level: LogLevel, message: str) -> None:
-        """Send a single log frame directly, bypassing the message queue.
+    async def send_frame(
+        self, message: WebsocketMessage, *, timeout: float | None = None
+    ) -> None:
+        """Send a single message to the connected client.
+
+        This is the sole outbound write path for a connection. The send lock
+        serializes every frame so concurrent producers (queue drain, status and
+        telemetry loops, crash logs) can never interleave writes on the socket,
+        which the websockets library forbids.
 
         Args:
-            level: The log level for the frame.
-            message: The log message body.
+            message: The message to serialize and send.
+            timeout: Optional per-send timeout in seconds.
         """
         client = self.client
         if client is None:
             return
 
+        frame = message.model_dump_json(by_alias=True)
+        async with self._send_lock:
+            if timeout is None:
+                await client.send(frame)
+            else:
+                await asyncio.wait_for(client.send(frame), timeout)
+
+    async def send_log_now(self, level: LogLevel, message: str) -> None:
+        """Send a single log frame directly, ahead of connection teardown.
+
+        Args:
+            level: The log level for the frame.
+            message: The log message body.
+        """
         payload = LogEntry(origin=LogOrigin.FIRMWARE, level=level, message=message)
-        frame = LogMessage(payload=payload).model_dump_json(by_alias=True)
         try:
-            async with self._send_lock:
-                await asyncio.wait_for(client.send(frame), CRASH_LOG_SEND_TIMEOUT_S)
+            await self.send_frame(
+                LogMessage(payload=payload), timeout=CRASH_LOG_SEND_TIMEOUT_S
+            )
         except Exception:
             _logger.exception("Failed to send final websocket crash log")
 
-    async def _send_from_queue(self, websocket: ServerConnection) -> None:
+    async def _send_from_queue(self) -> None:
         try:
             while True:
                 message = await get_message_queue().get()
                 try:
-                    json_msg = message.model_dump_json(by_alias=True)
-                    async with self._send_lock:
-                        await websocket.send(json_msg)
+                    await self.send_frame(message)
                 except Exception as e:
                     log_error(f"Error sending queued message: {e}")
         except asyncio.CancelledError:
             pass
 
-    async def _send_status_periodically(
-        self, websocket: ServerConnection, state: RovState
-    ) -> None:
+    async def _send_status_periodically(self) -> None:
         try:
             while True:
-                await handle_status_update(websocket, state)
+                await self.send_frame(build_status_update(self.state))
                 await asyncio.sleep(1 / 2)
         except asyncio.CancelledError:
             pass
 
-    async def _send_telemetry_periodically(
-        self, websocket: ServerConnection, state: RovState
-    ) -> None:
+    async def _send_telemetry_periodically(self) -> None:
         try:
             while True:
-                await handle_telemetry(websocket, state)
+                await self.send_frame(build_telemetry(self.state))
                 await asyncio.sleep(1 / 60)
         except asyncio.CancelledError:
             pass

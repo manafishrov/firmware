@@ -5,13 +5,13 @@ import subprocess
 from typing import Any
 
 from pydantic import ValidationError
-from websockets import ServerConnection
 
 from ...log import log_info, log_warn
 from ...models.config import PartialRovConfig, RovConfig, apply_migrations
 from ...rov_state import RovState
 from ...toast import ToastContent, toast_info, toast_success, toast_warn
 from ..message import Config
+from ..queue import get_message_queue
 
 
 _DEVICE_REPORTED_FIELDS = ("firmwareVersion", "mcuFirmwareVersion")
@@ -19,16 +19,13 @@ _DEVICE_REPORTED_FIELDS = ("firmwareVersion", "mcuFirmwareVersion")
 
 async def handle_get_config(
     state: RovState,
-    websocket: ServerConnection,
 ) -> None:
     """Handle get config request.
 
     Args:
         state: The ROV state.
-        websocket: The WebSocket connection.
     """
-    msg = Config(payload=state.rov_config).model_dump_json(by_alias=True)
-    await websocket.send(msg)
+    await get_message_queue().put(Config(payload=state.rov_config))
     log_info("Sent config to client.")
 
 

@@ -2,8 +2,6 @@
 
 from typing import Any, cast
 
-from websockets import ServerConnection
-
 from ..log import log_warn
 from ..models.actions import CustomAction, DirectionVector
 from ..models.config import (
@@ -63,20 +61,18 @@ async def _handle_payload_message(
 
 async def handle_message(
     state: RovState,
-    websocket: ServerConnection,
     message: WebsocketMessage,
 ) -> None:
     """Handle a WebSocket message.
 
     Args:
         state: The ROV state.
-        websocket: The WebSocket.
         message: The message.
     """
     payload = getattr(message, "payload", None)
     match message.type:
         case MessageType.GET_CONFIG:
-            await handle_get_config(state, websocket)
+            await handle_get_config(state)
         case MessageType.START_REGULATOR_AUTO_TUNING:
             await handle_start_regulator_auto_tuning(state)
         case MessageType.CANCEL_REGULATOR_AUTO_TUNING:
