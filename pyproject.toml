@@ -1,6 +1,6 @@
 [project]
 name = "manafish"
-version = "1.1.4"
+version = "1.1.5"
 description = "Firmware for the Manafish ROV"
 license = "AGPL-3.0-or-later"
 requires-python = "==3.13.12"
