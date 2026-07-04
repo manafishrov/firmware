@@ -196,11 +196,11 @@
     "numpydantic-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1781221789,
-        "narHash": "sha256-gOeay3WWziKJGnC/onLSEBNpXzZpoEy6Lw9cgu8z7ss=",
+        "lastModified": 1782165846,
+        "narHash": "sha256-uSVlC5nZbGZVJamz3wYIdi6IvZobRWTNL70fB74us8w=",
         "owner": "p2p-ld",
         "repo": "numpydantic",
-        "rev": "f3db2530727ebf8cb590d4fae05eceafcdb6038b",
+        "rev": "54b938133fe12137414da3e8d714f5324059d71d",
         "type": "github"
       },
       "original": {
