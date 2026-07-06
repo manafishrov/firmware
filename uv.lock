@@ -141,7 +141,7 @@ requires-dist = [
     { name = "lgpio", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'", specifier = "==0.2.2" },
     { name = "ms5837", git = "https://github.com/bluerobotics/ms5837-python.git?rev=02996d71d2f08339b3d317b3f4da0a83781c706e" },
     { name = "numpy", specifier = "==2.3.4" },
-    { name = "numpydantic", specifier = "==1.9.1" },
+    { name = "numpydantic", specifier = "==1.10.0" },
     { name = "psutil", specifier = "==7.1.2" },
     { name = "pydantic", specifier = "==2.11.7" },
     { name = "pyserial-asyncio-fast", specifier = "==0.16" },
@@ -207,15 +207,15 @@ wheels = [
 
 [[package]]
 name = "numpydantic"
-version = "1.9.1"
+version = "1.10.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
     { name = "pydantic" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/01/d4/92e5ad2689e6b29ad422659f12efd30ae20a6bb364f33f6328ec34396dfe/numpydantic-1.9.1.tar.gz", hash = "sha256:d1f50f0e291bc1d4a93751bfedc95fcd0df0608667d44c0ae33434668c1a91cd", size = 98248, upload-time = "2026-06-08T21:56:12.451Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/95/5c/0cfed22c6483338c73d2faf182d863c47836e5f8f34e65b70aea345e7b72/numpydantic-1.10.0.tar.gz", hash = "sha256:a17d5ccc3b893c4a2e539c81c2f18960d70884ad7fcaa09c9eb56a95e8daf4a3", size = 98771, upload-time = "2026-06-22T22:04:46.251Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9c/46/e14a98e34514aab0642ae9f47a1a88bb1870a72f03d85d48a0d6c704d863/numpydantic-1.9.1-py3-none-any.whl", hash = "sha256:3811c2843508bded722207b5603be0d78fdb01a668cde1716df314b7b2a91016", size = 102776, upload-time = "2026-06-08T21:56:11.072Z" },
+    { url = "https://files.pythonhosted.org/packages/69/15/0dd8e1ff306f97bee18a3ef024bb694f9043ee57474c57f7330f90804cae/numpydantic-1.10.0-py3-none-any.whl", hash = "sha256:1c62a445d305da69a5fa4510f7e7e1c25218f58fe462e5d59548042f1f769e66", size = 101858, upload-time = "2026-06-22T22:04:44.918Z" },
 ]
 
 [[package]]
