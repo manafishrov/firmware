@@ -79,19 +79,33 @@ in {
       resolveLocalQueries = false;
       settings = {
         interface = "eth0";
-        # bind-interfaces (rather than bind-dynamic) is the more robust
-        # choice here: with port = 0 there are no DNS sockets that could
-        # race with addresses appearing later, and binding strictly to eth0
-        # guarantees dnsmasq can never leak onto the WiFi interface. The
-        # only startup requirement -- eth0 having its address before dnsmasq
-        # binds -- is handled by ordering the unit after
-        # manafish-network.service (see systemd.services.dnsmasq below).
-        bind-interfaces = true;
+        # bind-dynamic, not bind-interfaces. Ordering the unit after
+        # manafish-network.service (see systemd.services.dnsmasq below) covers
+        # the boot-time race, but not a mid-session one: unplugging the tether
+        # drops eth0's address, and with bind-interfaces dnsmasq logs
+        # "DHCP packet received on eth0 which has no address" and can miss the
+        # lease when the cable comes back. bind-dynamic re-binds as addresses
+        # come and go. It still serves DHCP only on eth0, and with port = 0
+        # there is no DNS socket that could leak onto WiFi.
+        bind-dynamic = true;
         port = 0;
         dhcp-range = "10.10.10.150,10.10.10.200,255.255.255.0,12h";
-        # Empty option 3 (router) and 6 (dns-server): push no gateway and
-        # no DNS, so Android keeps routing internet traffic over WiFi.
-        dhcp-option = ["3" "6"];
+        # Option 3 (router) and 6 (dns-server) must both be present and point
+        # at a real address, otherwise Android never brings the link up.
+        # Android's IpClient only accepts a lease once
+        # LinkProperties.isIpv4Provisioned() is true, and that requires an
+        # IPv4 address *and* an IPv4 default route *and* an IPv4 DNS server.
+        # Sending these options empty (the obvious way to say "no gateway,
+        # no DNS") makes the DHCP handshake succeed while provisioning fails,
+        # so the phone ACKs a lease and then silently tears the network down
+        # -- no traffic ever reaches the ROV.
+        # Pointing both at the Pi keeps internet on WiFi anyway: the Pi does
+        # not forward, so Android's captive-portal validation over eth0 fails
+        # and the ethernet network never becomes the default network. DNS is
+        # still disabled (port = 0), so queries sent here get an immediate
+        # ICMP port-unreachable and Android falls back to the WiFi resolver.
+        # Only the option's presence matters for provisioning.
+        dhcp-option = ["3,10.10.10.10" "6,10.10.10.10"];
       };
     };
     openssh = {
