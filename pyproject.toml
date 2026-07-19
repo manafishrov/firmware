@@ -8,7 +8,7 @@ dependencies = [
   "numpy==2.4.4",
   "websockets==16.0",
   "pydantic==2.12.5",
-  "numpydantic==1.9.1",
+  "numpydantic==1.10.0",
   "smbus2==0.6.1",
   "scipy==1.17.1",
   "pyserial-asyncio-fast==0.16",

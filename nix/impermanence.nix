@@ -26,6 +26,7 @@ in {
     };
     "/nix" = {
       device = "/persistent/nix";
+      fsType = "none";
       options = ["bind"];
       neededForBoot = true;
     };
