@@ -11,7 +11,7 @@ from typing import Annotated, Any, ClassVar
 import numpy as np
 from numpy.typing import NDArray as NumpyNDArray
 from numpydantic import NDArraySchema
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 from .base import CamelCaseModel
 
@@ -167,6 +167,141 @@ class Power(CamelCaseModel):
         return v
 
 
+class H264Profile(StrEnum):
+    """Enum for supported H.264 encoder profiles."""
+
+    BASELINE = "baseline"
+    MAIN = "main"
+    HIGH = "high"
+
+
+class H264Level(StrEnum):
+    """Enum for supported H.264 encoder levels."""
+
+    LEVEL_4_0 = "4"
+    LEVEL_4_1 = "4.1"
+    LEVEL_4_2 = "4.2"
+
+
+class AwbMode(StrEnum):
+    """Enum for camera auto white balance modes."""
+
+    AUTO = "auto"
+    INCANDESCENT = "incandescent"
+    TUNGSTEN = "tungsten"
+    FLUORESCENT = "fluorescent"
+    INDOOR = "indoor"
+    DAYLIGHT = "daylight"
+    CLOUDY = "cloudy"
+
+
+class DenoiseMode(StrEnum):
+    """Enum for camera denoise modes."""
+
+    AUTO = "auto"
+    OFF = "off"
+    CDN_OFF = "cdn_off"
+    CDN_FAST = "cdn_fast"
+    CDN_HQ = "cdn_hq"
+
+
+_MIN_FRAME_DIMENSION = 160
+_MAX_FRAME_WIDTH = 4056
+_MAX_FRAME_HEIGHT = 3040
+_MIN_FRAMERATE = 1
+_MAX_FRAMERATE = 60
+_MIN_BITRATE = 1_000_000
+_MAX_BITRATE = 25_000_000
+_MIN_KEYFRAME_INTERVAL = 1
+_MAX_KEYFRAME_INTERVAL = 300
+_VALID_ROTATIONS = (0, 180)
+_MIN_EXPOSURE_VALUE = -8.0
+_MAX_EXPOSURE_VALUE = 8.0
+_MIN_BRIGHTNESS = -1.0
+_MAX_BRIGHTNESS = 1.0
+_MIN_IMAGE_ADJUSTMENT = 0.0
+_MAX_IMAGE_ADJUSTMENT = 15.0
+
+
+def _clamp_int(value: int, low: int, high: int) -> int:
+    """Clamp an integer into the inclusive ``[low, high]`` range."""
+    return max(low, min(value, high))
+
+
+def _clamp_float(value: float, low: float, high: float) -> float:
+    """Clamp a float into the inclusive ``[low, high]`` range."""
+    return max(low, min(value, high))
+
+
+def _to_even(value: int) -> int:
+    """Round an integer down to the nearest even number.
+
+    Hardware H.264 encoders require even frame dimensions.
+    """
+    return value - (value % 2)
+
+
+class Camera(CamelCaseModel):
+    """Camera capture and H.264 stream configuration.
+
+    Every numeric field is clamped to an encoder-safe range so an out-of-range
+    value can never prevent the camera stream from starting.
+    """
+
+    width: int = 1920
+    height: int = 1080
+    framerate: int = 30
+    bitrate: int = 20_000_000
+    keyframe_interval: int = 30
+    profile: H264Profile = H264Profile.BASELINE
+    level: H264Level = H264Level.LEVEL_4_2
+    rotation: int = 0
+    hflip: bool = False
+    vflip: bool = False
+    awb: AwbMode = AwbMode.AUTO
+    exposure_value: float = 0.0
+    brightness: float = 0.0
+    contrast: float = 1.0
+    saturation: float = 1.0
+    sharpness: float = 1.0
+    denoise: DenoiseMode = DenoiseMode.AUTO
+
+    @model_validator(mode="after")
+    def clamp_ranges(self) -> "Camera":
+        """Clamp all numeric fields to encoder-safe ranges."""
+        self.width = _to_even(
+            _clamp_int(self.width, _MIN_FRAME_DIMENSION, _MAX_FRAME_WIDTH)
+        )
+        self.height = _to_even(
+            _clamp_int(self.height, _MIN_FRAME_DIMENSION, _MAX_FRAME_HEIGHT)
+        )
+        self.framerate = _clamp_int(self.framerate, _MIN_FRAMERATE, _MAX_FRAMERATE)
+        self.bitrate = _clamp_int(self.bitrate, _MIN_BITRATE, _MAX_BITRATE)
+        self.keyframe_interval = _clamp_int(
+            self.keyframe_interval,
+            _MIN_KEYFRAME_INTERVAL,
+            _MAX_KEYFRAME_INTERVAL,
+        )
+        if self.rotation not in _VALID_ROTATIONS:
+            self.rotation = 0
+        self.exposure_value = _clamp_float(
+            self.exposure_value, _MIN_EXPOSURE_VALUE, _MAX_EXPOSURE_VALUE
+        )
+        self.brightness = _clamp_float(
+            self.brightness, _MIN_BRIGHTNESS, _MAX_BRIGHTNESS
+        )
+        self.contrast = _clamp_float(
+            self.contrast, _MIN_IMAGE_ADJUSTMENT, _MAX_IMAGE_ADJUSTMENT
+        )
+        self.saturation = _clamp_float(
+            self.saturation, _MIN_IMAGE_ADJUSTMENT, _MAX_IMAGE_ADJUSTMENT
+        )
+        self.sharpness = _clamp_float(
+            self.sharpness, _MIN_IMAGE_ADJUSTMENT, _MAX_IMAGE_ADJUSTMENT
+        )
+        return self
+
+
 class RovConfig(CamelCaseModel):
     """Main ROV configuration."""
 
@@ -222,6 +357,7 @@ class RovConfig(CamelCaseModel):
         min_battery_voltage=16,
         max_battery_voltage=20.5,
     )
+    camera: Camera = Camera()
     ip_address: str = "10.10.10.10"
     websocket_port: int = 9000
 
@@ -319,6 +455,7 @@ class PartialRovConfig(CamelCaseModel):
     regulator: Regulator | None = None
     direction_coefficients: DirectionCoefficients | None = None
     power: Power | None = None
+    camera: Camera | None = None
     ip_address: str | None = None
     websocket_port: int | None = None
 
