@@ -7,6 +7,7 @@ import pytest
 from rov_firmware.models.config import (
     CURRENT_FIRMWARE_VERSION,
     AxisConfig,
+    Camera,
     PartialRovConfig,
     Power,
     RovConfig,
@@ -248,3 +249,85 @@ def test_rov_config_round_trip_nullspace_vectors_populated():
         assert isinstance(row, np.ndarray)
         assert row.dtype == np.float32
         assert np.array_equal(row, np.array(_NULLSPACE_VECTORS[i], dtype=np.float32))
+
+
+def test_camera_defaults_match_stream_baseline():
+    camera = Camera()
+
+    assert camera.width == 1920
+    assert camera.height == 1080
+    assert camera.framerate == 30
+    assert camera.bitrate == 20000000
+    assert camera.keyframe_interval == 30
+    assert camera.profile == "baseline"
+    assert camera.level == "4.2"
+    assert camera.denoise == "auto"
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    [
+        ("width", 999999, 4056),
+        ("width", 10, 160),
+        ("width", 1281, 1280),
+        ("height", 999999, 3040),
+        ("framerate", 999, 60),
+        ("framerate", 0, 1),
+        ("bitrate", 10**12, 25000000),
+        ("bitrate", 1, 1000000),
+        ("keyframe_interval", 100000, 300),
+        ("keyframe_interval", 0, 1),
+    ],
+)
+def test_camera_clamps_out_of_range_integers(field, value, expected):
+    camera = Camera.model_validate({field: value})
+
+    assert getattr(camera, field) == expected
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "expected"),
+    [
+        ("exposure_value", 100.0, 8.0),
+        ("exposure_value", -100.0, -8.0),
+        ("brightness", 5.0, 1.0),
+        ("brightness", -5.0, -1.0),
+        ("contrast", 100.0, 15.0),
+        ("saturation", -5.0, 0.0),
+        ("sharpness", 100.0, 15.0),
+    ],
+)
+def test_camera_clamps_out_of_range_floats(field, value, expected):
+    camera = Camera.model_validate({field: value})
+
+    assert getattr(camera, field) == expected
+
+
+def test_camera_rejects_odd_dimensions_by_rounding_down():
+    camera = Camera(width=1921, height=1081)
+
+    assert camera.width == 1920
+    assert camera.height == 1080
+
+
+def test_camera_falls_back_invalid_rotation_to_zero():
+    assert Camera(rotation=90).rotation == 0
+    assert Camera(rotation=180).rotation == 180
+
+
+def test_rov_config_serializes_camera_with_camel_case_aliases():
+    serialized = json.loads(RovConfig().model_dump_json(by_alias=True))
+
+    assert "camera" in serialized
+    assert serialized["camera"]["keyframeInterval"] == 30
+    assert serialized["camera"]["exposureValue"] == 0.0
+
+    round_tripped = RovConfig.model_validate(serialized)
+    assert round_tripped.camera == RovConfig().camera
+
+
+def test_partial_rov_config_accepts_camera_update():
+    partial = PartialRovConfig.model_validate({"camera": {"framerate": 24}})
+
+    assert partial.camera is not None
+    assert partial.camera.framerate == 24
