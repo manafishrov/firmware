@@ -254,14 +254,15 @@ def test_rov_config_round_trip_nullspace_vectors_populated():
 def test_camera_defaults_match_stream_baseline():
     camera = Camera()
 
-    assert camera.width == 1920
+    assert camera.width == 1440
     assert camera.height == 1080
-    assert camera.framerate == 30
+    assert camera.framerate == 40
+    assert camera.crop_fov is False
     assert camera.bitrate == 20000000
     assert camera.keyframe_interval == 30
     assert camera.profile == "baseline"
     assert camera.level == "4.2"
-    assert camera.denoise == "auto"
+    assert camera.denoise == "off"
 
 
 @pytest.mark.parametrize(
@@ -271,7 +272,9 @@ def test_camera_defaults_match_stream_baseline():
         ("width", 10, 160),
         ("width", 1281, 1280),
         ("height", 999999, 3040),
-        ("framerate", 999, 60),
+        # At the default 1440x1080 (full-FOV only, crop_fov defaults False),
+        # the ceiling is the encoder's ~40.15fps rounded down to 40.
+        ("framerate", 999, 40),
         ("framerate", 0, 1),
         ("bitrate", 10**12, 25000000),
         ("bitrate", 1, 1000000),
@@ -283,6 +286,36 @@ def test_camera_clamps_out_of_range_integers(field, value, expected):
     camera = Camera.model_validate({field: value})
 
     assert getattr(camera, field) == expected
+
+
+def test_camera_framerate_ceiling_depends_on_crop_fov_and_resolution():
+    # A small resolution with crop_fov off still only gets the full-FOV
+    # sensor mode's 40fps ceiling.
+    scaled = Camera.model_validate(
+        {"width": 320, "height": 240, "crop_fov": False, "framerate": 999}
+    )
+    assert scaled.framerate == 40
+
+    # The same resolution with crop_fov on can use the faster crop sensor
+    # mode, up to its 120fps hardware ceiling.
+    cropped = Camera.model_validate(
+        {"width": 320, "height": 240, "crop_fov": True, "framerate": 999}
+    )
+    assert cropped.framerate == 120
+
+    # A resolution too large for the crop mode falls back to the full-FOV
+    # ceiling even with crop_fov on.
+    max_resolution = Camera.model_validate(
+        {"width": 1440, "height": 1080, "crop_fov": True, "framerate": 999}
+    )
+    assert max_resolution.framerate == 40
+
+    # A mid-size resolution with crop_fov on is limited by the H.264 encoder's
+    # macroblock rate before the sensor's 120fps ceiling ever applies.
+    mid_resolution = Camera.model_validate(
+        {"width": 1280, "height": 960, "crop_fov": True, "framerate": 999}
+    )
+    assert mid_resolution.framerate == 51
 
 
 @pytest.mark.parametrize(
