@@ -209,7 +209,6 @@ _MIN_FRAME_DIMENSION = 160
 _MAX_FRAME_WIDTH = 4056
 _MAX_FRAME_HEIGHT = 3040
 _MIN_FRAMERATE = 1
-_MAX_FRAMERATE = 60
 _MIN_BITRATE = 1_000_000
 _MAX_BITRATE = 25_000_000
 _MIN_KEYFRAME_INTERVAL = 1
@@ -241,6 +240,51 @@ def _to_even(value: int) -> int:
     return value - (value % 2)
 
 
+# Two imx477 sensor modes are used, matched to real libcamera modes so the
+# nix camera wrapper's `--mode` stays valid: full-FOV is 2028x1520 (SRGGB12),
+# full sensor width and height, max 40 fps, used whenever crop_fov is off and
+# always for resolutions too large to fit the crop mode; crop is 1332x990
+# (SRGGB10), a ~2/3 crop of the sensor, max 120 fps, used for smaller
+# resolutions when crop_fov is on. Kept in sync with the app's
+# camera/constants.ts, which computes the same ceiling for its UI.
+_CROP_MODE_MAX_WIDTH = 1332
+_CROP_MODE_MAX_HEIGHT = 990
+_CROP_MODE_MAX_FRAMERATE = 120
+_FULL_FOV_MAX_FRAMERATE = 40
+
+# H.264 level 4 macroblock-rate ceiling (245,760 MB/s). Levels 4 and 4.1 share
+# this exact figure; level 4.2 is higher. Using level 4's figure regardless of
+# which level is selected elsewhere keeps every framerate/resolution
+# combination valid no matter what the user has picked there.
+_H264_LEVEL4_MAX_MACROBLOCKS_PER_SECOND = 245_760
+_MACROBLOCK_SIZE = 16
+
+
+def _to_macroblock_count(pixels: int) -> int:
+    """Round pixels up to a whole number of macroblocks."""
+    return (pixels + _MACROBLOCK_SIZE - 1) // _MACROBLOCK_SIZE
+
+
+def _encoder_framerate_ceiling(width: int, height: int) -> int:
+    macroblocks_per_frame = _to_macroblock_count(width) * _to_macroblock_count(height)
+    return _H264_LEVEL4_MAX_MACROBLOCKS_PER_SECOND // macroblocks_per_frame
+
+
+def _max_framerate_for(width: int, height: int, crop_fov: bool) -> int:
+    """The highest framerate this width/height/crop_fov combination can reach.
+
+    Combines the imx477 sensor mode's hardware ceiling with the H.264
+    encoder's macroblock-rate ceiling - whichever is lower.
+    """
+    fits_crop_mode = width <= _CROP_MODE_MAX_WIDTH and height <= _CROP_MODE_MAX_HEIGHT
+    sensor_ceiling = (
+        _CROP_MODE_MAX_FRAMERATE
+        if crop_fov and fits_crop_mode
+        else _FULL_FOV_MAX_FRAMERATE
+    )
+    return min(sensor_ceiling, _encoder_framerate_ceiling(width, height))
+
+
 class Camera(CamelCaseModel):
     """Camera capture and H.264 stream configuration.
 
@@ -248,9 +292,13 @@ class Camera(CamelCaseModel):
     value can never prevent the camera stream from starting.
     """
 
-    width: int = 1920
+    width: int = 1440
     height: int = 1080
-    framerate: int = 30
+    framerate: int = 40
+    # Whether resolutions smaller than the largest supported crop the field of
+    # view (via the imx477's faster 1332x990 sensor mode) instead of scaling
+    # down from the full-FOV mode. See _max_framerate_for.
+    crop_fov: bool = False
     bitrate: int = 20_000_000
     keyframe_interval: int = 30
     profile: H264Profile = H264Profile.BASELINE
@@ -264,7 +312,7 @@ class Camera(CamelCaseModel):
     contrast: float = 1.0
     saturation: float = 1.0
     sharpness: float = 1.0
-    denoise: DenoiseMode = DenoiseMode.AUTO
+    denoise: DenoiseMode = DenoiseMode.OFF
 
     @model_validator(mode="after")
     def clamp_ranges(self) -> "Camera":
@@ -275,7 +323,11 @@ class Camera(CamelCaseModel):
         self.height = _to_even(
             _clamp_int(self.height, _MIN_FRAME_DIMENSION, _MAX_FRAME_HEIGHT)
         )
-        self.framerate = _clamp_int(self.framerate, _MIN_FRAMERATE, _MAX_FRAMERATE)
+        self.framerate = _clamp_int(
+            self.framerate,
+            _MIN_FRAMERATE,
+            _max_framerate_for(self.width, self.height, self.crop_fov),
+        )
         self.bitrate = _clamp_int(self.bitrate, _MIN_BITRATE, _MAX_BITRATE)
         self.keyframe_interval = _clamp_int(
             self.keyframe_interval,

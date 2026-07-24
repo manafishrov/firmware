@@ -62,9 +62,12 @@
       printf '%s' "$fallback"
     }
 
-    WIDTH=$(clamp_int "$(get .camera.width)" 160 4056 1920)
+    WIDTH=$(clamp_int "$(get .camera.width)" 160 4056 1440)
     HEIGHT=$(clamp_int "$(get .camera.height)" 160 3040 1080)
-    FRAMERATE=$(clamp_int "$(get .camera.framerate)" 1 60 30)
+    # The firmware already clamps framerate to a resolution/crop-FOV-specific
+    # ceiling (at most 120, the crop sensor mode's hardware limit) before ever
+    # writing it to this file; 120 here is just an absolute syntax guard.
+    FRAMERATE=$(clamp_int "$(get .camera.framerate)" 1 120 40)
     BITRATE=$(clamp_int "$(get .camera.bitrate)" 1000000 25000000 20000000)
     KEYFRAME_INTERVAL=$(clamp_int "$(get .camera.keyframeInterval)" 1 300 30)
     ROTATION=$(enum_or "$(get .camera.rotation)" 0 0 180)
@@ -72,7 +75,7 @@
     LEVEL=$(enum_or "$(get .camera.level)" 4.2 4 4.1 4.2)
     AWB=$(enum_or "$(get .camera.awb)" auto \
       auto incandescent tungsten fluorescent indoor daylight cloudy)
-    DENOISE=$(enum_or "$(get .camera.denoise)" auto \
+    DENOISE=$(enum_or "$(get .camera.denoise)" off \
       auto off cdn_off cdn_fast cdn_hq)
     EV=$(num_or "$(get .camera.exposureValue)" 0)
     BRIGHTNESS=$(num_or "$(get .camera.brightness)" 0)
@@ -81,9 +84,21 @@
     SHARPNESS=$(num_or "$(get .camera.sharpness)" 1)
     HFLIP=$(get .camera.hflip)
     VFLIP=$(get .camera.vflip)
+    CROP_FOV=$(get .camera.cropFov)
+
+    # Full-FOV mode (2028x1520, SRGGB12) reads the whole sensor and scales
+    # down to WIDTHxHEIGHT; the crop mode (1332x990, SRGGB10) instead reads a
+    # ~2/3 crop of the sensor for a higher framerate ceiling. The crop mode is
+    # only used when it's actually big enough to produce WIDTHxHEIGHT.
+    if [ "$CROP_FOV" = "true" ] && [ "$WIDTH" -le 1332 ] && [ "$HEIGHT" -le 990 ]; then
+      MODE="1332:990:10:P"
+    else
+      MODE="2028:1520:12:P"
+    fi
 
     set -- \
       -t 0 -n --inline \
+      --mode "$MODE" \
       --width "$WIDTH" --height "$HEIGHT" --framerate "$FRAMERATE" \
       --codec h264 --profile "$PROFILE" --level "$LEVEL" \
       -b "$BITRATE" -g "$KEYFRAME_INTERVAL" \
