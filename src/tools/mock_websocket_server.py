@@ -58,6 +58,26 @@ MOCK_CONFIG: dict[str, Any] = {
         "maxBatteryVoltage": 21.5,
         "internalResistance": 0.1,
     },
+    "camera": {
+        "width": 1440,
+        "height": 1080,
+        "framerate": 40,
+        "cropFov": False,
+        "bitrate": 20000000,
+        "keyframeInterval": 30,
+        "profile": "baseline",
+        "level": "4.2",
+        "rotation": 0,
+        "hflip": False,
+        "vflip": False,
+        "awb": "auto",
+        "exposureValue": 0.0,
+        "brightness": 0.0,
+        "contrast": 1.0,
+        "saturation": 1.0,
+        "sharpness": 1.0,
+        "denoise": "off",
+    },
     "ipAddress": "10.10.10.10",
     "websocketPort": 9000,
 }
@@ -656,3 +676,10 @@ async def main() -> None:
         if server:
             server.close()
             await server.wait_closed()
+
+
+if __name__ == "__main__":
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s"
+    )
+    asyncio.run(main())
