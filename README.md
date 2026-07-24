@@ -131,6 +131,24 @@ with `nmcli device status` (often "Wired connection 1"), then:
    nmcli connection up "Wired connection 1"
    ```
 
+### Android Devices
+
+Phones and tablets connected through a USB-C ethernet adapter need no manual
+configuration: the ROV runs a small DHCP server on its ethernet port that
+automatically assigns the device an address in the range
+10.10.10.150–10.10.10.200. The device then reaches the ROV at the same
+endpoints as a PC (for example `10.10.10.10`). The lease points both the
+gateway and the DNS server at the ROV itself, because Android refuses to
+bring an ethernet link up unless the lease carries an address, a default
+route and a DNS server. The ROV does not forward traffic, so Android's
+connectivity check over ethernet fails, ethernet never becomes the default
+network, and the phone keeps using WiFi for regular internet access. PCs are
+unaffected and keep the manual static-IP setup described above.
+
+Note: the DHCP range assumes the default `10.10.10.0/24` subnet. If you
+change the ROV's IP address to a different subnet, DHCP will stop handing out
+addresses and the phone needs manual addressing too.
+
 ## Raspberry Pi
 
 To modify the firmware on the Raspberry Pi, you need to connect to it via SSH.
