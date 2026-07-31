@@ -5,6 +5,10 @@ on:
     branches:
       - main
   pull_request:
+
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -73,3 +77,25 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@908b263ff629f4cc17666315b7fd3ec127c6244d # v14
       - name: Evaluate configuration (dry-run)
         run: nix build --accept-flake-config --dry-run
+
+  ci:
+    name: ci
+    if: always()
+    needs:
+      - filter
+      - code-quality-nix
+      - code-quality-python
+      - validate-nix-eval
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require all applicable checks
+        env:
+          FILTER_RESULT: ${{ needs.filter.result }}
+          NIX_RESULT: ${{ needs.code-quality-nix.result }}
+          PYTHON_RESULT: ${{ needs.code-quality-python.result }}
+          NIX_EVAL_RESULT: ${{ needs.validate-nix-eval.result }}
+        run: |
+          test "$FILTER_RESULT" = success
+          for result in "$NIX_RESULT" "$PYTHON_RESULT" "$NIX_EVAL_RESULT"; do
+            test "$result" = success || test "$result" = skipped
+          done
