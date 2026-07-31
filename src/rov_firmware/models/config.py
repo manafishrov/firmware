@@ -206,8 +206,11 @@ class DenoiseMode(StrEnum):
 
 
 _MIN_FRAME_DIMENSION = 160
-_MAX_FRAME_WIDTH = 4056
-_MAX_FRAME_HEIGHT = 3040
+# The Pi 3 hardware H.264 encoder cannot emit the IMX477's full sensor size.
+# Keep arbitrary API clients inside its supported output frame, not merely
+# inside the sensor dimensions. The app's 4:3 presets are stricter still.
+_MAX_FRAME_WIDTH = 1920
+_MAX_FRAME_HEIGHT = 1080
 _MIN_FRAMERATE = 1
 _MIN_BITRATE = 1_000_000
 _MAX_BITRATE = 25_000_000

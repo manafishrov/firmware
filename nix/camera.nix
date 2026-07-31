@@ -29,23 +29,29 @@
     clamp_int() {
       case "$1" in
         "" | *[!0-9]*)
-          printf '%s' "$4"
-          return
+          value=$4
           ;;
+        *) value=$1 ;;
       esac
-      value=$1
       [ "$value" -lt "$2" ] && value=$2
       [ "$value" -gt "$3" ] && value=$3
       printf '%s' "$value"
     }
 
-    # num_or VALUE DEFAULT -> VALUE if it looks like a decimal, else DEFAULT.
-    # Upstream (app + firmware) already clamp ranges; this only guards syntax.
-    num_or() {
-      case "$1" in
-        "" | *[!0-9.-]*) printf '%s' "$2" ;;
-        *) printf '%s' "$1" ;;
-      esac
+    # clamp_num VALUE MIN MAX DEFAULT -> decimal within [MIN, MAX]. jq handles
+    # syntax and bounds together so a corrupt-but-valid JSON config cannot pass
+    # malformed values such as "1.2.3" or unsafe values to rpicam-vid.
+    clamp_num() {
+      ${jq} -nr \
+        --arg value "$1" \
+        --argjson low "$2" \
+        --argjson high "$3" \
+        --argjson fallback "$4" \
+        '($value | tonumber? // $fallback) as $parsed
+        | if $parsed < $low then $low
+          elif $parsed > $high then $high
+          else $parsed
+          end'
     }
 
     # enum_or VALUE DEFAULT ALLOWED... -> VALUE if allowed, else DEFAULT.
@@ -62,12 +68,25 @@
       printf '%s' "$fallback"
     }
 
-    WIDTH=$(clamp_int "$(get .camera.width)" 160 4056 1440)
-    HEIGHT=$(clamp_int "$(get .camera.height)" 160 3040 1080)
-    # The firmware already clamps framerate to a resolution/crop-FOV-specific
-    # ceiling (at most 120, the crop sensor mode's hardware limit) before ever
-    # writing it to this file; 120 here is just an absolute syntax guard.
-    FRAMERATE=$(clamp_int "$(get .camera.framerate)" 1 120 40)
+    # The Pi 3 hardware H.264 encoder is limited to a 1920x1080 output frame.
+    WIDTH=$(clamp_int "$(get .camera.width)" 160 1920 1440)
+    HEIGHT=$(clamp_int "$(get .camera.height)" 160 1080 1080)
+    CROP_FOV=$(get .camera.cropFov)
+
+    # Repeat the firmware model's resolution-aware limit here because go2rtc
+    # starts without trusting the persisted JSON. This combines the selected
+    # sensor mode ceiling with H.264 level 4's 245,760 macroblocks/second.
+    SENSOR_MAX_FRAMERATE=40
+    if [ "$CROP_FOV" = "true" ] && [ "$WIDTH" -le 1332 ] && [ "$HEIGHT" -le 990 ]; then
+      SENSOR_MAX_FRAMERATE=120
+    fi
+    MACROBLOCKS_PER_FRAME=$(( ((WIDTH + 15) / 16) * ((HEIGHT + 15) / 16) ))
+    ENCODER_MAX_FRAMERATE=$(( 245760 / MACROBLOCKS_PER_FRAME ))
+    MAX_FRAMERATE=$SENSOR_MAX_FRAMERATE
+    if [ "$ENCODER_MAX_FRAMERATE" -lt "$MAX_FRAMERATE" ]; then
+      MAX_FRAMERATE=$ENCODER_MAX_FRAMERATE
+    fi
+    FRAMERATE=$(clamp_int "$(get .camera.framerate)" 1 "$MAX_FRAMERATE" 40)
     BITRATE=$(clamp_int "$(get .camera.bitrate)" 1000000 25000000 20000000)
     KEYFRAME_INTERVAL=$(clamp_int "$(get .camera.keyframeInterval)" 1 300 30)
     ROTATION=$(enum_or "$(get .camera.rotation)" 0 0 180)
@@ -77,14 +96,13 @@
       auto incandescent tungsten fluorescent indoor daylight cloudy)
     DENOISE=$(enum_or "$(get .camera.denoise)" off \
       auto off cdn_off cdn_fast cdn_hq)
-    EV=$(num_or "$(get .camera.exposureValue)" 0)
-    BRIGHTNESS=$(num_or "$(get .camera.brightness)" 0)
-    CONTRAST=$(num_or "$(get .camera.contrast)" 1)
-    SATURATION=$(num_or "$(get .camera.saturation)" 1)
-    SHARPNESS=$(num_or "$(get .camera.sharpness)" 1)
+    EV=$(clamp_num "$(get .camera.exposureValue)" -8 8 0)
+    BRIGHTNESS=$(clamp_num "$(get .camera.brightness)" -1 1 0)
+    CONTRAST=$(clamp_num "$(get .camera.contrast)" 0 15 1)
+    SATURATION=$(clamp_num "$(get .camera.saturation)" 0 15 1)
+    SHARPNESS=$(clamp_num "$(get .camera.sharpness)" 0 15 1)
     HFLIP=$(get .camera.hflip)
     VFLIP=$(get .camera.vflip)
-    CROP_FOV=$(get .camera.cropFov)
 
     # Full-FOV mode (2028x1520, SRGGB12) reads the whole sensor and scales
     # down to WIDTHxHEIGHT; the crop mode (1332x990, SRGGB10) instead reads a
@@ -167,11 +185,17 @@ in {
 
   # Run go2rtc as `pi` so the stream wrapper can read the 0600 ROV config file
   # (owner match). The `video` group grants access to the camera devices.
-  systemd.services.go2rtc.serviceConfig = {
-    DynamicUser = lib.mkForce false;
-    User = lib.mkForce "pi";
-    Group = lib.mkForce "video";
-    ProtectHome = lib.mkForce false;
+  systemd.services.go2rtc = {
+    # The setup unit restores the persisted config while deploying a new image.
+    # Do not construct the camera command until that file is in place.
+    after = ["manafish-setup.service"];
+    requires = ["manafish-setup.service"];
+    serviceConfig = {
+      DynamicUser = lib.mkForce false;
+      User = lib.mkForce "pi";
+      Group = lib.mkForce "video";
+      ProtectHome = lib.mkForce false;
+    };
   };
 
   services.go2rtc = {

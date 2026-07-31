@@ -268,10 +268,10 @@ def test_camera_defaults_match_stream_baseline():
 @pytest.mark.parametrize(
     ("field", "value", "expected"),
     [
-        ("width", 999999, 4056),
+        ("width", 999999, 1920),
         ("width", 10, 160),
         ("width", 1281, 1280),
-        ("height", 999999, 3040),
+        ("height", 999999, 1080),
         # At the default 1440x1080 (full-FOV only, crop_fov defaults False),
         # the ceiling is the encoder's ~40.15fps rounded down to 40.
         ("framerate", 999, 40),
@@ -316,6 +316,14 @@ def test_camera_framerate_ceiling_depends_on_crop_fov_and_resolution():
         {"width": 1280, "height": 960, "crop_fov": True, "framerate": 999}
     )
     assert mid_resolution.framerate == 51
+
+
+def test_camera_clamps_sensor_sized_frame_to_h264_encoder_limits():
+    camera = Camera(width=4056, height=3040, framerate=120)
+
+    assert camera.width == 1920
+    assert camera.height == 1080
+    assert camera.framerate == 30
 
 
 @pytest.mark.parametrize(

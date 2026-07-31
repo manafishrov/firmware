@@ -5,6 +5,7 @@ import numpy as np
 import pytest
 
 from rov_firmware.models.config import PartialRovConfig, RovConfig
+from rov_firmware.websocket.receive import config as config_handlers
 from rov_firmware.websocket.receive.config import handle_set_config
 
 
@@ -67,3 +68,18 @@ def test_set_config_does_not_modify_fields_not_in_payload(rov_state):
 
     assert rov_state.rov_config.rov_name == "TestROV"
     assert rov_state.rov_config.nullspace_vectors == []
+
+
+def test_set_config_applies_camera_only_when_camera_changed(rov_state, monkeypatch):
+    apply_calls: list[None] = []
+    monkeypatch.setattr(
+        config_handlers, "_apply_camera", lambda: apply_calls.append(None)
+    )
+
+    unrelated_payload = PartialRovConfig.model_validate({"rovName": "Updated"})
+    asyncio.run(handle_set_config(rov_state, unrelated_payload))
+    assert apply_calls == []
+
+    camera_payload = PartialRovConfig.model_validate({"camera": {"framerate": 24}})
+    asyncio.run(handle_set_config(rov_state, camera_payload))
+    assert apply_calls == [None]
