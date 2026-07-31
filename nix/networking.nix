@@ -5,17 +5,44 @@
 }: let
   jq = lib.getExe pkgs.jq;
   nmcli = lib.getExe' pkgs.networkmanager "nmcli";
+  python = lib.getExe pkgs.python3;
+  systemctl = lib.getExe' pkgs.systemd "systemctl";
+  dnsmasqConfig = "/run/manafish/dnsmasq.conf";
 
   networkScript = pkgs.writeShellScriptBin "manafish-network" ''
+    set -euo pipefail
+
     CONFIG="/home/pi/firmware/src/rov_firmware/config.json"
     DEFAULT_IP="10.10.10.10"
     PREFIX="24"
     CONNECTION="eth0"
+    DNSMASQ_CONFIG="${dnsmasqConfig}"
 
     if [ -f "$CONFIG" ]; then
       IP=$(${jq} -r '.ipAddress // empty' "$CONFIG" 2>/dev/null)
     fi
     IP="''${IP:-$DEFAULT_IP}"
+
+    ${python} - "$IP" "$DNSMASQ_CONFIG" <<'PY'
+    from ipaddress import IPv4Address, IPv4Network
+    from pathlib import Path
+    import sys
+
+    address = IPv4Address(sys.argv[1])
+    network = IPv4Network(f"{address}/24", strict=False)
+    if address in (network.network_address, network.broadcast_address):
+        raise ValueError(f"{address} is not a usable /24 host address")
+
+    host = int(address) - int(network.network_address)
+    start_host, end_host = (50, 100) if 150 <= host <= 200 else (150, 200)
+    start = IPv4Address(int(network.network_address) + start_host)
+    end = IPv4Address(int(network.network_address) + end_host)
+
+    Path(sys.argv[2]).write_text(
+        f"dhcp-range={start},{end},255.255.255.0,12h\n",
+        encoding="utf-8",
+    )
+    PY
 
     if ${nmcli} connection show "$CONNECTION" &>/dev/null; then
       ${nmcli} connection modify "$CONNECTION" \
@@ -33,6 +60,7 @@
     fi
 
     ${nmcli} connection up "$CONNECTION"
+    ${systemctl} try-restart --no-block dnsmasq.service
   '';
 in {
   networking = {
@@ -49,6 +77,28 @@ in {
 
   environment.systemPackages = [networkScript];
 
+  # The network helper is run by root during boot and by `pi` after a runtime
+  # config change. Give both paths one transient location for the subnet-aware
+  # dnsmasq configuration.
+  systemd.tmpfiles.rules = ["d /run/manafish 0755 pi users -"];
+
+  # Applying a new ROV address must also reload the matching DHCP pool. Limit
+  # the firmware user to managing only dnsmasq through systemd.
+  security.polkit = {
+    enable = true;
+    extraConfig = ''
+      polkit.addRule(function (action, subject) {
+        if (
+          action.id == "org.freedesktop.systemd1.manage-units" &&
+          action.lookup("unit") == "dnsmasq.service" &&
+          subject.user == "pi"
+        ) {
+          return polkit.Result.YES;
+        }
+      });
+    '';
+  };
+
   services = {
     avahi = {
       enable = true;
@@ -57,6 +107,30 @@ in {
       publish = {
         enable = true;
         addresses = true;
+      };
+    };
+    dnsmasq = {
+      enable = true;
+      resolveLocalQueries = false;
+      settings = {
+        interface = "eth0";
+        bind-dynamic = true;
+        port = 0;
+        dhcp-authoritative = true;
+        conf-file = dnsmasqConfig;
+
+        # Android identifies its DHCP client with an android-dhcp-* vendor
+        # class. It requires router and DNS options before treating Ethernet
+        # as provisioned, even though this isolated link provides neither
+        # service. Other clients receive no default route or DNS server, so a
+        # laptop's normal internet connection is not replaced by the tether.
+        dhcp-vendorclass = "set:android,android-dhcp-";
+        dhcp-option = [
+          "option:router"
+          "option:dns-server"
+          "tag:android,option:router,0.0.0.0"
+          "tag:android,option:dns-server,0.0.0.0"
+        ];
       };
     };
     openssh = {
@@ -74,5 +148,10 @@ in {
       RemainAfterExit = true;
       ExecStart = lib.getExe networkScript;
     };
+  };
+
+  systemd.services.dnsmasq = {
+    after = ["manafish-network.service"];
+    requires = ["manafish-network.service"];
   };
 }
