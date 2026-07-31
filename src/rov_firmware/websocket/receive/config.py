@@ -1,5 +1,6 @@
 """WebSocket config handlers for the ROV firmware."""
 
+import asyncio
 import shutil
 import subprocess
 from typing import Any
@@ -15,6 +16,7 @@ from ..queue import get_message_queue
 
 
 _DEVICE_REPORTED_FIELDS = ("firmwareVersion", "mcuFirmwareVersion")
+_SYSTEMCTL_TIMEOUT_SECONDS = 5.0
 
 
 async def handle_get_config(
@@ -45,6 +47,45 @@ def _apply_ip_address(ip_address: str) -> None:
         log_warn(f"Failed to apply IP address change to {ip_address}.")
 
 
+async def _restart_firmware() -> bool:
+    path = shutil.which("systemctl")
+    if path is None:
+        log_warn("systemctl not found in PATH.")
+        return False
+    try:
+        process = await asyncio.create_subprocess_exec(
+            path,
+            "try-restart",
+            "--no-block",
+            "manafish-firmware.service",
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+    except OSError as error:
+        log_warn(f"Failed to start systemctl: {error}.")
+        return False
+
+    try:
+        _, stderr = await asyncio.wait_for(
+            process.communicate(),
+            timeout=_SYSTEMCTL_TIMEOUT_SECONDS,
+        )
+    except TimeoutError:
+        process.kill()
+        await process.wait()
+        log_warn("Timed out while requesting the firmware restart.")
+        return False
+
+    if process.returncode != 0:
+        details = stderr.decode(errors="replace").strip()
+        suffix = f": {details}" if details else "."
+        log_warn(f"Failed to restart firmware after the WebSocket port change{suffix}")
+        return False
+
+    log_info("Restarting firmware to apply the WebSocket port change.")
+    return True
+
+
 def _apply_camera() -> None:
     path = shutil.which("manafish-camera")
     if path is None:
@@ -72,6 +113,7 @@ async def handle_set_config(
         payload: Partial ROV configuration update.
     """
     old_ip = state.rov_config.ip_address
+    old_websocket_port = state.rov_config.websocket_port
     previous_camera = state.rov_config.camera
     current_data = state.rov_config.model_dump(by_alias=False)
     update_data = payload.model_dump(by_alias=False, include=payload.model_fields_set)
@@ -79,6 +121,7 @@ async def handle_set_config(
     state.rov_config = RovConfig.model_validate(current_data)
     state.rov_config.save()
     log_info("Received and applied config update.")
+    connection_restart_failed = False
 
     if state.rov_config.ip_address != old_ip:
         toast_info(
@@ -89,9 +132,21 @@ async def handle_set_config(
             action=None,
         )
         _apply_ip_address(state.rov_config.ip_address)
+    elif state.rov_config.websocket_port != old_websocket_port:
+        connection_restart_failed = not await _restart_firmware()
 
     if state.rov_config.camera != previous_camera:
         _apply_camera()
+
+    if connection_restart_failed:
+        toast_warn(
+            identifier=None,
+            content=ToastContent(
+                message_key="toasts_rov_connection_restart_failed",
+            ),
+            action=None,
+        )
+        return
 
     toast_success(
         identifier=None,
@@ -136,6 +191,7 @@ async def handle_import_config(
             newer firmware version.
     """
     old_ip = state.rov_config.ip_address
+    old_websocket_port = state.rov_config.websocket_port
     previous_camera = state.rov_config.camera
     raw = apply_migrations(dict(payload))
     _strip_device_reported(raw)
@@ -156,6 +212,7 @@ async def handle_import_config(
     log_info(
         f"Imported config from app. Skipped fields: {skipped or 'none'}.",
     )
+    connection_restart_failed = False
 
     if state.rov_config.ip_address != old_ip:
         toast_info(
@@ -164,9 +221,21 @@ async def handle_import_config(
             action=None,
         )
         _apply_ip_address(state.rov_config.ip_address)
+    elif state.rov_config.websocket_port != old_websocket_port:
+        connection_restart_failed = not await _restart_firmware()
 
     if state.rov_config.camera != previous_camera:
         _apply_camera()
+
+    if connection_restart_failed:
+        toast_warn(
+            identifier=None,
+            content=ToastContent(
+                message_key="toasts_rov_connection_restart_failed",
+            ),
+            action=None,
+        )
+        return
 
     if skipped:
         toast_warn(
