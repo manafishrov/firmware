@@ -89,9 +89,12 @@ def test_set_config_restarts_firmware_when_websocket_port_changed(
     rov_state, monkeypatch
 ):
     restart_calls: list[None] = []
-    monkeypatch.setattr(
-        config_handlers, "_restart_firmware", lambda: restart_calls.append(None)
-    )
+
+    async def restart_firmware() -> bool:
+        restart_calls.append(None)
+        return True
+
+    monkeypatch.setattr(config_handlers, "_restart_firmware", restart_firmware)
 
     payload = PartialRovConfig.model_validate({"websocketPort": 9100})
     asyncio.run(handle_set_config(rov_state, payload))
@@ -109,9 +112,12 @@ def test_set_config_applies_network_once_when_ip_and_port_changed(
         "_apply_ip_address",
         network_calls.append,
     )
-    monkeypatch.setattr(
-        config_handlers, "_restart_firmware", lambda: restart_calls.append(None)
-    )
+
+    async def restart_firmware() -> bool:
+        restart_calls.append(None)
+        return True
+
+    monkeypatch.setattr(config_handlers, "_restart_firmware", restart_firmware)
 
     payload = PartialRovConfig.model_validate(
         {"ipAddress": "10.10.11.10", "websocketPort": 9100}
@@ -120,3 +126,29 @@ def test_set_config_applies_network_once_when_ip_and_port_changed(
 
     assert network_calls == ["10.10.11.10"]
     assert restart_calls == []
+
+
+def test_set_config_reports_restart_failure_without_success(rov_state, monkeypatch):
+    success_calls: list[None] = []
+    warning_keys: list[str] = []
+
+    async def restart_firmware() -> bool:
+        return False
+
+    monkeypatch.setattr(config_handlers, "_restart_firmware", restart_firmware)
+    monkeypatch.setattr(
+        config_handlers,
+        "toast_success",
+        lambda **_kwargs: success_calls.append(None),
+    )
+    monkeypatch.setattr(
+        config_handlers,
+        "toast_warn",
+        lambda *, content, **_kwargs: warning_keys.append(content.message_key),
+    )
+
+    payload = PartialRovConfig.model_validate({"websocketPort": 9100})
+    asyncio.run(handle_set_config(rov_state, payload))
+
+    assert success_calls == []
+    assert warning_keys == ["toasts_rov_connection_restart_failed"]
