@@ -83,3 +83,40 @@ def test_set_config_applies_camera_only_when_camera_changed(rov_state, monkeypat
     camera_payload = PartialRovConfig.model_validate({"camera": {"framerate": 24}})
     asyncio.run(handle_set_config(rov_state, camera_payload))
     assert apply_calls == [None]
+
+
+def test_set_config_restarts_firmware_when_websocket_port_changed(
+    rov_state, monkeypatch
+):
+    restart_calls: list[None] = []
+    monkeypatch.setattr(
+        config_handlers, "_restart_firmware", lambda: restart_calls.append(None)
+    )
+
+    payload = PartialRovConfig.model_validate({"websocketPort": 9100})
+    asyncio.run(handle_set_config(rov_state, payload))
+
+    assert restart_calls == [None]
+
+
+def test_set_config_applies_network_once_when_ip_and_port_changed(
+    rov_state, monkeypatch
+):
+    network_calls: list[str] = []
+    restart_calls: list[None] = []
+    monkeypatch.setattr(
+        config_handlers,
+        "_apply_ip_address",
+        network_calls.append,
+    )
+    monkeypatch.setattr(
+        config_handlers, "_restart_firmware", lambda: restart_calls.append(None)
+    )
+
+    payload = PartialRovConfig.model_validate(
+        {"ipAddress": "10.10.11.10", "websocketPort": 9100}
+    )
+    asyncio.run(handle_set_config(rov_state, payload))
+
+    assert network_calls == ["10.10.11.10"]
+    assert restart_calls == []

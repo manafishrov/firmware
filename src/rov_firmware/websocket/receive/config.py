@@ -45,6 +45,22 @@ def _apply_ip_address(ip_address: str) -> None:
         log_warn(f"Failed to apply IP address change to {ip_address}.")
 
 
+def _restart_firmware() -> None:
+    path = shutil.which("systemctl")
+    if path is None:
+        log_warn("systemctl not found in PATH.")
+        return
+    try:
+        subprocess.run(  # noqa: S603
+            [path, "try-restart", "--no-block", "manafish-firmware.service"],
+            check=True,
+            capture_output=True,
+        )
+        log_info("Restarting firmware to apply the WebSocket port change.")
+    except subprocess.CalledProcessError:
+        log_warn("Failed to restart firmware after the WebSocket port change.")
+
+
 def _apply_camera() -> None:
     path = shutil.which("manafish-camera")
     if path is None:
@@ -72,6 +88,7 @@ async def handle_set_config(
         payload: Partial ROV configuration update.
     """
     old_ip = state.rov_config.ip_address
+    old_websocket_port = state.rov_config.websocket_port
     previous_camera = state.rov_config.camera
     current_data = state.rov_config.model_dump(by_alias=False)
     update_data = payload.model_dump(by_alias=False, include=payload.model_fields_set)
@@ -89,6 +106,8 @@ async def handle_set_config(
             action=None,
         )
         _apply_ip_address(state.rov_config.ip_address)
+    elif state.rov_config.websocket_port != old_websocket_port:
+        _restart_firmware()
 
     if state.rov_config.camera != previous_camera:
         _apply_camera()
@@ -136,6 +155,7 @@ async def handle_import_config(
             newer firmware version.
     """
     old_ip = state.rov_config.ip_address
+    old_websocket_port = state.rov_config.websocket_port
     previous_camera = state.rov_config.camera
     raw = apply_migrations(dict(payload))
     _strip_device_reported(raw)
@@ -164,6 +184,8 @@ async def handle_import_config(
             action=None,
         )
         _apply_ip_address(state.rov_config.ip_address)
+    elif state.rov_config.websocket_port != old_websocket_port:
+        _restart_firmware()
 
     if state.rov_config.camera != previous_camera:
         _apply_camera()

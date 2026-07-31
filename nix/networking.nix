@@ -61,6 +61,11 @@
 
     ${nmcli} connection up "$CONNECTION"
     ${systemctl} restart --no-block dnsmasq.service
+
+    # At runtime the firmware server is still bound to the previous address.
+    # Restart it so it binds the new address; at boot try-restart is a no-op
+    # and the normal service ordering starts it later.
+    ${systemctl} try-restart --no-block manafish-firmware.service
   '';
 in {
   networking = {
@@ -82,15 +87,17 @@ in {
   # dnsmasq configuration.
   systemd.tmpfiles.rules = ["d /run/manafish 0755 pi users -"];
 
-  # Applying a new ROV address must also reload the matching DHCP pool. Limit
-  # the firmware user to managing only dnsmasq through systemd.
+  # Applying a new ROV address must reload the matching DHCP pool and rebind
+  # the firmware server. Limit the firmware user to those two units.
   security.polkit = {
     enable = true;
     extraConfig = ''
       polkit.addRule(function (action, subject) {
         if (
           action.id == "org.freedesktop.systemd1.manage-units" &&
-          action.lookup("unit") == "dnsmasq.service" &&
+          ["dnsmasq.service", "manafish-firmware.service"].indexOf(
+            action.lookup("unit")
+          ) >= 0 &&
           subject.user == "pi"
         ) {
           return polkit.Result.YES;
