@@ -60,7 +60,7 @@
     fi
 
     ${nmcli} connection up "$CONNECTION"
-    ${systemctl} try-restart --no-block dnsmasq.service
+    ${systemctl} restart --no-block dnsmasq.service
   '';
 in {
   networking = {
