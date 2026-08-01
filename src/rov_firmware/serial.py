@@ -29,6 +29,7 @@ class SerialManager:
         self._first_boot_retries: int = 0
         self._first_boot_flashed: bool = False
         self._connection_generation: int = 0
+        self._mcu_protocol_config: tuple[str, int] | None = None
 
     async def _find_mcu_port(self, *, log_missing: bool = True) -> str | None:
         mcu_ports = list(Path("/dev/serial/by-id/").glob("usb-Raspberry_Pi_Pico*"))
@@ -44,6 +45,7 @@ class SerialManager:
         writer = self.writer
         self.reader = None
         self.writer = None
+        self._mcu_protocol_config = None
         self.state.system_health.mcu_healthy = False
         if writer is not None:
             writer.close()
@@ -84,6 +86,7 @@ class SerialManager:
                     url=serial_port, baudrate=115200
                 )
                 self._connection_generation += 1
+                self._mcu_protocol_config = None
                 self.state.system_health.mcu_healthy = True
                 log_info("MCU initialized successfully.")
                 return True
@@ -148,6 +151,15 @@ class SerialManager:
     def connection_generation(self) -> int:
         """Monotonically increasing serial connection generation."""
         return self._connection_generation
+
+    @property
+    def mcu_protocol_config(self) -> tuple[str, int] | None:
+        """Protocol configuration most recently acknowledged by the MCU."""
+        return self._mcu_protocol_config
+
+    def record_mcu_protocol_config(self, protocol: str, dshot_speed: int) -> None:
+        """Record a protocol configuration reported by an MCU version packet."""
+        self._mcu_protocol_config = (protocol, dshot_speed)
 
     async def shutdown(self) -> None:
         """Shutdown the serial connection."""

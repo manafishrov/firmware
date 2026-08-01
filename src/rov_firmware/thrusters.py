@@ -34,6 +34,10 @@ from .serial import SerialManager
 from .toast import ToastContent, cancel_thruster_test_action, toast_content
 
 
+_CONFIG_RETRY_INTERVAL_SECONDS = 0.5
+_CONFIG_ACK_WARNING_SECONDS = 5.0
+
+
 class Thrusters:
     """Thrusters control class."""
 
@@ -55,6 +59,11 @@ class Thrusters:
         self.regulator: Regulator = regulator
         self._last_sent_protocol_config: tuple[str, int] | None = None
         self._last_config_generation: int = -1
+        self._last_config_attempt_time: float = 0.0
+        self._pending_protocol_config: tuple[str, int] | None = None
+        self._pending_config_generation: int = -1
+        self._pending_config_since: float = 0.0
+        self._pending_config_warning_logged = False
 
         self.previous_direction_vector: NDArray[np.float32] = np.zeros(
             8, dtype=np.float32
@@ -516,20 +525,56 @@ class Thrusters:
         writer.write(packet)
         await writer.drain()
 
-    async def _ensure_config_sent(self, writer: StreamWriter) -> None:
+    async def _ensure_config_sent(self, writer: StreamWriter) -> bool:
         current = (
-            self.state.rov_config.thruster_protocol,
+            self.state.rov_config.thruster_protocol.value,
             self.state.rov_config.dshot_speed,
         )
         generation = self.serial_manager.connection_generation
+        if self.serial_manager.mcu_protocol_config == current:
+            self._pending_protocol_config = None
+            self._pending_config_generation = -1
+            self._pending_config_since = 0.0
+            self._pending_config_warning_logged = False
+            return True
+
+        # A protocol change is only safe while the Pico's last accepted motor
+        # command is neutral. Hold neutral until its version packet confirms
+        # the requested configuration, and retry if either packet was lost or
+        # rejected.
+        await self._send_packet(writer, [THRUSTER_NEUTRAL_PULSE_WIDTH] * NUM_MOTORS)
+
+        now = time.monotonic()
         if (
-            current == self._last_sent_protocol_config
-            and generation == self._last_config_generation
+            current != self._pending_protocol_config
+            or generation != self._pending_config_generation
         ):
-            return
-        await self._send_config_packet(writer)
-        self._last_sent_protocol_config = current
-        self._last_config_generation = generation
+            self._pending_protocol_config = current
+            self._pending_config_generation = generation
+            self._pending_config_since = now
+            self._pending_config_warning_logged = False
+        elif (
+            not self._pending_config_warning_logged
+            and now - self._pending_config_since >= _CONFIG_ACK_WARNING_SECONDS
+        ):
+            log_error(
+                "Thruster protocol change is still blocked because the MCU has not "
+                "confirmed it. Check power and telemetry for every ESC."
+            )
+            self._pending_config_warning_logged = True
+
+        should_retry = (
+            current != self._last_sent_protocol_config
+            or generation != self._last_config_generation
+            or now - self._last_config_attempt_time >= _CONFIG_RETRY_INTERVAL_SECONDS
+        )
+        if should_retry:
+            await self._send_config_packet(writer)
+            self._last_sent_protocol_config = current
+            self._last_config_generation = generation
+            self._last_config_attempt_time = now
+
+        return False
 
     def _determine_thrust_vector(
         self, current_time: float, last_send_time: float
@@ -592,10 +637,26 @@ class Thrusters:
                 next_tick = time.perf_counter() + interval
                 continue
             writer = self.serial_manager.get_writer()
-            await self._ensure_config_sent(writer)
+            try:
+                config_confirmed = await self._ensure_config_sent(writer)
+            except Exception as e:
+                await self.serial_manager.handle_connection_lost(
+                    f"Thruster protocol synchronization failed: {e}"
+                )
+                await asyncio.sleep(1)
+                next_tick = time.perf_counter() + interval
+                continue
+
+            if not config_confirmed:
+                sleep_time = next_tick - time.perf_counter()
+                await asyncio.sleep(max(0.0, sleep_time))
+                next_tick += interval
+                now = time.perf_counter()
+                if next_tick < now:
+                    next_tick = now + interval
+                continue
 
             current_time = time.time()
-            self.regulator.update_regulator_data_from_imu()
             new_thrust_vector, updated_last_send_time = self._determine_thrust_vector(
                 current_time, last_send_time
             )

@@ -56,7 +56,6 @@ MOCK_CONFIG: dict[str, Any] = {
         "regulatorLimit": 30,
         "minBatteryVoltage": 14.0,
         "maxBatteryVoltage": 21.5,
-        "internalResistance": 0.1,
     },
     "camera": {
         "width": 1440,

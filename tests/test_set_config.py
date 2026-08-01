@@ -1,5 +1,6 @@
 import asyncio
 from pathlib import Path
+import subprocess
 
 import numpy as np
 import pytest
@@ -83,6 +84,45 @@ def test_set_config_applies_camera_only_when_camera_changed(rov_state, monkeypat
     camera_payload = PartialRovConfig.model_validate({"camera": {"framerate": 24}})
     asyncio.run(handle_set_config(rov_state, camera_payload))
     assert apply_calls == [None]
+
+
+def test_set_config_preserves_unspecified_camera_fields(rov_state, monkeypatch):
+    rov_state.rov_config.camera.width = 1280
+    rov_state.rov_config.camera.bitrate = 8_000_000
+    monkeypatch.setattr(config_handlers, "_apply_camera", lambda: None)
+
+    payload = PartialRovConfig.model_validate({"camera": {"framerate": 24}})
+    asyncio.run(handle_set_config(rov_state, payload))
+
+    assert rov_state.rov_config.camera.framerate == 24
+    assert rov_state.rov_config.camera.width == 1280
+    assert rov_state.rov_config.camera.bitrate == 8_000_000
+
+
+def test_apply_command_has_a_timeout(monkeypatch):
+    calls: list[dict] = []
+    warnings: list[str] = []
+    monkeypatch.setattr(
+        config_handlers.shutil, "which", lambda binary: f"/bin/{binary}"
+    )
+
+    def run(*args, **kwargs):
+        calls.append(kwargs)
+        raise subprocess.TimeoutExpired(args[0], kwargs["timeout"])
+
+    monkeypatch.setattr(config_handlers.subprocess, "run", run)
+    monkeypatch.setattr(config_handlers, "log_warn", warnings.append)
+
+    config_handlers._apply_camera()
+
+    assert calls == [
+        {
+            "check": True,
+            "capture_output": True,
+            "timeout": config_handlers._APPLY_COMMAND_TIMEOUT_SECONDS,
+        }
+    ]
+    assert warnings and warnings[0].startswith("Failed to apply camera settings:")
 
 
 def test_set_config_restarts_firmware_when_websocket_port_changed(

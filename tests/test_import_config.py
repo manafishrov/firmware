@@ -78,6 +78,18 @@ def test_import_keeps_current_values_for_fields_not_in_payload(rov_state):
     assert rov_state.rov_config.smoothing_factor == pytest.approx(0.7)
 
 
+def test_import_merges_partial_camera_with_current_values(rov_state, monkeypatch):
+    rov_state.rov_config.camera.width = 1280
+    rov_state.rov_config.camera.bitrate = 8_000_000
+    monkeypatch.setattr(config_handlers, "_apply_camera", lambda: None)
+
+    asyncio.run(handle_import_config(rov_state, {"camera": {"framerate": 24}}))
+
+    assert rov_state.rov_config.camera.framerate == 24
+    assert rov_state.rov_config.camera.width == 1280
+    assert rov_state.rov_config.camera.bitrate == 8_000_000
+
+
 def test_import_persists_to_disk(rov_state, isolated_config_path):
     payload = _baseline_export(rov_state)
     payload["rovName"] = "Persisted"
@@ -86,6 +98,16 @@ def test_import_persists_to_disk(rov_state, isolated_config_path):
 
     assert isolated_config_path.exists()
     assert "Persisted" in isolated_config_path.read_text()
+
+
+def test_import_publishes_canonical_config_to_client(rov_state, monkeypatch):
+    queue = asyncio.Queue()
+    monkeypatch.setattr(config_handlers, "get_message_queue", lambda: queue)
+
+    asyncio.run(handle_import_config(rov_state, {"rovName": "Published"}))
+
+    message = queue.get_nowait()
+    assert message.payload.rov_name == "Published"
 
 
 def test_import_restarts_firmware_when_websocket_port_changed(rov_state, monkeypatch):

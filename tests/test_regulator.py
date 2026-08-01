@@ -1,3 +1,5 @@
+import asyncio
+
 import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
@@ -91,6 +93,25 @@ def test_mahony_quaternion_stays_normalized_after_many_updates():
         ahrs.update(gyro.copy(), accel, 1 / THRUSTER_SEND_FREQUENCY)
 
     assert np.linalg.norm(ahrs.current_attitude.as_quat()) == pytest.approx(1.0)
+
+
+def test_imu_update_loop_does_not_depend_on_mcu_connection(rov_state, monkeypatch):
+    regulator = RegulatorController(rov_state)
+    updates: list[None] = []
+
+    def update_once() -> None:
+        updates.append(None)
+
+    async def cancel_after_first_tick(_delay: float) -> None:
+        raise asyncio.CancelledError
+
+    monkeypatch.setattr(regulator, "update_regulator_data_from_imu", update_once)
+    monkeypatch.setattr(asyncio, "sleep", cancel_after_first_tick)
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(regulator.imu_update_loop())
+
+    assert updates == [None]
 
 
 def test_handle_depth_hold_computes_pid(rov_state):

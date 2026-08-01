@@ -291,19 +291,19 @@ class McuSensor:
             else ThrusterProtocol.PWM
         )
         dshot_speed = packet[5] | (packet[6] << 8)
-
-        changed = (
-            self.state.rov_config.mcu_firmware_version != version
-            or self.state.rov_config.thruster_protocol != protocol
-            or self.state.rov_config.dshot_speed != dshot_speed
+        acknowledged_config = (protocol.value, dshot_speed)
+        protocol_changed = (
+            self.serial_manager.mcu_protocol_config != acknowledged_config
         )
+        self.serial_manager.record_mcu_protocol_config(*acknowledged_config)
+
+        version_changed = self.state.rov_config.mcu_firmware_version != version
 
         self.state.rov_config.mcu_firmware_version = version
-        self.state.rov_config.thruster_protocol = protocol
-        self.state.rov_config.dshot_speed = dshot_speed
 
-        if changed:
+        if protocol_changed:
             self._reset_telemetry()
+        if version_changed or protocol_changed:
             get_message_queue().put_nowait(Config(payload=self.state.rov_config))
 
         expected = self._get_expected_version()

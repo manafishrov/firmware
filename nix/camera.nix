@@ -71,6 +71,11 @@
     # The Pi 3 hardware H.264 encoder is limited to a 1920x1080 output frame.
     WIDTH=$(clamp_int "$(get .camera.width)" 160 1920 1440)
     HEIGHT=$(clamp_int "$(get .camera.height)" 160 1080 1080)
+    # H.264 and the camera scaler require complete chroma pairs. The Python
+    # model already enforces this, but repeat it here for manually edited or
+    # otherwise corrupted persisted configuration.
+    WIDTH=$(( WIDTH - WIDTH % 2 ))
+    HEIGHT=$(( HEIGHT - HEIGHT % 2 ))
     CROP_FOV=$(get .camera.cropFov)
 
     # Repeat the firmware model's resolution-aware limit here because go2rtc

@@ -82,6 +82,29 @@ Select the SD card from the "Device" dropdown.
 Click "Select" and choose the extracted .img file.
 Click "Start" to begin flashing the SD card.
 
+## Ethernet Connections
+
+The ROV uses `10.10.10.10/24` by default. Connect a computer, phone, or tablet
+to its Ethernet port and use that address in the app. The DHCP server assigns
+clients an address from the same `/24` subnet without changing the ROV's own
+static address.
+
+Android phones and tablets can connect through a USB-C Ethernet adapter without
+manual network configuration. Android requires router and DNS fields before it
+considers an Ethernet link usable, so the ROV supplies placeholder values only
+to clients identifying themselves as Android. The ROV does not provide DNS or
+forward internet traffic; the device can therefore keep using Wi-Fi for normal
+internet access. An Android "no internet" indication for the Ethernet link is
+expected.
+
+Desktop clients receive an address but no default route or DNS server, so the
+tether does not replace their existing internet connection. A manual address in
+the same subnet, such as `10.10.10.100/24`, also works.
+
+If the ROV address is changed in the app, its DHCP pool follows the selected
+`/24` subnet automatically. Reconnect the Ethernet adapter if a client retains
+an old lease after that change.
+
 ## Development Hooks
 
 Install the development dependencies and Git hook once per clone:
