@@ -35,8 +35,10 @@ _DSHOT_1200 = 1200
 _PICO_SAFE_DSHOT_SPEED = 600
 
 
-def parse_semver(version: str) -> tuple[int, int, int]:
+def parse_semver(version: object) -> tuple[int, int, int]:
     """Parse semver string into (major, minor, patch) tuple."""
+    if not isinstance(version, str):
+        return (0, 0, 0)
     parts = version.split(".")
     major = int(parts[_MAJOR]) if len(parts) > _MAJOR and parts[_MAJOR].isdigit() else 0
     minor = int(parts[_MINOR]) if len(parts) > _MINOR and parts[_MINOR].isdigit() else 0
@@ -44,7 +46,7 @@ def parse_semver(version: str) -> tuple[int, int, int]:
     return (major, minor, patch)
 
 
-def compare_semver(a: str, b: str) -> int:
+def compare_semver(a: object, b: object) -> int:
     """Compare two semver strings. Returns -1, 0, or 1."""
     a_tuple = parse_semver(a)
     b_tuple = parse_semver(b)

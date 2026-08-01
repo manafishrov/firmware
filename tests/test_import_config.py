@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from rov_firmware.models.config import RovConfig
+from rov_firmware.models.config import McuBoard, RovConfig
 from rov_firmware.websocket.receive import config as config_handlers
 from rov_firmware.websocket.receive.config import handle_import_config
 
@@ -76,6 +76,35 @@ def test_import_keeps_current_values_for_fields_not_in_payload(rov_state):
 
     assert rov_state.rov_config.rov_name == "MinimalImport"
     assert rov_state.rov_config.smoothing_factor == pytest.approx(0.7)
+
+
+def test_partial_old_import_uses_current_pico2_for_dshot_1200_migration(rov_state):
+    rov_state.rov_config.mcu_board = McuBoard.PICO2
+
+    asyncio.run(
+        handle_import_config(
+            rov_state,
+            {"firmwareVersion": "1.1.5", "dshotSpeed": 1200},
+        )
+    )
+
+    assert rov_state.rov_config.mcu_board is McuBoard.PICO2
+    assert rov_state.rov_config.dshot_speed == 1200
+
+
+def test_import_with_malformed_version_still_applies_migrations(rov_state):
+    asyncio.run(
+        handle_import_config(
+            rov_state,
+            {
+                "firmwareVersion": None,
+                "power": {"internalResistance": 0.1},
+                "rovName": "Migrated",
+            },
+        )
+    )
+
+    assert rov_state.rov_config.rov_name == "Migrated"
 
 
 def test_import_merges_partial_camera_with_current_values(rov_state, monkeypatch):

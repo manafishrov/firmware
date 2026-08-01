@@ -202,7 +202,13 @@ async def handle_import_config(
     old_ip = state.rov_config.ip_address
     old_websocket_port = state.rov_config.websocket_port
     previous_camera = state.rov_config.camera
-    raw = apply_migrations(dict(payload))
+    migration_input = dict(payload)
+    board_was_omitted = "mcuBoard" not in migration_input
+    if board_was_omitted:
+        migration_input["mcuBoard"] = state.rov_config.mcu_board.value
+    raw = apply_migrations(migration_input)
+    if board_was_omitted:
+        raw.pop("mcuBoard", None)
     _strip_device_reported(raw)
 
     current = state.rov_config.model_dump(by_alias=True)

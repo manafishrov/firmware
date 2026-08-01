@@ -26,6 +26,9 @@ from rov_firmware.models.config import (
         ("1.0", (1, 0, 0)),
         ("", (0, 0, 0)),
         ("abc", (0, 0, 0)),
+        (None, (0, 0, 0)),
+        (123, (0, 0, 0)),
+        ({"major": 1}, (0, 0, 0)),
     ],
 )
 def test_parse_semver(version, expected):
