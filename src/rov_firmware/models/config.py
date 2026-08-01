@@ -31,10 +31,14 @@ CURRENT_FIRMWARE_VERSION = _pyproject["project"]["version"]
 _MAJOR = 0
 _MINOR = 1
 _PATCH = 2
+_DSHOT_1200 = 1200
+_PICO_SAFE_DSHOT_SPEED = 600
 
 
-def parse_semver(version: str) -> tuple[int, int, int]:
+def parse_semver(version: object) -> tuple[int, int, int]:
     """Parse semver string into (major, minor, patch) tuple."""
+    if not isinstance(version, str):
+        return (0, 0, 0)
     parts = version.split(".")
     major = int(parts[_MAJOR]) if len(parts) > _MAJOR and parts[_MAJOR].isdigit() else 0
     minor = int(parts[_MINOR]) if len(parts) > _MINOR and parts[_MINOR].isdigit() else 0
@@ -42,7 +46,7 @@ def parse_semver(version: str) -> tuple[int, int, int]:
     return (major, minor, patch)
 
 
-def compare_semver(a: str, b: str) -> int:
+def compare_semver(a: object, b: object) -> int:
     """Compare two semver strings. Returns -1, 0, or 1."""
     a_tuple = parse_semver(a)
     b_tuple = parse_semver(b)
@@ -60,6 +64,33 @@ def apply_migrations(raw: dict[str, Any]) -> dict[str, Any]:
     if compare_semver(firmware_version, "1.1.0") == -1:
         raw.setdefault("nullspaceVectors", [])
         raw["firmwareVersion"] = "1.1.0"
+
+    if compare_semver(firmware_version, "1.1.6") == -1:
+        power = raw.get("power")
+        if isinstance(power, dict):
+            power.pop("internalResistance", None)
+
+        regulator = raw.get("regulator")
+        if isinstance(regulator, dict):
+            depth = regulator.get("depth")
+            if isinstance(depth, dict) and depth == {
+                "kp": 6,
+                "ki": 2,
+                "kd": 0.6,
+                "rate": 0.5,
+            }:
+                regulator["depth"] = {"kp": 2, "ki": 0, "kd": 0.5, "rate": 0.5}
+
+        # Older builds allowed this unsupported combination and silently ran
+        # it as DShot600. Preserve that effective setting when loading an old
+        # config, while rejecting new attempts to select it below.
+        if (
+            raw.get("mcuBoard", McuBoard.PICO.value) == McuBoard.PICO.value
+            and raw.get("dshotSpeed") == _DSHOT_1200
+        ):
+            raw["dshotSpeed"] = _PICO_SAFE_DSHOT_SPEED
+
+        raw["firmwareVersion"] = "1.1.6"
 
     return raw
 
@@ -146,7 +177,6 @@ class Power(CamelCaseModel):
     regulator_limit: int
     min_battery_voltage: float
     max_battery_voltage: float
-    internal_resistance: float = 0.1
 
     @field_validator("min_battery_voltage", "max_battery_voltage", mode="after")
     @classmethod
@@ -154,15 +184,6 @@ class Power(CamelCaseModel):
         """Validate that battery voltage is positive."""
         if v <= 0:
             msg = "Battery voltage must be positive"
-            raise ValueError(msg)
-        return v
-
-    @field_validator("internal_resistance", mode="after")
-    @classmethod
-    def validate_internal_resistance(cls, v: float) -> float:
-        """Validate that internal resistance is non-negative."""
-        if v < 0:
-            msg = "Internal resistance must be non-negative"
             raise ValueError(msg)
         return v
 
@@ -357,6 +378,43 @@ class Camera(CamelCaseModel):
         return self
 
 
+class PartialCamera(CamelCaseModel):
+    """Camera fields supplied by a partial configuration update."""
+
+    width: int | None = None
+    height: int | None = None
+    framerate: int | None = None
+    crop_fov: bool | None = None
+    bitrate: int | None = None
+    keyframe_interval: int | None = None
+    profile: H264Profile | None = None
+    level: H264Level | None = None
+    rotation: int | None = None
+    hflip: bool | None = None
+    vflip: bool | None = None
+    awb: AwbMode | None = None
+    exposure_value: float | None = None
+    brightness: float | None = None
+    contrast: float | None = None
+    saturation: float | None = None
+    sharpness: float | None = None
+    denoise: DenoiseMode | None = None
+
+    @model_validator(mode="after")
+    def reject_explicit_nulls(self) -> "PartialCamera":
+        """Reject nulls that cannot be applied to the complete camera config."""
+        null_fields = sorted(
+            field_name
+            for field_name in self.model_fields_set
+            if getattr(self, field_name) is None
+        )
+        if null_fields:
+            fields = ", ".join(null_fields)
+            msg = f"Camera fields cannot be null: {fields}"
+            raise ValueError(msg)
+        return self
+
+
 class RovConfig(CamelCaseModel):
     """Main ROV configuration."""
 
@@ -397,7 +455,7 @@ class RovConfig(CamelCaseModel):
         pitch=AxisConfig(kp=6, ki=2, kd=0.6, rate=120.0),
         roll=AxisConfig(kp=6, ki=2, kd=0.6, rate=120.0),
         yaw=AxisConfig(kp=6, ki=2, kd=0.6, rate=120.0),
-        depth=AxisConfig(kp=6, ki=2, kd=0.6, rate=0.5),
+        depth=AxisConfig(kp=2, ki=0, kd=0.5, rate=0.5),
         fpv_mode=False,
     )
     direction_coefficients: DirectionCoefficients = DirectionCoefficients(
@@ -424,6 +482,14 @@ class RovConfig(CamelCaseModel):
             msg = "DShot speed must be one of 150, 300, 600, 1200"
             raise ValueError(msg)
         return v
+
+    @model_validator(mode="after")
+    def validate_dshot_speed_for_board(self) -> "RovConfig":
+        """Reject DShot speeds unsupported by the selected MCU."""
+        if self.mcu_board == McuBoard.PICO and self.dshot_speed == _DSHOT_1200:
+            msg = "DShot1200 requires Pico 2"
+            raise ValueError(msg)
+        return self
 
     @field_validator("thruster_allocation", mode="before")
     @classmethod
@@ -510,7 +576,7 @@ class PartialRovConfig(CamelCaseModel):
     regulator: Regulator | None = None
     direction_coefficients: DirectionCoefficients | None = None
     power: Power | None = None
-    camera: Camera | None = None
+    camera: PartialCamera | None = None
     ip_address: str | None = None
     websocket_port: int | None = None
 

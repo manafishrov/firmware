@@ -16,6 +16,7 @@ from ..queue import get_message_queue
 
 
 _DEVICE_REPORTED_FIELDS = ("firmwareVersion", "mcuFirmwareVersion")
+_APPLY_COMMAND_TIMEOUT_SECONDS = 10.0
 _SYSTEMCTL_TIMEOUT_SECONDS = 5.0
 
 
@@ -31,20 +32,30 @@ async def handle_get_config(
     log_info("Sent config to client.")
 
 
-def _apply_ip_address(ip_address: str) -> None:
-    path = shutil.which("manafish-network")
+def _run_apply_command(binary: str, success_message: str, failure_message: str) -> None:
+    """Run a bounded system configuration helper and report its result."""
+    path = shutil.which(binary)
     if path is None:
-        log_warn("manafish-network not found in PATH.")
+        log_warn(f"{binary} not found in PATH.")
         return
     try:
         subprocess.run(  # noqa: S603
             [path],
             check=True,
             capture_output=True,
+            timeout=_APPLY_COMMAND_TIMEOUT_SECONDS,
         )
-        log_info(f"Applied IP address change to {ip_address}.")
-    except subprocess.CalledProcessError:
-        log_warn(f"Failed to apply IP address change to {ip_address}.")
+        log_info(success_message)
+    except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
+        log_warn(f"{failure_message}: {error}")
+
+
+def _apply_ip_address(ip_address: str) -> None:
+    _run_apply_command(
+        "manafish-network",
+        f"Applied IP address change to {ip_address}.",
+        f"Failed to apply IP address change to {ip_address}",
+    )
 
 
 async def _restart_firmware() -> bool:
@@ -87,19 +98,11 @@ async def _restart_firmware() -> bool:
 
 
 def _apply_camera() -> None:
-    path = shutil.which("manafish-camera")
-    if path is None:
-        log_warn("manafish-camera not found in PATH.")
-        return
-    try:
-        subprocess.run(  # noqa: S603
-            [path],
-            check=True,
-            capture_output=True,
-        )
-        log_info("Applied camera settings and restarted the video stream.")
-    except subprocess.CalledProcessError:
-        log_warn("Failed to apply camera settings.")
+    _run_apply_command(
+        "manafish-camera",
+        "Applied camera settings and restarted the video stream.",
+        "Failed to apply camera settings",
+    )
 
 
 async def handle_set_config(
@@ -117,6 +120,12 @@ async def handle_set_config(
     previous_camera = state.rov_config.camera
     current_data = state.rov_config.model_dump(by_alias=False)
     update_data = payload.model_dump(by_alias=False, include=payload.model_fields_set)
+    if payload.camera is not None:
+        camera_update = payload.camera.model_dump(
+            by_alias=False,
+            include=payload.camera.model_fields_set,
+        )
+        update_data["camera"] = {**current_data["camera"], **camera_update}
     current_data.update(update_data)
     state.rov_config = RovConfig.model_validate(current_data)
     state.rov_config.save()
@@ -193,10 +202,18 @@ async def handle_import_config(
     old_ip = state.rov_config.ip_address
     old_websocket_port = state.rov_config.websocket_port
     previous_camera = state.rov_config.camera
-    raw = apply_migrations(dict(payload))
+    migration_input = dict(payload)
+    board_was_omitted = "mcuBoard" not in migration_input
+    if board_was_omitted:
+        migration_input["mcuBoard"] = state.rov_config.mcu_board.value
+    raw = apply_migrations(migration_input)
+    if board_was_omitted:
+        raw.pop("mcuBoard", None)
     _strip_device_reported(raw)
 
     current = state.rov_config.model_dump(by_alias=True)
+    if isinstance(raw.get("camera"), dict):
+        raw["camera"] = {**current["camera"], **raw["camera"]}
     merged = {**current, **raw}
 
     try:
@@ -209,6 +226,7 @@ async def handle_import_config(
     new_config.mcu_firmware_version = state.rov_config.mcu_firmware_version
     state.rov_config = new_config
     state.rov_config.save()
+    await get_message_queue().put(Config(payload=state.rov_config))
     log_info(
         f"Imported config from app. Skipped fields: {skipped or 'none'}.",
     )

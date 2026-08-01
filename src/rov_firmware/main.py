@@ -64,6 +64,9 @@ async def main() -> None:
 
         tasks = [
             asyncio.create_task(imu.read_loop(), name="imu.read_loop"),
+            asyncio.create_task(
+                regulator.imu_update_loop(), name="regulator.imu_update_loop"
+            ),
             asyncio.create_task(pressure.read_loop(), name="pressure.read_loop"),
             asyncio.create_task(mcu.read_loop(), name="mcu.read_loop"),
             asyncio.create_task(thrusters.send_loop(), name="thrusters.send_loop"),

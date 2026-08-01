@@ -1,5 +1,6 @@
 """Regulator module for ROV control (NED convention)."""
 
+import asyncio
 import time
 from typing import cast
 
@@ -140,7 +141,7 @@ class _MahonyAhrs:
         )
 
         # Error drives estimated up toward measured accel direction.
-        e = cast(NDArray[np.float32], np.cross(a, g_body))
+        e = np.cross(a, g_body)
 
         if self.ki > 0.0:
             self._integral += e * (self.ki * dt)
@@ -387,6 +388,19 @@ class Regulator:
         self.state.regulator.pitch = pitch
         self.state.regulator.roll = roll
         self.state.regulator.yaw = yaw
+
+    async def imu_update_loop(self) -> None:
+        """Update attitude continuously, independently of the MCU connection."""
+        interval = 1.0 / THRUSTER_SEND_FREQUENCY
+        next_tick = time.perf_counter() + interval
+        while True:
+            self.update_regulator_data_from_imu()
+            sleep_time = next_tick - time.perf_counter()
+            await asyncio.sleep(max(0.0, sleep_time))
+            next_tick += interval
+            now = time.perf_counter()
+            if next_tick < now:
+                next_tick = now + interval
 
     def _handle_edges(self) -> None:
         """Detect and handle rising-edge transitions for depth-hold and stabilization enable flags.

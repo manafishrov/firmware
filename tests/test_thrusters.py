@@ -5,6 +5,7 @@ from typing import Any, cast
 import numpy as np
 import pytest
 
+from rov_firmware import thrusters as thrusters_module
 from rov_firmware.constants import (
     MCU_CONFIG_START_BYTE,
     MCU_PROTOCOL_DSHOT,
@@ -31,6 +32,11 @@ class _WriterSpy:
 
     async def drain(self):
         self.drains += 1
+
+
+class _SerialManagerSpy:
+    connection_generation = 1
+    mcu_protocol_config: tuple[str, int] | None = None
 
 
 @pytest.fixture
@@ -275,3 +281,75 @@ def test_send_config_packet_writes_expected_binary_packet(
 
     assert writer.writes == [bytes(expected)]
     assert writer.drains == 1
+
+
+def test_protocol_config_holds_neutral_until_mcu_acknowledges(rov_state):
+    serial_manager = _SerialManagerSpy()
+    thrusters = Thrusters(
+        rov_state,
+        cast(Any, serial_manager),
+        cast(Any, RegulatorController(rov_state)),
+    )
+    writer = _WriterSpy()
+
+    confirmed = asyncio.run(thrusters._ensure_config_sent(cast(Any, writer)))
+
+    neutral_payload = struct.pack(
+        f"<{NUM_MOTORS}H", *([THRUSTER_NEUTRAL_PULSE_WIDTH] * NUM_MOTORS)
+    )
+    assert confirmed is False
+    assert writer.writes[0][1:-1] == neutral_payload
+    assert writer.writes[1][0] == MCU_CONFIG_START_BYTE
+
+    serial_manager.mcu_protocol_config = ("dshot", 300)
+    writer.writes.clear()
+
+    confirmed = asyncio.run(thrusters._ensure_config_sent(cast(Any, writer)))
+
+    assert confirmed is True
+    assert writer.writes == []
+
+
+def test_protocol_config_retries_after_unacknowledged_attempt(rov_state):
+    serial_manager = _SerialManagerSpy()
+    thrusters = Thrusters(
+        rov_state,
+        cast(Any, serial_manager),
+        cast(Any, RegulatorController(rov_state)),
+    )
+    writer = _WriterSpy()
+
+    asyncio.run(thrusters._ensure_config_sent(cast(Any, writer)))
+    thrusters._last_config_attempt_time -= 1
+    writer.writes.clear()
+
+    confirmed = asyncio.run(thrusters._ensure_config_sent(cast(Any, writer)))
+
+    assert confirmed is False
+    assert len(writer.writes) == 2
+    assert writer.writes[0][0] == THRUSTER_INPUT_START_BYTE
+    assert writer.writes[1][0] == MCU_CONFIG_START_BYTE
+
+
+def test_protocol_config_logs_actionable_error_when_ack_stays_blocked(
+    rov_state, monkeypatch
+):
+    serial_manager = _SerialManagerSpy()
+    thrusters = Thrusters(
+        rov_state,
+        cast(Any, serial_manager),
+        cast(Any, RegulatorController(rov_state)),
+    )
+    writer = _WriterSpy()
+    messages: list[str] = []
+    monkeypatch.setattr(thrusters_module, "log_error", messages.append)
+
+    asyncio.run(thrusters._ensure_config_sent(cast(Any, writer)))
+    thrusters._pending_config_since -= 6
+    asyncio.run(thrusters._ensure_config_sent(cast(Any, writer)))
+    asyncio.run(thrusters._ensure_config_sent(cast(Any, writer)))
+
+    assert messages == [
+        "Thruster protocol change is still blocked because the MCU has not "
+        "confirmed it. Check power and telemetry for every ESC."
+    ]

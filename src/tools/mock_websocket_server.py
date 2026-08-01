@@ -11,10 +11,12 @@ from typing import Any, cast
 import websockets
 from websockets import ServerConnection
 
+from rov_firmware.models.config import CURRENT_FIRMWARE_VERSION
+
 
 WEBSOCKET_PORT = 9000
 MOCK_CONFIG: dict[str, Any] = {
-    "firmwareVersion": "1.0.0",
+    "firmwareVersion": CURRENT_FIRMWARE_VERSION,
     "mcuFirmwareVersion": "",
     "rovName": "Manafish-m0ck",
     "mcuBoard": "pico",
@@ -56,7 +58,6 @@ MOCK_CONFIG: dict[str, Any] = {
         "regulatorLimit": 30,
         "minBatteryVoltage": 14.0,
         "maxBatteryVoltage": 21.5,
-        "internalResistance": 0.1,
     },
     "camera": {
         "width": 1440,
@@ -107,6 +108,21 @@ THRUSTER_TEST_DURATION_SECONDS = 10
 AUTO_TUNING_OSCILLATION_DURATION_SECONDS = 10
 FLASH_DURATION_SECONDS = 3
 PERCENT_COMPLETE = 100
+
+
+def _update_mock_config(payload: dict[str, Any], *, imported: bool = False) -> None:
+    """Apply a partial config while preserving canonical mock-owned fields."""
+    update = dict(payload)
+    if imported:
+        update.pop("firmwareVersion", None)
+        update.pop("mcuFirmwareVersion", None)
+
+    camera = update.get("camera")
+    current_camera = MOCK_CONFIG.get("camera")
+    if isinstance(camera, dict) and isinstance(current_camera, dict):
+        update["camera"] = {**current_camera, **camera}
+
+    MOCK_CONFIG.update(update)
 
 
 async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR0912,PLR0915
@@ -493,7 +509,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     await websocket.send(json.dumps(config_msg))
                 elif msg_type == "setConfig":
                     if isinstance(payload, dict):
-                        MOCK_CONFIG.update(cast(dict[str, Any], payload))
+                        _update_mock_config(cast(dict[str, Any], payload))
                     toast_msg = {
                         "type": "showToast",
                         "payload": {
@@ -510,10 +526,9 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     await websocket.send(json.dumps(toast_msg))
                 elif msg_type == "importConfig":
                     if isinstance(payload, dict):
-                        raw = cast(dict[str, Any], dict(payload))
-                        raw.pop("firmwareVersion", None)
-                        raw.pop("mcuFirmwareVersion", None)
-                        MOCK_CONFIG.update(raw)
+                        _update_mock_config(
+                            cast(dict[str, Any], payload), imported=True
+                        )
                     config_msg = {"type": "config", "payload": MOCK_CONFIG}
                     await websocket.send(json.dumps(config_msg))
                     toast_msg = {

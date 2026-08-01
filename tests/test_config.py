@@ -8,10 +8,12 @@ from rov_firmware.models.config import (
     CURRENT_FIRMWARE_VERSION,
     AxisConfig,
     Camera,
+    McuBoard,
     PartialRovConfig,
     Power,
     RovConfig,
     ThrusterPinSetup,
+    apply_migrations,
     compare_semver,
     parse_semver,
 )
@@ -24,6 +26,9 @@ from rov_firmware.models.config import (
         ("1.0", (1, 0, 0)),
         ("", (0, 0, 0)),
         ("abc", (0, 0, 0)),
+        (None, (0, 0, 0)),
+        (123, (0, 0, 0)),
+        ({"major": 1}, (0, 0, 0)),
     ],
 )
 def test_parse_semver(version, expected):
@@ -51,19 +56,17 @@ def test_axis_config_accepts_float_values():
     assert axis.rate == pytest.approx(2.0)
 
 
-def test_power_validators_accept_positive_voltage_and_zero_resistance():
+def test_power_validators_accept_positive_voltage():
     power = Power(
         thrusters_limit=30,
         actions_limit=40,
         regulator_limit=50,
         min_battery_voltage=14.0,
         max_battery_voltage=21.5,
-        internal_resistance=0.0,
     )
 
     assert power.min_battery_voltage == pytest.approx(14.0)
     assert power.max_battery_voltage == pytest.approx(21.5)
-    assert power.internal_resistance == pytest.approx(0.0)
 
 
 @pytest.mark.parametrize("voltage", [0.0, -1.0])
@@ -75,27 +78,61 @@ def test_power_rejects_non_positive_battery_voltage(voltage):
             regulator_limit=50,
             min_battery_voltage=voltage,
             max_battery_voltage=21.5,
-            internal_resistance=0.1,
         )
 
 
-def test_power_rejects_negative_internal_resistance():
-    with pytest.raises(ValidationError):
-        Power(
-            thrusters_limit=30,
-            actions_limit=40,
-            regulator_limit=50,
-            min_battery_voltage=14.0,
-            max_battery_voltage=21.5,
-            internal_resistance=-0.01,
-        )
+def test_1_1_6_migration_removes_internal_resistance_and_updates_old_depth_defaults():
+    raw = {
+        "firmwareVersion": "1.1.5",
+        "power": {"internalResistance": 0.1, "minBatteryVoltage": 16},
+        "regulator": {
+            "depth": {"kp": 6, "ki": 2, "kd": 0.6, "rate": 0.5},
+        },
+        "mcuBoard": "pico",
+        "dshotSpeed": 1200,
+    }
+
+    migrated = apply_migrations(raw)
+
+    assert migrated["firmwareVersion"] == "1.1.6"
+    assert migrated["power"] == {"minBatteryVoltage": 16}
+    assert migrated["regulator"]["depth"] == {
+        "kp": 2,
+        "ki": 0,
+        "kd": 0.5,
+        "rate": 0.5,
+    }
+    assert migrated["dshotSpeed"] == 600
 
 
-@pytest.mark.parametrize("dshot_speed", [150, 300, 600, 1200])
+def test_1_1_6_migration_preserves_custom_depth_tuning():
+    custom_depth = {"kp": 3, "ki": 0.25, "kd": 0.75, "rate": 0.2}
+    raw = {
+        "firmwareVersion": "1.1.5",
+        "regulator": {"depth": custom_depth.copy()},
+    }
+
+    migrated = apply_migrations(raw)
+
+    assert migrated["regulator"]["depth"] == custom_depth
+
+
+@pytest.mark.parametrize("dshot_speed", [150, 300, 600])
 def test_rov_config_accepts_supported_dshot_speeds(dshot_speed):
     config = RovConfig(dshot_speed=dshot_speed)
 
     assert config.dshot_speed == dshot_speed
+
+
+def test_rov_config_rejects_dshot_1200_for_pico():
+    with pytest.raises(ValidationError, match="DShot1200 requires Pico 2"):
+        RovConfig(mcu_board=McuBoard.PICO, dshot_speed=1200)
+
+
+def test_rov_config_accepts_dshot_1200_for_pico2():
+    config = RovConfig(mcu_board=McuBoard.PICO2, dshot_speed=1200)
+
+    assert config.dshot_speed == 1200
 
 
 @pytest.mark.parametrize("dshot_speed", [0, 100, 450, 2400])
@@ -181,6 +218,9 @@ def test_rov_config_defaults_are_sensible():
     assert config.websocket_port == 9000
     assert config.dshot_speed == 300
     assert config.thruster_protocol == "dshot"
+    assert config.regulator.depth.kp == pytest.approx(2.0)
+    assert config.regulator.depth.ki == pytest.approx(0.0)
+    assert config.regulator.depth.kd == pytest.approx(0.5)
 
 
 _NULLSPACE_VECTORS = [
@@ -372,3 +412,16 @@ def test_partial_rov_config_accepts_camera_update():
 
     assert partial.camera is not None
     assert partial.camera.framerate == 24
+
+
+@pytest.mark.parametrize(
+    "camera_update",
+    [
+        {"framerate": None},
+        {"keyframeInterval": None},
+        {"cropFov": None, "bitrate": 8_000_000},
+    ],
+)
+def test_partial_rov_config_rejects_explicit_null_camera_fields(camera_update):
+    with pytest.raises(ValidationError, match="Camera fields cannot be null"):
+        PartialRovConfig.model_validate({"camera": camera_update})
