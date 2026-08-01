@@ -5,6 +5,7 @@ from pydantic import ValidationError
 import pytest
 
 from rov_firmware.models.config import (
+    CURRENT_CONFIG_SCHEMA_VERSION,
     CURRENT_FIRMWARE_VERSION,
     AxisConfig,
     Camera,
@@ -78,7 +79,7 @@ def test_power_rejects_non_positive_battery_voltage(voltage):
         )
 
 
-def test_1_1_6_migration_removes_internal_resistance_and_updates_old_depth_defaults():
+def test_schema_migration_removes_internal_resistance_and_updates_old_depth_defaults():
     raw = {
         "firmwareVersion": "1.1.5",
         "power": {"internalResistance": 0.1, "minBatteryVoltage": 16},
@@ -91,7 +92,8 @@ def test_1_1_6_migration_removes_internal_resistance_and_updates_old_depth_defau
 
     migrated = apply_migrations(raw)
 
-    assert migrated["firmwareVersion"] == "1.1.6"
+    assert migrated["firmwareVersion"] == "1.1.5"
+    assert migrated["configSchemaVersion"] == CURRENT_CONFIG_SCHEMA_VERSION
     assert migrated["power"] == {"minBatteryVoltage": 16}
     assert migrated["regulator"]["depth"] == {
         "kp": 2,
@@ -102,7 +104,7 @@ def test_1_1_6_migration_removes_internal_resistance_and_updates_old_depth_defau
     assert migrated["dshotSpeed"] == 600
 
 
-def test_1_1_6_migration_preserves_custom_depth_tuning():
+def test_schema_migration_preserves_custom_depth_tuning():
     custom_depth = {"kp": 3, "ki": 0.25, "kd": 0.75, "rate": 0.2}
     raw = {
         "firmwareVersion": "1.1.5",
@@ -112,6 +114,42 @@ def test_1_1_6_migration_preserves_custom_depth_tuning():
     migrated = apply_migrations(raw)
 
     assert migrated["regulator"]["depth"] == custom_depth
+
+
+def test_current_schema_does_not_reapply_settings_migration():
+    depth = {"kp": 6, "ki": 2, "kd": 0.6, "rate": 0.5}
+    raw = {
+        "firmwareVersion": "1.1.5",
+        "configSchemaVersion": CURRENT_CONFIG_SCHEMA_VERSION,
+        "regulator": {"depth": depth.copy()},
+    }
+
+    migrated = apply_migrations(raw)
+
+    assert migrated["regulator"]["depth"] == depth
+
+
+def test_load_persists_schema_migration(monkeypatch, tmp_path):
+    config_path = tmp_path / "config.json"
+    monkeypatch.setattr(RovConfig, "_config_path", config_path)
+    raw = json.loads(RovConfig().model_dump_json(by_alias=True))
+    raw.pop("configSchemaVersion")
+    raw["power"]["internalResistance"] = 0.1
+    raw["regulator"]["depth"] = {
+        "kp": 6,
+        "ki": 2,
+        "kd": 0.6,
+        "rate": 0.5,
+    }
+    config_path.write_text(json.dumps(raw))
+
+    loaded = RovConfig.load()
+    saved = json.loads(config_path.read_text())
+
+    assert loaded.config_schema_version == CURRENT_CONFIG_SCHEMA_VERSION
+    assert loaded.regulator.depth.kp == pytest.approx(2)
+    assert saved["configSchemaVersion"] == CURRENT_CONFIG_SCHEMA_VERSION
+    assert "internalResistance" not in saved["power"]
 
 
 @pytest.mark.parametrize("dshot_speed", [150, 300, 600])
@@ -163,6 +201,7 @@ def test_rov_config_json_round_trip_uses_camel_case_aliases():
     serialized = json.loads(config.model_dump_json(by_alias=True))
 
     assert "firmwareVersion" in serialized
+    assert serialized["configSchemaVersion"] == CURRENT_CONFIG_SCHEMA_VERSION
     assert "mcuFirmwareVersion" in serialized
     assert "dshotSpeed" in serialized
     assert "ipAddress" in serialized

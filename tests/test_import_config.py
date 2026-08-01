@@ -35,12 +35,14 @@ def test_import_preserves_device_reported_fields(rov_state):
 
     payload = _baseline_export(rov_state)
     payload["firmwareVersion"] = "spoofed"
+    payload["configSchemaVersion"] = 0
     payload["mcuFirmwareVersion"] = "spoofed"
     payload["rovName"] = "X"
 
     asyncio.run(handle_import_config(rov_state, payload))
 
     assert rov_state.rov_config.firmware_version != "spoofed"
+    assert rov_state.rov_config.config_schema_version > 0
     assert rov_state.rov_config.mcu_firmware_version == "real-mcu-version"
     assert rov_state.rov_config.rov_name == "X"
 
