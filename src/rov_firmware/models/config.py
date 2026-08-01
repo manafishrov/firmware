@@ -27,7 +27,6 @@ _pyproject_path = Path(__file__).parents[3] / "pyproject.toml"
 with _pyproject_path.open("rb") as _f:
     _pyproject = tomllib.load(_f)
 CURRENT_FIRMWARE_VERSION = _pyproject["project"]["version"]
-CURRENT_CONFIG_SCHEMA_VERSION = 1
 
 _MAJOR = 0
 _MINOR = 1
@@ -57,18 +56,14 @@ def compare_semver(a: str, b: str) -> int:
 
 
 def apply_migrations(raw: dict[str, Any]) -> dict[str, Any]:
-    """Apply config migrations based on firmware and config schema versions."""
+    """Apply config migrations based on firmware version."""
     firmware_version = raw.get("firmwareVersion", "0.0.0")
 
     if compare_semver(firmware_version, "1.1.0") == -1:
         raw.setdefault("nullspaceVectors", [])
         raw["firmwareVersion"] = "1.1.0"
 
-    schema_version = raw.get("configSchemaVersion", 0)
-    if not isinstance(schema_version, int) or isinstance(schema_version, bool):
-        schema_version = 0
-
-    if schema_version < CURRENT_CONFIG_SCHEMA_VERSION:
+    if compare_semver(firmware_version, "1.1.6") == -1:
         power = raw.get("power")
         if isinstance(power, dict):
             power.pop("internalResistance", None)
@@ -93,7 +88,7 @@ def apply_migrations(raw: dict[str, Any]) -> dict[str, Any]:
         ):
             raw["dshotSpeed"] = _PICO_SAFE_DSHOT_SPEED
 
-        raw["configSchemaVersion"] = CURRENT_CONFIG_SCHEMA_VERSION
+        raw["firmwareVersion"] = "1.1.6"
 
     return raw
 
@@ -422,7 +417,6 @@ class RovConfig(CamelCaseModel):
     """Main ROV configuration."""
 
     firmware_version: str = CURRENT_FIRMWARE_VERSION
-    config_schema_version: int = CURRENT_CONFIG_SCHEMA_VERSION
     mcu_firmware_version: str = ""
     rov_name: str = Field(default_factory=_generate_rov_name)
     mcu_board: McuBoard = McuBoard.PICO
@@ -535,34 +529,18 @@ class RovConfig(CamelCaseModel):
             return default_config
 
         stored_version = raw.get("firmwareVersion", "0.0.0")
-        stored_schema_version = raw.get("configSchemaVersion", 0)
 
         if compare_semver(stored_version, CURRENT_FIRMWARE_VERSION) > 0:
             return cls()
-        if (
-            isinstance(stored_schema_version, int)
-            and not isinstance(stored_schema_version, bool)
-            and stored_schema_version > CURRENT_CONFIG_SCHEMA_VERSION
-        ):
-            return cls()
 
-        migration_needed = (
-            stored_version != CURRENT_FIRMWARE_VERSION
-            or stored_schema_version != CURRENT_CONFIG_SCHEMA_VERSION
-        )
         raw = apply_migrations(raw)
         raw["firmwareVersion"] = CURRENT_FIRMWARE_VERSION
-        raw["configSchemaVersion"] = CURRENT_CONFIG_SCHEMA_VERSION
 
-        config = cls.model_validate(raw)
-        if migration_needed:
-            config.save()
-        return config
+        return cls.model_validate(raw)
 
     def save(self) -> None:
         """Save config to file with current firmware version."""
         self.firmware_version = CURRENT_FIRMWARE_VERSION
-        self.config_schema_version = CURRENT_CONFIG_SCHEMA_VERSION
         dir_path = self._config_path.parent
         tmp = Path(tempfile.mkstemp(dir=dir_path, suffix=".tmp")[1])
         try:

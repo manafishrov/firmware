@@ -15,11 +15,7 @@ from ..message import Config
 from ..queue import get_message_queue
 
 
-_DEVICE_REPORTED_FIELDS = (
-    "firmwareVersion",
-    "configSchemaVersion",
-    "mcuFirmwareVersion",
-)
+_DEVICE_REPORTED_FIELDS = ("firmwareVersion", "mcuFirmwareVersion")
 _APPLY_COMMAND_TIMEOUT_SECONDS = 10.0
 _SYSTEMCTL_TIMEOUT_SECONDS = 5.0
 
