@@ -68,6 +68,18 @@
     ${systemctl} try-restart --no-block manafish-firmware.service
   '';
 in {
+  # Keep the onboard radios powered down; the ROV communicates over Ethernet.
+  hardware.raspberry-pi.config.all.dt-overlays = {
+    disable-wifi = {
+      enable = true;
+      params = {};
+    };
+    disable-bt = {
+      enable = true;
+      params = {};
+    };
+  };
+
   networking = {
     hostName = "manafish";
     usePredictableInterfaceNames = false;
