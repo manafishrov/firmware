@@ -1,5 +1,7 @@
 """Central state management for the ROV firmware."""
 
+import asyncio
+
 from .models.config import RovConfig
 from .models.regulator import RegulatorData
 from .models.sensors import ImuData, McuData, PressureData
@@ -21,3 +23,4 @@ class RovState:
         self.regulator: RegulatorData = RegulatorData()
         self.thrusters: ThrusterData = ThrusterData()
         self.mcu_flashing: bool = False
+        self.mcu_flash_lock = asyncio.Lock()

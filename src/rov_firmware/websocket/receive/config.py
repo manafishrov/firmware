@@ -32,12 +32,12 @@ async def handle_get_config(
     log_info("Sent config to client.")
 
 
-def _run_apply_command(binary: str, success_message: str, failure_message: str) -> None:
+def _run_apply_command(binary: str, success_message: str, failure_message: str) -> bool:
     """Run a bounded system configuration helper and report its result."""
     path = shutil.which(binary)
     if path is None:
         log_warn(f"{binary} not found in PATH.")
-        return
+        return False
     try:
         subprocess.run(  # noqa: S603
             [path],
@@ -46,12 +46,14 @@ def _run_apply_command(binary: str, success_message: str, failure_message: str) 
             timeout=_APPLY_COMMAND_TIMEOUT_SECONDS,
         )
         log_info(success_message)
+        return True
     except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         log_warn(f"{failure_message}: {error}")
+        return False
 
 
-def _apply_ip_address(ip_address: str) -> None:
-    _run_apply_command(
+def _apply_ip_address(ip_address: str) -> bool:
+    return _run_apply_command(
         "manafish-network",
         f"Applied IP address change to {ip_address}.",
         f"Failed to apply IP address change to {ip_address}",
@@ -135,12 +137,13 @@ async def handle_set_config(
     if state.rov_config.ip_address != old_ip:
         toast_info(
             identifier=None,
-            content=ToastContent(
-                message_key="toasts_rov_ip_address_changing",
-            ),
+            content=ToastContent(message_key="toasts_rov_ip_address_changing"),
             action=None,
         )
-        _apply_ip_address(state.rov_config.ip_address)
+        connection_restart_failed = not await asyncio.to_thread(
+            _apply_ip_address,
+            state.rov_config.ip_address,
+        )
     elif state.rov_config.websocket_port != old_websocket_port:
         connection_restart_failed = not await _restart_firmware()
 
@@ -238,7 +241,10 @@ async def handle_import_config(
             content=ToastContent(message_key="toasts_rov_ip_address_changing"),
             action=None,
         )
-        _apply_ip_address(state.rov_config.ip_address)
+        connection_restart_failed = not await asyncio.to_thread(
+            _apply_ip_address,
+            state.rov_config.ip_address,
+        )
     elif state.rov_config.websocket_port != old_websocket_port:
         connection_restart_failed = not await _restart_firmware()
 

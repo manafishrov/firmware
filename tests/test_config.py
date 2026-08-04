@@ -23,7 +23,8 @@ from rov_firmware.models.config import (
     ("version", "expected"),
     [
         ("1.2.3", (1, 2, 3)),
-        ("1.0", (1, 0, 0)),
+        ("1.2.3-rc.4", (1, 2, 3)),
+        ("1.0", (0, 0, 0)),
         ("", (0, 0, 0)),
         ("abc", (0, 0, 0)),
         (None, (0, 0, 0)),
@@ -41,6 +42,8 @@ def test_parse_semver(version, expected):
         ("1.0.0", "1.0.1", -1),
         ("1.2.3", "1.2.3", 0),
         ("2.0.0", "1.9.9", 1),
+        ("1.1.6-rc.2", "1.1.6-rc.3", -1),
+        ("1.1.6-rc.3", "1.1.6", -1),
     ],
 )
 def test_compare_semver(left, right, expected):
@@ -94,7 +97,7 @@ def test_1_1_6_migration_removes_internal_resistance_and_updates_old_depth_defau
 
     migrated = apply_migrations(raw)
 
-    assert migrated["firmwareVersion"] == "1.1.6"
+    assert migrated["firmwareVersion"] == "1.1.6-rc.1"
     assert migrated["power"] == {"minBatteryVoltage": 16}
     assert migrated["regulator"]["depth"] == {
         "kp": 2,
@@ -122,6 +125,18 @@ def test_rov_config_accepts_supported_dshot_speeds(dshot_speed):
     config = RovConfig(dshot_speed=dshot_speed)
 
     assert config.dshot_speed == dshot_speed
+
+
+@pytest.mark.parametrize("ip_address", ["not-an-ip", "10.10.10.0", "10.10.10.255"])
+def test_rov_config_rejects_invalid_or_reserved_ip_address(ip_address):
+    with pytest.raises(ValidationError):
+        RovConfig(ip_address=ip_address)
+
+
+@pytest.mark.parametrize("websocket_port", [0, 65536])
+def test_rov_config_rejects_invalid_websocket_port(websocket_port):
+    with pytest.raises(ValidationError):
+        RovConfig(websocket_port=websocket_port)
 
 
 def test_rov_config_rejects_dshot_1200_for_pico():

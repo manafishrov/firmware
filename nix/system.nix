@@ -58,6 +58,7 @@ in {
       mkdir -p "$MCU_DIR"
       for board in pico pico2; do
         TARGET="$MCU_DIR/$board-${mcuFirmwareVersion}.uf2"
+        find "$MCU_DIR" -maxdepth 1 -type f -name "$board-v*.uf2" ! -name "$(basename "$TARGET")" -delete
         [ -f "$TARGET" ] && continue
         case "$board" in
           pico)  cp ${inputs.mcu-firmware-pico} "$TARGET" ;;

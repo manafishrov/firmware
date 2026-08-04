@@ -35,7 +35,11 @@ from ..rov_state import RovState
 from ..serial import SerialManager
 from ..websocket.message import Config
 from ..websocket.queue import get_message_queue
-from ..websocket.receive.mcu import flash_mcu_firmware, resolve_mcu_firmware
+from ..websocket.receive.mcu import (
+    flash_mcu_firmware,
+    mcu_update_required,
+    resolve_mcu_firmware,
+)
 
 
 _MAX_READ_BUFFER_SIZE = 512
@@ -45,6 +49,7 @@ _TELEMETRY_START_TOKEN = bytes((MCU_TELEMETRY_START_BYTE,))
 _TELEMETRY_BATCH_START_TOKEN = bytes((MCU_TELEMETRY_BATCH_START_BYTE,))
 _LOG_PACKET_START_TOKEN = bytes((LOG_PACKET_START_BYTE,))
 _VERSION_PACKET_START_TOKEN = bytes((MCU_VERSION_START_BYTE,))
+_TELEMETRY_FIELDS = ("erpm", "voltage", "temperature", "current", "signal_quality")
 
 _LOG_LEVEL_MAP: dict[int, LogLevel] = {
     LOG_LEVEL_INFO: LogLevel.INFO,
@@ -71,8 +76,11 @@ class McuSensor:
         """
         self.state: RovState = state
         self.serial_manager: SerialManager = serial_manager
-        self._last_telemetry_time: list[float] = [0.0] * NUM_MOTORS
+        self._last_telemetry_time: list[list[float]] = [
+            [0.0] * len(_TELEMETRY_FIELDS) for _ in range(NUM_MOTORS)
+        ]
         self._startup_time: float = time.monotonic()
+        self._flash_task: asyncio.Task[None] | None = None
 
     async def read_loop(self) -> None:
         """Read telemetry data from the MCU in a loop."""
@@ -321,10 +329,17 @@ class McuSensor:
         if expected_version is None:
             return
 
-        if current_version == expected_version:
+        if not mcu_update_required(
+            self.state.rov_config.mcu_board,
+            current_version,
+            expected_version,
+        ):
             return
 
         if self.state.mcu_flashing:
+            return
+
+        if self._flash_task is not None and not self._flash_task.done():
             return
 
         if time.monotonic() - self._startup_time > MCU_AUTO_UPDATE_WINDOW_S:
@@ -337,7 +352,7 @@ class McuSensor:
         log_warn(
             f"MCU firmware mismatch: current is {current_version}, expected is {expected_version}. Auto-flashing."
         )
-        _ = asyncio.get_running_loop().create_task(self._flash_mcu())
+        self._flash_task = asyncio.get_running_loop().create_task(self._flash_mcu())
 
     async def _flash_mcu(self) -> None:
         succeeded = await flash_mcu_firmware(
@@ -350,26 +365,20 @@ class McuSensor:
 
     def _reset_telemetry(self) -> None:
         for i in range(NUM_MOTORS):
-            self.state.mcu_telemetry.erpm[i] = 0
-            self.state.mcu_telemetry.current[i] = 0
-            self.state.mcu_telemetry.voltage[i] = 0.0
-            self.state.mcu_telemetry.temperature[i] = 0
-            self.state.mcu_telemetry.signal_quality[i] = 0.0
-            self._last_telemetry_time[i] = 0.0
+            for packet_type in range(len(_TELEMETRY_FIELDS)):
+                self._clear_telemetry_item(i, packet_type)
 
     def _expire_stale_telemetry(self) -> None:
         now = time.monotonic()
         for i in range(NUM_MOTORS):
-            if (
-                self._last_telemetry_time[i] > 0
-                and now - self._last_telemetry_time[i] > MCU_TELEMETRY_STALE_TIMEOUT_S
-            ):
-                self.state.mcu_telemetry.erpm[i] = 0
-                self.state.mcu_telemetry.current[i] = 0
-                self.state.mcu_telemetry.voltage[i] = 0.0
-                self.state.mcu_telemetry.temperature[i] = 0
-                self.state.mcu_telemetry.signal_quality[i] = 0.0
-                self._last_telemetry_time[i] = 0.0
+            for packet_type, updated_at in enumerate(self._last_telemetry_time[i]):
+                if updated_at > 0 and now - updated_at > MCU_TELEMETRY_STALE_TIMEOUT_S:
+                    self._clear_telemetry_item(i, packet_type)
+
+    def _clear_telemetry_item(self, global_id: int, packet_type: int) -> None:
+        field = _TELEMETRY_FIELDS[packet_type]
+        getattr(self.state.mcu_telemetry, field)[global_id] = 0
+        self._last_telemetry_time[global_id][packet_type] = 0.0
 
     def _update_telemetry(self, packet: bytes | bytearray | memoryview) -> None:
         """Update MCU telemetry from a validated packet.
@@ -396,8 +405,8 @@ class McuSensor:
     def _update_telemetry_item(
         self, global_id: int, packet_type: int, value: int
     ) -> None:
-        if 0 <= global_id < NUM_MOTORS:
-            self._last_telemetry_time[global_id] = time.monotonic()
+        if 0 <= global_id < NUM_MOTORS and 0 <= packet_type < len(_TELEMETRY_FIELDS):
+            self._last_telemetry_time[global_id][packet_type] = time.monotonic()
             if packet_type == MCU_TELEMETRY_TYPE_ERPM:
                 self.state.mcu_telemetry.erpm[global_id] = value * 100
             elif packet_type == MCU_TELEMETRY_TYPE_VOLTAGE:
