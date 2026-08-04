@@ -11,4 +11,5 @@ class RovStatus(CamelCaseModel):
     depth_hold: bool
     battery_percentage: int
     current_draw: int
+    pi_undervoltage: bool
     health: SystemHealth
