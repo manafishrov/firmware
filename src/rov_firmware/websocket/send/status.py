@@ -2,6 +2,7 @@
 
 from ...models.rov_status import RovStatus
 from ...rov_state import RovState
+from ...sensors.pi_power import is_pi_undervoltage_detected
 from ..message import StatusUpdate
 
 
@@ -30,6 +31,7 @@ def build_status_update(state: RovState) -> StatusUpdate:
         depth_hold=state.system_status.depth_hold,
         battery_percentage=int(state.system_status.battery_percentage),
         current_draw=current_draw,
+        pi_undervoltage=is_pi_undervoltage_detected(),
         health=state.system_health,
     )
     return StatusUpdate(payload=payload)
