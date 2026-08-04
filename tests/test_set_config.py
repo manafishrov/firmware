@@ -147,11 +147,12 @@ def test_set_config_applies_network_once_when_ip_and_port_changed(
 ):
     network_calls: list[str] = []
     restart_calls: list[None] = []
-    monkeypatch.setattr(
-        config_handlers,
-        "_apply_ip_address",
-        network_calls.append,
-    )
+
+    def apply_ip_address(ip_address: str) -> bool:
+        network_calls.append(ip_address)
+        return True
+
+    monkeypatch.setattr(config_handlers, "_apply_ip_address", apply_ip_address)
 
     async def restart_firmware() -> bool:
         restart_calls.append(None)
@@ -166,6 +167,30 @@ def test_set_config_applies_network_once_when_ip_and_port_changed(
 
     assert network_calls == ["10.10.11.10"]
     assert restart_calls == []
+
+
+def test_set_config_reports_network_apply_failure_without_success(
+    rov_state, monkeypatch
+):
+    success_calls: list[None] = []
+    warning_keys: list[str] = []
+    monkeypatch.setattr(config_handlers, "_apply_ip_address", lambda _address: False)
+    monkeypatch.setattr(
+        config_handlers,
+        "toast_success",
+        lambda **_kwargs: success_calls.append(None),
+    )
+    monkeypatch.setattr(
+        config_handlers,
+        "toast_warn",
+        lambda *, content, **_kwargs: warning_keys.append(content.message_key),
+    )
+
+    payload = PartialRovConfig.model_validate({"ipAddress": "10.10.11.10"})
+    asyncio.run(handle_set_config(rov_state, payload))
+
+    assert success_calls == []
+    assert warning_keys == ["toasts_rov_connection_restart_failed"]
 
 
 def test_set_config_reports_restart_failure_without_success(rov_state, monkeypatch):

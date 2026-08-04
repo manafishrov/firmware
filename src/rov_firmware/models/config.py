@@ -1,8 +1,10 @@
 """Configuration models for the ROV firmware."""
 
 from enum import StrEnum
+from ipaddress import IPv4Address, IPv4Network
 import json
 from pathlib import Path
+import re
 import secrets
 import tempfile
 import tomllib
@@ -28,28 +30,60 @@ with _pyproject_path.open("rb") as _f:
     _pyproject = tomllib.load(_f)
 CURRENT_FIRMWARE_VERSION = _pyproject["project"]["version"]
 
-_MAJOR = 0
-_MINOR = 1
-_PATCH = 2
 _DSHOT_1200 = 1200
 _PICO_SAFE_DSHOT_SPEED = 600
+_MIN_TCP_PORT = 1
+_MAX_TCP_PORT = 65535
+_SEMVER_RE = re.compile(
+    r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
+    r"(?:-(?P<prerelease>[0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$"
+)
 
 
 def parse_semver(version: object) -> tuple[int, int, int]:
     """Parse semver string into (major, minor, patch) tuple."""
     if not isinstance(version, str):
         return (0, 0, 0)
-    parts = version.split(".")
-    major = int(parts[_MAJOR]) if len(parts) > _MAJOR and parts[_MAJOR].isdigit() else 0
-    minor = int(parts[_MINOR]) if len(parts) > _MINOR and parts[_MINOR].isdigit() else 0
-    patch = int(parts[_PATCH]) if len(parts) > _PATCH and parts[_PATCH].isdigit() else 0
-    return (major, minor, patch)
+    match = _SEMVER_RE.fullmatch(version)
+    if match is None:
+        return (0, 0, 0)
+    return (
+        int(match.group("major")),
+        int(match.group("minor")),
+        int(match.group("patch")),
+    )
+
+
+def _semver_sort_key(
+    version: object,
+) -> tuple[int, int, int, int, tuple[tuple[int, int, str], ...]]:
+    if not isinstance(version, str):
+        return (0, 0, 0, 0, ())
+    match = _SEMVER_RE.fullmatch(version)
+    if match is None:
+        return (0, 0, 0, 0, ())
+
+    prerelease = match.group("prerelease")
+    prerelease_key: tuple[tuple[int, int, str], ...] = ()
+    if prerelease is not None:
+        prerelease_key = tuple(
+            (0, int(identifier), "") if identifier.isdigit() else (1, 0, identifier)
+            for identifier in prerelease.split(".")
+        )
+    major, minor, patch = parse_semver(version)
+    return (
+        major,
+        minor,
+        patch,
+        1 if prerelease is None else 0,
+        prerelease_key,
+    )
 
 
 def compare_semver(a: object, b: object) -> int:
     """Compare two semver strings. Returns -1, 0, or 1."""
-    a_tuple = parse_semver(a)
-    b_tuple = parse_semver(b)
+    a_tuple = _semver_sort_key(a)
+    b_tuple = _semver_sort_key(b)
     if a_tuple < b_tuple:
         return -1
     elif a_tuple > b_tuple:
@@ -65,7 +99,7 @@ def apply_migrations(raw: dict[str, Any]) -> dict[str, Any]:
         raw.setdefault("nullspaceVectors", [])
         raw["firmwareVersion"] = "1.1.0"
 
-    if compare_semver(firmware_version, "1.1.6") == -1:
+    if compare_semver(firmware_version, "1.1.6-rc.1") == -1:
         power = raw.get("power")
         if isinstance(power, dict):
             power.pop("internalResistance", None)
@@ -90,7 +124,7 @@ def apply_migrations(raw: dict[str, Any]) -> dict[str, Any]:
         ):
             raw["dshotSpeed"] = _PICO_SAFE_DSHOT_SPEED
 
-        raw["firmwareVersion"] = "1.1.6"
+        raw["firmwareVersion"] = "1.1.6-rc.1"
 
     return raw
 
@@ -473,6 +507,31 @@ class RovConfig(CamelCaseModel):
     camera: Camera = Camera()
     ip_address: str = "10.10.10.10"
     websocket_port: int = 9000
+
+    @field_validator("ip_address", mode="after")
+    @classmethod
+    def validate_ip_address(cls, v: str) -> str:
+        """Require a usable IPv4 host address for the ROV's /24 network."""
+        try:
+            address = IPv4Address(v)
+        except ValueError as error:
+            msg = "ROV IP address must be a valid IPv4 address"
+            raise ValueError(msg) from error
+
+        network = IPv4Network(f"{address}/24", strict=False)
+        if address in (network.network_address, network.broadcast_address):
+            msg = "ROV IP address must be a usable /24 host address"
+            raise ValueError(msg)
+        return v
+
+    @field_validator("websocket_port", mode="after")
+    @classmethod
+    def validate_websocket_port(cls, v: int) -> int:
+        """Require a valid TCP port for the WebSocket server."""
+        if not _MIN_TCP_PORT <= v <= _MAX_TCP_PORT:
+            msg = "WebSocket port must be between 1 and 65535"
+            raise ValueError(msg)
+        return v
 
     @field_validator("dshot_speed", mode="after")
     @classmethod

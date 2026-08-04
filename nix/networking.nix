@@ -169,6 +169,9 @@ in {
     };
   };
 
+  # The WebSocket config handler runs inside this restricted service.
+  systemd.services.manafish-firmware.path = [networkScript];
+
   systemd.services.dnsmasq = {
     after = ["manafish-network.service"];
     requires = ["manafish-network.service"];

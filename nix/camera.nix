@@ -203,6 +203,9 @@ in {
     };
   };
 
+  # Camera config changes are applied by the firmware service at runtime.
+  systemd.services.manafish-firmware.path = [cameraApply];
+
   services.go2rtc = {
     enable = true;
     settings = {

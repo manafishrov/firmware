@@ -163,7 +163,11 @@ def test_import_applies_network_once_when_ip_and_port_changed(rov_state, monkeyp
         restart_calls.append(None)
         return True
 
-    monkeypatch.setattr(config_handlers, "_apply_ip_address", network_calls.append)
+    def apply_ip_address(ip_address: str) -> bool:
+        network_calls.append(ip_address)
+        return True
+
+    monkeypatch.setattr(config_handlers, "_apply_ip_address", apply_ip_address)
     monkeypatch.setattr(config_handlers, "_restart_firmware", restart_firmware)
 
     payload = _baseline_export(rov_state)
