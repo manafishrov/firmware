@@ -12,7 +12,7 @@ from ..toast import ToastContent, toast_error, toast_info
 def _read_cpu_temperature() -> float | None:
     """Read the CPU temperature in degrees Celsius, or None if unavailable."""
     try:
-        readings = psutil.sensors_temperatures().get("cpu_thermal")  # ty: ignore[possibly-missing-attribute]
+        readings = psutil.sensors_temperatures().get("cpu_thermal")
     except Exception as e:
         log_error(f"CPU temperature read failed: {e}")
         return None

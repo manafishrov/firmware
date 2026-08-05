@@ -15,7 +15,7 @@ from ..message import Config
 from ..queue import get_message_queue
 
 
-_DEVICE_REPORTED_FIELDS = ("firmwareVersion", "mcuFirmwareVersion")
+_DEVICE_REPORTED_FIELDS = ("firmwareVersion",)
 _APPLY_COMMAND_TIMEOUT_SECONDS = 10.0
 _SYSTEMCTL_TIMEOUT_SECONDS = 5.0
 
@@ -226,7 +226,6 @@ async def handle_import_config(
         new_config, skipped = _tolerant_merge(current, raw)
 
     new_config.firmware_version = state.rov_config.firmware_version
-    new_config.mcu_firmware_version = state.rov_config.mcu_firmware_version
     state.rov_config = new_config
     state.rov_config.save()
     await get_message_queue().put(Config(payload=state.rov_config))

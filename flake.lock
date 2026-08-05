@@ -1,5 +1,17 @@
 {
   "nodes": {
+    "esc-firmware": {
+      "flake": false,
+      "locked": {
+        "narHash": "sha256-FdCkDB+e1DsuTG44hJsAsPpLJ4LCQjvqp60DXAZSqJ0=",
+        "type": "file",
+        "url": "https://github.com/manafishrov/AM32/releases/download/v2.20.0-rc.2/AM32_SKYSTARS_AM60_V2_F421_2.20.0.hex"
+      },
+      "original": {
+        "type": "file",
+        "url": "https://github.com/manafishrov/AM32/releases/download/v2.20.0-rc.2/AM32_SKYSTARS_AM60_V2_F421_2.20.0.hex"
+      }
+    },
     "argononed": {
       "flake": false,
       "locked": {
@@ -211,6 +223,7 @@
     },
     "root": {
       "inputs": {
+        "esc-firmware": "esc-firmware",
         "bmi270-src": "bmi270-src",
         "impermanence": "impermanence",
         "mcu-firmware-pico": "mcu-firmware-pico",

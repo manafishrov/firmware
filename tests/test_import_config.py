@@ -31,17 +31,20 @@ def test_import_full_baseline_export_applies_cleanly(rov_state):
 
 
 def test_import_preserves_device_reported_fields(rov_state):
-    rov_state.rov_config.mcu_firmware_version = "real-mcu-version"
+    rov_state.device_info.mcu_firmware_version = "real-mcu-version"
+    rov_state.device_info.esc_firmware_versions = ["2.20.0"] * 8
 
     payload = _baseline_export(rov_state)
     payload["firmwareVersion"] = "spoofed"
     payload["mcuFirmwareVersion"] = "spoofed"
+    payload["escFirmwareVersions"] = ["spoofed"] * 8
     payload["rovName"] = "X"
 
     asyncio.run(handle_import_config(rov_state, payload))
 
     assert rov_state.rov_config.firmware_version != "spoofed"
-    assert rov_state.rov_config.mcu_firmware_version == "real-mcu-version"
+    assert rov_state.device_info.mcu_firmware_version == "real-mcu-version"
+    assert rov_state.device_info.esc_firmware_versions == ["2.20.0"] * 8
     assert rov_state.rov_config.rov_name == "X"
 
 

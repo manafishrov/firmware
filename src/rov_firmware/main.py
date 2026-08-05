@@ -47,8 +47,8 @@ async def main() -> None:
     asyncio.get_running_loop().set_exception_handler(_exception_handler)
 
     state: RovState = RovState()
-    ws_server: WebsocketServer = WebsocketServer(state)
     serial_manager: SerialManager = SerialManager(state)
+    ws_server: WebsocketServer = WebsocketServer(state, serial_manager)
     imu: Imu = Imu(state)
     pressure: PressureSensor = PressureSensor(state)
     regulator: Regulator = Regulator(state)

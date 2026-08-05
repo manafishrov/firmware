@@ -143,6 +143,12 @@ class FlashMcuFirmware(CamelCaseModel):
     payload: McuBoard
 
 
+class FlashEscFirmware(CamelCaseModel):
+    """WebSocket message for flashing all ESCs."""
+
+    type: Literal[MessageType.FLASH_ESC_FIRMWARE] = MessageType.FLASH_ESC_FIRMWARE
+
+
 WebsocketMessage = Annotated[
     DirectionVector
     | GetConfig
@@ -162,6 +168,7 @@ WebsocketMessage = Annotated[
     | ToggleAutoStabilization
     | ToggleDepthHold
     | SetDesiredDepth
-    | FlashMcuFirmware,
+    | FlashMcuFirmware
+    | FlashEscFirmware,
     Field(discriminator="type"),
 ]

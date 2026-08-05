@@ -181,7 +181,8 @@ def test_rov_config_json_round_trip_uses_camel_case_aliases():
     serialized = json.loads(config.model_dump_json(by_alias=True))
 
     assert "firmwareVersion" in serialized
-    assert "mcuFirmwareVersion" in serialized
+    assert "mcuFirmwareVersion" not in serialized
+    assert "escFirmwareVersions" not in serialized
     assert "dshotSpeed" in serialized
     assert "ipAddress" in serialized
     assert "websocketPort" in serialized

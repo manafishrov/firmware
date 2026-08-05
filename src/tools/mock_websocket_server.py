@@ -17,7 +17,6 @@ from rov_firmware.models.config import CURRENT_FIRMWARE_VERSION
 WEBSOCKET_PORT = 9000
 MOCK_CONFIG: dict[str, Any] = {
     "firmwareVersion": CURRENT_FIRMWARE_VERSION,
-    "mcuFirmwareVersion": "",
     "rovName": "Manafish-m0ck",
     "mcuBoard": "pico",
     "thrusterProtocol": "dshot",
@@ -104,10 +103,14 @@ SYSTEM_STATUS: dict[str, Any] = {
 THRUSTER_TEST_TOAST_ID = "thruster-test"
 AUTO_TUNING_TOAST_ID = "regulator-auto-tuning"
 FLASH_TOAST_ID = "flash-mcu-firmware"
+ESC_FLASH_TOAST_ID = "flash-esc-firmware"
 THRUSTER_TEST_DURATION_SECONDS = 10
 AUTO_TUNING_OSCILLATION_DURATION_SECONDS = 10
 FLASH_DURATION_SECONDS = 3
 PERCENT_COMPLETE = 100
+ESC_COUNT = 8
+ESC_UPLOAD_PERCENT = 10
+ESC_PROGRAM_PERCENT = PERCENT_COMPLETE - ESC_UPLOAD_PERCENT
 
 
 def _update_mock_config(payload: dict[str, Any], *, imported: bool = False) -> None:
@@ -115,7 +118,6 @@ def _update_mock_config(payload: dict[str, Any], *, imported: bool = False) -> N
     update = dict(payload)
     if imported:
         update.pop("firmwareVersion", None)
-        update.pop("mcuFirmwareVersion", None)
 
     camera = update.get("camera")
     current_camera = MOCK_CONFIG.get("camera")
@@ -203,6 +205,10 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         "mcuHealthy": True,
                         "imuHealthy": True,
                         "pressureSensorHealthy": True,
+                    },
+                    "deviceInfo": {
+                        "mcuFirmwareVersion": "1.0.4-rc.1",
+                        "escFirmwareVersions": ["2.20.0-rc.3"] * ESC_COUNT,
                     },
                 },
             }
@@ -487,6 +493,77 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
         except Exception:
             logger.exception("Error in mock flash")
 
+    async def run_flash_esc_firmware() -> None:
+        """Simulate uploading, programming, and verifying all eight ESCs."""
+        try:
+            start_time = time.time()
+            last_percent = -1
+
+            while True:
+                elapsed = time.time() - start_time
+                percent = min(
+                    PERCENT_COMPLETE,
+                    int((elapsed / FLASH_DURATION_SECONDS) * PERCENT_COMPLETE),
+                )
+
+                if percent != last_percent:
+                    last_percent = percent
+                    motor = None
+                    if percent >= ESC_UPLOAD_PERCENT:
+                        motor = min(
+                            ESC_COUNT - 1,
+                            ((percent - ESC_UPLOAD_PERCENT) * ESC_COUNT)
+                            // ESC_PROGRAM_PERCENT,
+                        )
+                    toast_msg = {
+                        "type": "showToast",
+                        "payload": {
+                            "identifier": ESC_FLASH_TOAST_ID,
+                            "variant": "loading",
+                            "content": {
+                                "messageKey": "toasts_esc_flash_in_progress",
+                                "messageArgs": {"percent": percent},
+                                "descriptionKey": (
+                                    "toasts_esc_flash_uploading"
+                                    if motor is None
+                                    else "toasts_esc_flash_motor_progress"
+                                ),
+                                "descriptionArgs": (
+                                    None
+                                    if motor is None
+                                    else {"esc": motor + 1, "total": ESC_COUNT}
+                                ),
+                            },
+                            "action": None,
+                        },
+                    }
+                    await websocket.send(json.dumps(toast_msg))
+
+                if percent >= PERCENT_COMPLETE:
+                    break
+                await asyncio.sleep(0.05)
+
+            await websocket.send(
+                json.dumps(
+                    {
+                        "type": "showToast",
+                        "payload": {
+                            "identifier": ESC_FLASH_TOAST_ID,
+                            "variant": "success",
+                            "content": {
+                                "messageKey": "toasts_esc_flash_success",
+                            },
+                            "action": None,
+                        },
+                    }
+                )
+            )
+            logger.info("Mock ESC firmware flash complete")
+        except asyncio.CancelledError:
+            logger.debug("ESC firmware flash cancelled")
+        except Exception:
+            logger.exception("Error in mock ESC firmware flash")
+
     flash_task: asyncio.Task[None] | None = None
 
     try:
@@ -605,6 +682,10 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     flash_task = asyncio.create_task(
                         run_flash_firmware(cast(str, payload))
                     )
+                elif msg_type == "flashEscFirmware":
+                    if flash_task is not None and not flash_task.done():
+                        _ = flash_task.cancel()
+                    flash_task = asyncio.create_task(run_flash_esc_firmware())
                 elif msg_type == "customAction":
                     logger.info(f"Custom action: {payload}")
                 elif msg_type == "startThrusterTest":

@@ -14,6 +14,7 @@ from ..constants import CRASH_LOG_SEND_TIMEOUT_S
 from ..log import flush_pending_logs, log_error, log_info, log_warn
 from ..models.log import LogEntry, LogLevel, LogOrigin
 from ..rov_state import RovState
+from ..serial import SerialManager
 from .handler import handle_message
 from .message import LogMessage, WebsocketMessage
 from .queue import get_message_queue
@@ -31,13 +32,15 @@ websocket_message_adapter = TypeAdapter(WebsocketMessage)
 class WebsocketServer:
     """WebSocket server class."""
 
-    def __init__(self, state: RovState) -> None:
+    def __init__(self, state: RovState, serial_manager: SerialManager) -> None:
         """Initialize the WebSocket server.
 
         Args:
             state: The ROV state.
+            serial_manager: The MCU serial connection used for ESC updates.
         """
         self.state: RovState = state
+        self.serial_manager = serial_manager
         self.server: Server | None = None
         self.client: ServerConnection | None = None
         self._send_lock: asyncio.Lock = asyncio.Lock()
@@ -80,7 +83,9 @@ class WebsocketServer:
                 try:
                     data = json.loads(message)
                     deserialized_msg = websocket_message_adapter.validate_python(data)
-                    await handle_message(self.state, deserialized_msg)
+                    await handle_message(
+                        self.state, self.serial_manager, deserialized_msg
+                    )
                 except json.JSONDecodeError:
                     log_warn(
                         f"Failed to deserialize message from {cast(tuple[str, int] | None, websocket.remote_address)}"

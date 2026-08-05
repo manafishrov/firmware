@@ -2,6 +2,7 @@
 
 from typing import Any, cast
 
+from ..esc_firmware import flash_esc_firmware
 from ..log import log_warn
 from ..models.actions import CustomAction, DirectionVector
 from ..models.config import (
@@ -10,6 +11,7 @@ from ..models.config import (
     ThrusterTest,
 )
 from ..rov_state import RovState
+from ..serial import SerialManager
 from .message import WebsocketMessage
 from .receive.actions import (
     handle_cancel_thruster_test,
@@ -61,12 +63,14 @@ async def _handle_payload_message(
 
 async def handle_message(
     state: RovState,
+    serial_manager: SerialManager,
     message: WebsocketMessage,
 ) -> None:
     """Handle a WebSocket message.
 
     Args:
         state: The ROV state.
+        serial_manager: The MCU serial connection used for ESC updates.
         message: The message.
     """
     payload = getattr(message, "payload", None)
@@ -81,6 +85,8 @@ async def handle_message(
             await handle_toggle_auto_stabilization(state)
         case MessageType.TOGGLE_DEPTH_HOLD:
             await handle_toggle_depth_hold(state)
+        case MessageType.FLASH_ESC_FIRMWARE:
+            _ = await flash_esc_firmware(state, serial_manager, show_toasts=True)
         case _:
             if not await _handle_payload_message(state, payload, message):
                 log_warn(f"Received unhandled message type: {message.type}")
