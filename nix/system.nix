@@ -2,6 +2,7 @@
   pkgs,
   inputs,
   mcuFirmwareVersion,
+  escFirmwareVersion,
   ...
 }: let
   username = "pi";
@@ -41,6 +42,7 @@ in {
     script = ''
       FIRMWARE_DIR="${homeDir}/firmware"
       MCU_DIR="${homeDir}/mcu-firmware"
+      ESC_FIRMWARE_DIR="${homeDir}/esc-firmware"
       CONFIG="$FIRMWARE_DIR/src/rov_firmware/config.json"
       MARKER="$FIRMWARE_DIR/.nix-source"
       CURRENT_SOURCE="${firmwareSource}"
@@ -66,6 +68,14 @@ in {
         esac
         chmod u+w "$TARGET"
       done
+
+      mkdir -p "$ESC_FIRMWARE_DIR"
+      ESC_FIRMWARE_TARGET="$ESC_FIRMWARE_DIR/esc-${escFirmwareVersion}.bin"
+      find "$ESC_FIRMWARE_DIR" -maxdepth 1 -type f \( -name "esc-v*.hex" -o -name "esc-v*.bin" \) ! -name "$(basename "$ESC_FIRMWARE_TARGET")" -delete
+      if [ ! -f "$ESC_FIRMWARE_TARGET" ]; then
+        cp ${inputs.esc-firmware} "$ESC_FIRMWARE_TARGET"
+        chmod u+w "$ESC_FIRMWARE_TARGET"
+      fi
     '';
   };
 }

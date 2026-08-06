@@ -25,3 +25,4 @@ class MessageType(StrEnum):
     TOGGLE_DEPTH_HOLD = "toggleDepthHold"
     SET_DESIRED_DEPTH = "setDesiredDepth"
     FLASH_MCU_FIRMWARE = "flashMcuFirmware"
+    FLASH_ESC_FIRMWARE = "flashEscFirmware"

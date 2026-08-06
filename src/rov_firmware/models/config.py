@@ -453,7 +453,6 @@ class RovConfig(CamelCaseModel):
     """Main ROV configuration."""
 
     firmware_version: str = CURRENT_FIRMWARE_VERSION
-    mcu_firmware_version: str = ""
     rov_name: str = Field(default_factory=_generate_rov_name)
     mcu_board: McuBoard = McuBoard.PICO
     thruster_protocol: ThrusterProtocol = ThrusterProtocol.DSHOT
@@ -617,7 +616,6 @@ class PartialRovConfig(CamelCaseModel):
     """Partial ROV configuration for updates."""
 
     firmware_version: str | None = None
-    mcu_firmware_version: str | None = None
     rov_name: str | None = None
     mcu_board: McuBoard | None = None
     thruster_protocol: ThrusterProtocol | None = None

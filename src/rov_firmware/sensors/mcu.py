@@ -5,6 +5,7 @@ import struct
 import time
 
 from ..constants import (
+    ESC_FIRMWARE_VERSION_MAX_LENGTH,
     LOG_LEVEL_ERROR,
     LOG_LEVEL_INFO,
     LOG_LEVEL_WARN,
@@ -12,6 +13,7 @@ from ..constants import (
     LOG_PACKET_START_BYTE,
     MCU_AUTO_UPDATE_WINDOW_S,
     MCU_PROTOCOL_DSHOT,
+    MCU_SERIAL_READ_TIMEOUT_S,
     MCU_TELEMETRY_BATCH_ENTRY_SIZE,
     MCU_TELEMETRY_BATCH_MAX_ITEMS,
     MCU_TELEMETRY_BATCH_START_BYTE,
@@ -20,6 +22,9 @@ from ..constants import (
     MCU_TELEMETRY_START_BYTE,
     MCU_TELEMETRY_TYPE_CURRENT,
     MCU_TELEMETRY_TYPE_ERPM,
+    MCU_TELEMETRY_TYPE_ESC_VERSION_CHUNK,
+    MCU_TELEMETRY_TYPE_ESC_VERSION_COMPLETE,
+    MCU_TELEMETRY_TYPE_ESC_VERSION_LENGTH,
     MCU_TELEMETRY_TYPE_SIGNAL_QUALITY,
     MCU_TELEMETRY_TYPE_TEMPERATURE,
     MCU_TELEMETRY_TYPE_VOLTAGE,
@@ -28,13 +33,17 @@ from ..constants import (
     MOTORS_PER_BUS,
     NUM_MOTORS,
 )
+from ..esc_firmware import (
+    esc_firmware_update_required,
+    flash_esc_firmware,
+    is_valid_esc_firmware_version,
+    resolve_esc_firmware,
+)
 from ..log import log_error, log_info, log_warn
 from ..models.config import CurrentSensingMode, ThrusterProtocol
 from ..models.log import LogLevel, LogOrigin
 from ..rov_state import RovState
 from ..serial import SerialManager
-from ..websocket.message import Config
-from ..websocket.queue import get_message_queue
 from ..websocket.receive.mcu import (
     flash_mcu_firmware,
     mcu_update_required,
@@ -50,6 +59,24 @@ _TELEMETRY_BATCH_START_TOKEN = bytes((MCU_TELEMETRY_BATCH_START_BYTE,))
 _LOG_PACKET_START_TOKEN = bytes((LOG_PACKET_START_BYTE,))
 _VERSION_PACKET_START_TOKEN = bytes((MCU_VERSION_START_BYTE,))
 _TELEMETRY_FIELDS = ("erpm", "voltage", "temperature", "current", "signal_quality")
+_ESC_VERSION_DISCOVERY_DELAY_S = 2.0
+_ESC_VERSION_TYPES = (
+    MCU_TELEMETRY_TYPE_ESC_VERSION_LENGTH,
+    MCU_TELEMETRY_TYPE_ESC_VERSION_CHUNK,
+    MCU_TELEMETRY_TYPE_ESC_VERSION_COMPLETE,
+)
+
+
+def _esc_version_crc8(version: bytes) -> int:
+    crc = len(version)
+    for _ in range(8):
+        crc = ((crc << 1) ^ 0x07) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
+    for value in version:
+        crc ^= value
+        for _ in range(8):
+            crc = ((crc << 1) ^ 0x07) & 0xFF if crc & 0x80 else (crc << 1) & 0xFF
+    return crc
+
 
 _LOG_LEVEL_MAP: dict[int, LogLevel] = {
     LOG_LEVEL_INFO: LogLevel.INFO,
@@ -81,6 +108,13 @@ class McuSensor:
         ]
         self._startup_time: float = time.monotonic()
         self._flash_task: asyncio.Task[None] | None = None
+        self._esc_firmware_flash_task: asyncio.Task[None] | None = None
+        self._esc_firmware_reconcile_task: asyncio.Task[None] | None = None
+        self._esc_version_lengths: list[int | None] = [None] * NUM_MOTORS
+        self._esc_version_buffers: list[bytearray] = [
+            bytearray() for _ in range(NUM_MOTORS)
+        ]
+        self._esc_version_next_chunks: list[int] = [0] * NUM_MOTORS
 
     async def read_loop(self) -> None:
         """Read telemetry data from the MCU in a loop."""
@@ -97,14 +131,21 @@ class McuSensor:
         if not await self.serial_manager.ensure_connection():
             return None
 
-        reader = self.serial_manager.get_reader()
-        try:
-            data = await reader.read(_READ_CHUNK_SIZE)
-        except Exception as e:
-            await self.serial_manager.handle_connection_lost(
-                f"MCU telemetry read failed, disabling MCU. Error: {e}"
-            )
-            return None
+        async with self.serial_manager.io_lock:
+            if self.state.mcu_flashing:
+                return None
+            reader = self.serial_manager.get_reader()
+            try:
+                data = await asyncio.wait_for(
+                    reader.read(_READ_CHUNK_SIZE), timeout=MCU_SERIAL_READ_TIMEOUT_S
+                )
+            except TimeoutError:
+                return b""
+            except Exception as e:
+                await self.serial_manager.handle_connection_lost(
+                    f"MCU telemetry read failed, disabling MCU. Error: {e}"
+                )
+                return None
 
         if not data:
             await self.serial_manager.handle_connection_lost(
@@ -305,17 +346,24 @@ class McuSensor:
         )
         self.serial_manager.record_mcu_protocol_config(*acknowledged_config)
 
-        version_changed = self.state.rov_config.mcu_firmware_version != version
-
-        self.state.rov_config.mcu_firmware_version = version
+        self.state.device_info.mcu_firmware_version = version
 
         if protocol_changed:
             self._reset_telemetry()
-        if version_changed or protocol_changed:
-            get_message_queue().put_nowait(Config(payload=self.state.rov_config))
-
         expected = self._get_expected_version()
         self._auto_update_mcu_if_needed(version, expected)
+        mcu_update_scheduled = (
+            self._flash_task is not None and not self._flash_task.done()
+        )
+        if (
+            protocol == ThrusterProtocol.DSHOT
+            and not mcu_update_scheduled
+            and self._auto_update_window_open()
+        ):
+            self._schedule_esc_firmware_reconciliation()
+
+    def _auto_update_window_open(self) -> bool:
+        return time.monotonic() - self._startup_time <= MCU_AUTO_UPDATE_WINDOW_S
 
     def _get_expected_version(self) -> str | None:
         resolved = resolve_mcu_firmware(self.state.rov_config.mcu_board)
@@ -342,7 +390,7 @@ class McuSensor:
         if self._flash_task is not None and not self._flash_task.done():
             return
 
-        if time.monotonic() - self._startup_time > MCU_AUTO_UPDATE_WINDOW_S:
+        if not self._auto_update_window_open():
             log_warn(
                 f"MCU firmware mismatch ({current_version} != {expected_version}) detected, "
                 f"but skipping auto-flash because the service has been running for more than {MCU_AUTO_UPDATE_WINDOW_S} seconds."
@@ -363,10 +411,67 @@ class McuSensor:
         if not succeeded:
             log_error("Auto-flash of MCU firmware failed.")
 
+    def _auto_update_esc_firmware_if_needed(self) -> None:
+        resolved = resolve_esc_firmware()
+        if resolved is None:
+            return
+        _, version = resolved
+        installed_versions = self.state.device_info.esc_firmware_versions
+        if not esc_firmware_update_required(version, installed_versions):
+            return
+        if self.state.mcu_flashing:
+            return
+        if (
+            self._esc_firmware_flash_task is not None
+            and not self._esc_firmware_flash_task.done()
+        ):
+            return
+        if not self._auto_update_window_open():
+            log_warn(
+                f"ESC firmware {version} has not been applied, but skipping auto-flash "
+                f"because the service has been running for more than {MCU_AUTO_UPDATE_WINDOW_S} seconds."
+            )
+            return
+
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        log_warn(
+            f"ESC firmware {version} has not been applied. Auto-flashing all ESCs."
+        )
+        self._esc_firmware_flash_task = loop.create_task(self._flash_esc_firmware())
+
+    async def _flash_esc_firmware(self) -> None:
+        if not await flash_esc_firmware(self.state, self.serial_manager):
+            log_error("Auto-flash of ESC firmware failed.")
+
+    def _schedule_esc_firmware_reconciliation(self) -> None:
+        if (
+            self._esc_firmware_reconcile_task is not None
+            and not self._esc_firmware_reconcile_task.done()
+        ):
+            return
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
+        self._esc_firmware_reconcile_task = loop.create_task(
+            self._reconcile_esc_firmware()
+        )
+
+    async def _reconcile_esc_firmware(self) -> None:
+        await asyncio.sleep(_ESC_VERSION_DISCOVERY_DELAY_S)
+        self._auto_update_esc_firmware_if_needed()
+
     def _reset_telemetry(self) -> None:
         for i in range(NUM_MOTORS):
             for packet_type in range(len(_TELEMETRY_FIELDS)):
                 self._clear_telemetry_item(i, packet_type)
+        self._esc_version_lengths = [None] * NUM_MOTORS
+        self._esc_version_buffers = [bytearray() for _ in range(NUM_MOTORS)]
+        self._esc_version_next_chunks = [0] * NUM_MOTORS
+        self.state.device_info.esc_firmware_versions = [None] * NUM_MOTORS
 
     def _expire_stale_telemetry(self) -> None:
         now = time.monotonic()
@@ -405,6 +510,9 @@ class McuSensor:
     def _update_telemetry_item(
         self, global_id: int, packet_type: int, value: int
     ) -> None:
+        if 0 <= global_id < NUM_MOTORS and packet_type in _ESC_VERSION_TYPES:
+            self._update_esc_firmware_version(global_id, packet_type, value)
+            return
         if 0 <= global_id < NUM_MOTORS and 0 <= packet_type < len(_TELEMETRY_FIELDS):
             self._last_telemetry_time[global_id][packet_type] = time.monotonic()
             if packet_type == MCU_TELEMETRY_TYPE_ERPM:
@@ -425,3 +533,65 @@ class McuSensor:
                     self.state.mcu_telemetry.current[global_id] = value
             elif packet_type == MCU_TELEMETRY_TYPE_SIGNAL_QUALITY:
                 self.state.mcu_telemetry.signal_quality[global_id] = value / 100
+
+    def _update_esc_firmware_version(
+        self, global_id: int, packet_type: int, value: int
+    ) -> None:
+        if packet_type == MCU_TELEMETRY_TYPE_ESC_VERSION_LENGTH:
+            self._begin_esc_version(global_id, value)
+        elif packet_type == MCU_TELEMETRY_TYPE_ESC_VERSION_CHUNK:
+            self._append_esc_version_chunk(global_id, value)
+        else:
+            self._complete_esc_version(global_id, value)
+
+    def _begin_esc_version(self, global_id: int, length: int) -> None:
+        if not 0 < length <= ESC_FIRMWARE_VERSION_MAX_LENGTH:
+            self._reset_esc_version_assembly(global_id)
+            return
+        self._esc_version_lengths[global_id] = length
+        self._esc_version_buffers[global_id].clear()
+        self._esc_version_next_chunks[global_id] = 0
+
+    def _append_esc_version_chunk(self, global_id: int, value: int) -> None:
+        length = self._esc_version_lengths[global_id]
+        if length is None:
+            return
+        packed = value & 0xFFFFFFFF
+        chunk_index = packed >> 24
+        if chunk_index != self._esc_version_next_chunks[global_id]:
+            self._reset_esc_version_assembly(global_id)
+            return
+        remaining = length - len(self._esc_version_buffers[global_id])
+        chunk = packed.to_bytes(4, "little")[: min(3, remaining)]
+        self._esc_version_buffers[global_id].extend(chunk)
+        self._esc_version_next_chunks[global_id] += 1
+
+    def _complete_esc_version(self, global_id: int, checksum: int) -> None:
+        length = self._esc_version_lengths[global_id]
+        if length is None:
+            return
+        encoded = bytes(self._esc_version_buffers[global_id])
+        if len(encoded) != length or checksum != _esc_version_crc8(encoded):
+            self._reset_esc_version_assembly(global_id)
+            return
+        try:
+            version = encoded.decode("ascii")
+        except UnicodeDecodeError:
+            self._reset_esc_version_assembly(global_id)
+            return
+        if not is_valid_esc_firmware_version(version):
+            self._reset_esc_version_assembly(global_id)
+            return
+
+        versions = list(self.state.device_info.esc_firmware_versions)
+        if versions[global_id] != version:
+            versions[global_id] = version
+            self.state.device_info.esc_firmware_versions = versions
+        self._reset_esc_version_assembly(global_id)
+        if all(item is not None for item in versions):
+            self._auto_update_esc_firmware_if_needed()
+
+    def _reset_esc_version_assembly(self, global_id: int) -> None:
+        self._esc_version_lengths[global_id] = None
+        self._esc_version_buffers[global_id].clear()
+        self._esc_version_next_chunks[global_id] = 0

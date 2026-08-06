@@ -33,5 +33,6 @@ def build_status_update(state: RovState) -> StatusUpdate:
         current_draw=current_draw,
         pi_undervoltage=is_pi_undervoltage_detected(),
         health=state.system_health,
+        device_info=state.device_info,
     )
     return StatusUpdate(payload=payload)

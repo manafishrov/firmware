@@ -26,6 +26,7 @@ class SerialManager:
         self.reader: asyncio.StreamReader | None = None
         self.writer: asyncio.StreamWriter | None = None
         self._connection_lock: asyncio.Lock = asyncio.Lock()
+        self.io_lock: asyncio.Lock = asyncio.Lock()
         self._first_boot_retries: int = 0
         self._first_boot_flashed: bool = False
         self._connection_generation: int = 0

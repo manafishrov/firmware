@@ -40,11 +40,15 @@
       flake = false;
     };
     mcu-firmware-pico = {
-      url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.3-rc.1/pico-v1.0.3-rc.1.uf2";
+      url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.3-rc.2/pico-v1.0.3-rc.2.uf2";
       flake = false;
     };
     mcu-firmware-pico2 = {
-      url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.3-rc.1/pico2-v1.0.3-rc.1.uf2";
+      url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.3-rc.2/pico2-v1.0.3-rc.2.uf2";
+      flake = false;
+    };
+    esc-firmware = {
+      url = "https://github.com/manafishrov/AM32/releases/download/v2.20.0-rc.3/AM32_SKYSTARS_AM60_V2_F421_2.20.0.bin";
       flake = false;
     };
   };
@@ -57,7 +61,8 @@
     treefmt-nix,
     ...
   } @ inputs: let
-    mcuFirmwareVersion = "v1.0.3-rc.1";
+    mcuFirmwareVersion = "v1.0.3-rc.2";
+    escFirmwareVersion = "v2.20.0-rc.3";
     supportedSystems = [
       "aarch64-linux"
       "x86_64-linux"
@@ -70,7 +75,7 @@
   in {
     nixosConfigurations.pi3-imx477 = nixos-raspberrypi.lib.nixosSystem {
       specialArgs = {
-        inherit inputs version nixos-raspberrypi mcuFirmwareVersion;
+        inherit inputs version nixos-raspberrypi mcuFirmwareVersion escFirmwareVersion;
       };
       modules = [
         nixos-raspberrypi.nixosModules.raspberry-pi-3.base
