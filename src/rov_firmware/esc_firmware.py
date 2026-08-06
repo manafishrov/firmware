@@ -438,6 +438,9 @@ def _control_packet(command: _Command, image: bytes | None = None) -> bytes:
         packet = bytearray(ESC_FIRMWARE_USB_CONTROL_PACKET_SIZE - 1)
         packet[0] = ESC_FIRMWARE_USB_CONTROL_START_BYTE
         packet[1] = command
+    if len(packet) != ESC_FIRMWARE_USB_CONTROL_PACKET_SIZE - 1:
+        msg = "ESC firmware control packet layout does not match its configured size"
+        raise EscFirmwareUpdateError(msg)
     packet.append(_checksum(packet))
     return bytes(packet)
 
@@ -514,9 +517,9 @@ async def _upload_image(
     reader: asyncio.StreamReader,
     writer: asyncio.StreamWriter,
     image: bytes,
+    read_buffer: bytearray,
     progress: Callable[[int, int | None], None] | None = None,
 ) -> None:
-    read_buffer = bytearray()
     await _write_packet(writer, _control_packet(_Command.BEGIN, image))
     await _expect_status(reader, read_buffer, _Status.READY, len(image))
 
@@ -577,7 +580,7 @@ async def _run_update(
     progress: Callable[[int, int | None], None] | None = None,
 ) -> None:
     read_buffer = bytearray()
-    await _upload_image(reader, writer, image, progress)
+    await _upload_image(reader, writer, image, read_buffer, progress)
     await _flash_all_escs(reader, read_buffer, len(image), progress)
 
 
@@ -644,6 +647,12 @@ async def flash_esc_firmware(
             state.device_info.esc_firmware_versions = [version] * NUM_MOTORS
             _notify_esc_flash_success(show_toasts)
             return True
+        except asyncio.CancelledError:
+            with contextlib.suppress(OSError, RuntimeError):
+                await _write_packet(
+                    serial_manager.get_writer(), _control_packet(_Command.ABORT)
+                )
+            raise
         except (EscFirmwareUpdateError, TimeoutError, OSError) as error:
             log_error(f"ESC firmware update failed: {error}")
             _notify_esc_flash_error(show_toasts, str(error))

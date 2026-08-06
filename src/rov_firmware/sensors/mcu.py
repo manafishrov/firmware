@@ -355,8 +355,15 @@ class McuSensor:
         mcu_update_scheduled = (
             self._flash_task is not None and not self._flash_task.done()
         )
-        if protocol == ThrusterProtocol.DSHOT and not mcu_update_scheduled:
+        if (
+            protocol == ThrusterProtocol.DSHOT
+            and not mcu_update_scheduled
+            and self._auto_update_window_open()
+        ):
             self._schedule_esc_firmware_reconciliation()
+
+    def _auto_update_window_open(self) -> bool:
+        return time.monotonic() - self._startup_time <= MCU_AUTO_UPDATE_WINDOW_S
 
     def _get_expected_version(self) -> str | None:
         resolved = resolve_mcu_firmware(self.state.rov_config.mcu_board)
@@ -383,7 +390,7 @@ class McuSensor:
         if self._flash_task is not None and not self._flash_task.done():
             return
 
-        if time.monotonic() - self._startup_time > MCU_AUTO_UPDATE_WINDOW_S:
+        if not self._auto_update_window_open():
             log_warn(
                 f"MCU firmware mismatch ({current_version} != {expected_version}) detected, "
                 f"but skipping auto-flash because the service has been running for more than {MCU_AUTO_UPDATE_WINDOW_S} seconds."
@@ -419,19 +426,21 @@ class McuSensor:
             and not self._esc_firmware_flash_task.done()
         ):
             return
-        if time.monotonic() - self._startup_time > MCU_AUTO_UPDATE_WINDOW_S:
+        if not self._auto_update_window_open():
             log_warn(
                 f"ESC firmware {version} has not been applied, but skipping auto-flash "
                 f"because the service has been running for more than {MCU_AUTO_UPDATE_WINDOW_S} seconds."
             )
             return
 
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            return
         log_warn(
             f"ESC firmware {version} has not been applied. Auto-flashing all ESCs."
         )
-        self._esc_firmware_flash_task = asyncio.get_running_loop().create_task(
-            self._flash_esc_firmware()
-        )
+        self._esc_firmware_flash_task = loop.create_task(self._flash_esc_firmware())
 
     async def _flash_esc_firmware(self) -> None:
         if not await flash_esc_firmware(self.state, self.serial_manager):

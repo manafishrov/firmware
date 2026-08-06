@@ -564,6 +564,23 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
         except Exception:
             logger.exception("Error in mock ESC firmware flash")
 
+    async def reject_concurrent_firmware_flash(
+        identifier: str, message_key: str
+    ) -> None:
+        await websocket.send(
+            json.dumps(
+                {
+                    "type": "showToast",
+                    "payload": {
+                        "identifier": identifier,
+                        "variant": "error",
+                        "content": {"messageKey": message_key},
+                        "action": None,
+                    },
+                }
+            )
+        )
+
     flash_task: asyncio.Task[None] | None = None
 
     try:
@@ -678,14 +695,20 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     await websocket.send(json.dumps(log_msg))
                 elif msg_type == "flashMcuFirmware":
                     if flash_task is not None and not flash_task.done():
-                        _ = flash_task.cancel()
-                    flash_task = asyncio.create_task(
-                        run_flash_firmware(cast(str, payload))
-                    )
+                        await reject_concurrent_firmware_flash(
+                            FLASH_TOAST_ID, "toasts_flash_failed"
+                        )
+                    else:
+                        flash_task = asyncio.create_task(
+                            run_flash_firmware(cast(str, payload))
+                        )
                 elif msg_type == "flashEscFirmware":
                     if flash_task is not None and not flash_task.done():
-                        _ = flash_task.cancel()
-                    flash_task = asyncio.create_task(run_flash_esc_firmware())
+                        await reject_concurrent_firmware_flash(
+                            ESC_FLASH_TOAST_ID, "toasts_esc_flash_failed"
+                        )
+                    else:
+                        flash_task = asyncio.create_task(run_flash_esc_firmware())
                 elif msg_type == "customAction":
                     logger.info(f"Custom action: {payload}")
                 elif msg_type == "startThrusterTest":

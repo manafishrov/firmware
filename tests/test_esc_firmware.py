@@ -35,6 +35,15 @@ def _hex_record(record_type: int, address: int, data: bytes) -> str:
     return f":{record.hex().upper()}"
 
 
+def _status_packet(status: esc_firmware._Status, value: int = 0) -> bytes:
+    packet = bytearray(ESC_FIRMWARE_USB_STATUS_PACKET_SIZE)
+    packet[0] = esc_firmware.ESC_FIRMWARE_USB_STATUS_START_BYTE
+    packet[1] = status
+    struct.pack_into("<I", packet, 4, value)
+    packet[-1] = esc_firmware._checksum(packet[:-1])
+    return bytes(packet)
+
+
 def test_load_esc_firmware_image_accepts_exact_target_binary(tmp_path):
     path = tmp_path / "esc-v2.20.0.bin"
     expected = _valid_image()
@@ -173,6 +182,48 @@ def test_usb_packets_have_fixed_sizes_and_checksums():
     assert received == ESC_FIRMWARE_USB_DATA_PAYLOAD_SIZE
 
 
+def test_begin_packet_rejects_mismatched_configured_size(monkeypatch):
+    monkeypatch.setattr(
+        esc_firmware,
+        "ESC_FIRMWARE_USB_CONTROL_PACKET_SIZE",
+        ESC_FIRMWARE_USB_CONTROL_PACKET_SIZE + 1,
+    )
+
+    with pytest.raises(esc_firmware.EscFirmwareUpdateError, match="configured size"):
+        esc_firmware._control_packet(esc_firmware._Command.BEGIN, _valid_image())
+
+
+def test_update_preserves_status_bytes_between_upload_and_flash():
+    image = b"x"
+
+    class RecordingWriter:
+        def __init__(self):
+            self.packets = []
+
+        def write(self, packet):
+            self.packets.append(packet)
+
+        async def drain(self):
+            return None
+
+    async def run_update() -> list[bytes]:
+        reader = asyncio.StreamReader()
+        reader.feed_data(
+            _status_packet(esc_firmware._Status.READY, len(image))
+            + _status_packet(esc_firmware._Status.RECEIVED, len(image))
+            + _status_packet(esc_firmware._Status.COMPLETE)
+        )
+        reader.feed_eof()
+        recording_writer = RecordingWriter()
+        writer = cast(asyncio.StreamWriter, recording_writer)
+        await esc_firmware._run_update(reader, writer, image)
+        return recording_writer.packets
+
+    packets = asyncio.run(run_update())
+
+    assert len(packets) == 3
+
+
 def test_status_reader_resynchronizes_after_false_start_byte():
     status = bytearray(ESC_FIRMWARE_USB_STATUS_PACKET_SIZE)
     status[0] = esc_firmware.ESC_FIRMWARE_USB_STATUS_START_BYTE
@@ -264,7 +315,7 @@ def test_concurrent_flash_request_is_rejected_and_success_updates_live_state(
             lambda: (Path("esc-v2.20.0.bin"), "2.20.0", image),
         )
         monkeypatch.setattr(esc_firmware, "_run_update", fake_run_update)
-        monkeypatch.setattr(esc_firmware.asyncio, "sleep", lambda _delay: _noop())
+        monkeypatch.setattr(esc_firmware, "_DISARM_SETTLE_S", 0)
 
         first = asyncio.create_task(
             esc_firmware.flash_esc_firmware(rov_state, manager, show_toasts=False)
@@ -276,8 +327,57 @@ def test_concurrent_flash_request_is_rejected_and_success_updates_live_state(
         allow_connection.set()
         assert await first
 
-    async def _noop():
-        return None
-
     asyncio.run(run_test())
     assert rov_state.device_info.esc_firmware_versions == ["2.20.0"] * 8
+
+
+def test_cancelled_flash_aborts_updater_and_clears_state(rov_state, monkeypatch):
+    image = _valid_image()
+
+    class RecordingWriter:
+        def __init__(self):
+            self.packets = []
+
+        def write(self, packet):
+            self.packets.append(packet)
+
+        async def drain(self):
+            return None
+
+    class FakeSerialManager:
+        def __init__(self):
+            self.io_lock = asyncio.Lock()
+            self.writer = RecordingWriter()
+
+        async def ensure_connection(self):
+            return True
+
+        def get_reader(self):
+            return object()
+
+        def get_writer(self):
+            return self.writer
+
+    async def cancelled_update(_reader, _writer, _firmware, _progress):
+        raise asyncio.CancelledError
+
+    manager = FakeSerialManager()
+    monkeypatch.setattr(
+        esc_firmware,
+        "_resolve_validated_image",
+        lambda: (Path("esc-v2.20.0.bin"), "2.20.0", image),
+    )
+    monkeypatch.setattr(esc_firmware, "_run_update", cancelled_update)
+    monkeypatch.setattr(esc_firmware, "_DISARM_SETTLE_S", 0)
+
+    with pytest.raises(asyncio.CancelledError):
+        asyncio.run(
+            esc_firmware.flash_esc_firmware(
+                rov_state,
+                cast(SerialManager, manager),
+                show_toasts=False,
+            )
+        )
+
+    assert manager.writer.packets[-1][1] == esc_firmware._Command.ABORT
+    assert not rov_state.mcu_flashing
