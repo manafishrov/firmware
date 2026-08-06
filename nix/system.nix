@@ -70,7 +70,7 @@ in {
       done
 
       mkdir -p "$ESC_FIRMWARE_DIR"
-      ESC_FIRMWARE_TARGET="$ESC_FIRMWARE_DIR/esc-${escFirmwareVersion}.hex"
+      ESC_FIRMWARE_TARGET="$ESC_FIRMWARE_DIR/esc-${escFirmwareVersion}.bin"
       find "$ESC_FIRMWARE_DIR" -maxdepth 1 -type f \( -name "esc-v*.hex" -o -name "esc-v*.bin" \) ! -name "$(basename "$ESC_FIRMWARE_TARGET")" -delete
       if [ ! -f "$ESC_FIRMWARE_TARGET" ]; then
         cp ${inputs.esc-firmware} "$ESC_FIRMWARE_TARGET"
