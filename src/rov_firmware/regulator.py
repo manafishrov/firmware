@@ -1,6 +1,7 @@
 """Regulator module for ROV control (NED convention)."""
 
 import asyncio
+import math
 import time
 from typing import cast
 
@@ -38,6 +39,17 @@ from .websocket.message import RegulatorSuggestions
 from .websocket.queue import get_message_queue
 
 
+# Subscripting NDArray re-runs the typing machinery on every evaluation, which
+# costs ~8 us per call site. Bind it once so hot-path casts stay free.
+_F32 = NDArray[np.float32]
+
+_NOMINAL_DT = 1 / THRUSTER_SEND_FREQUENCY
+_MIN_DT = _NOMINAL_DT * 0.5
+_MAX_DT = _NOMINAL_DT * 10
+_MAX_GYRO_RAD_PER_SEC = math.radians(MAX_GYRO_DEG_PER_SEC)
+_INTEGRAL_WINDUP_CLIP_RAD = math.radians(INTEGRAL_WINDUP_CLIP_DEGREES)
+
+
 def _clamp_dt(dt: float) -> float:
     """Clamp a time step to a safe range around the thruster send interval.
 
@@ -50,17 +62,13 @@ def _clamp_dt(dt: float) -> float:
     Returns:
         float: Clamped time delta in seconds.
     """
-    if not np.isfinite(dt):
-        return 1 / THRUSTER_SEND_FREQUENCY
-    return cast(
-        float,
-        np.clip(
-            dt,
-            (1 / THRUSTER_SEND_FREQUENCY) * 0.5,
-            (1 / THRUSTER_SEND_FREQUENCY) * 10,
-            dtype=np.float32,
-        ),
-    )
+    if not math.isfinite(dt):
+        return _NOMINAL_DT
+    if dt < _MIN_DT:
+        return _MIN_DT
+    if dt > _MAX_DT:
+        return _MAX_DT
+    return dt
 
 
 class _MahonyAhrs:
@@ -83,6 +91,7 @@ class _MahonyAhrs:
         self.kp: float = float(kp)
         self.ki: float = float(ki)
         self._integral: NDArray[np.float32] = np.zeros(3, dtype=np.float32)
+        self._omega_buffer: NDArray[np.float32] = np.zeros(3, dtype=np.float32)
         self.current_attitude: Rotation = Rotation.identity()
 
     def reset(self) -> None:
@@ -114,46 +123,46 @@ class _MahonyAhrs:
         """
         dt = _clamp_dt(dt)
 
+        gx, gy, gz = float(gyro_rad_s[0]), float(gyro_rad_s[1]), float(gyro_rad_s[2])
+
         # Discard gyro reading if unreasonable big
-        if np.any(
-            cast(NDArray[np.float32], np.abs(gyro_rad_s, dtype=np.float32))
-            > cast(np.float32, np.deg2rad(MAX_GYRO_DEG_PER_SEC, dtype=np.float32))
-        ):
+        if max(abs(gx), abs(gy), abs(gz)) > _MAX_GYRO_RAD_PER_SEC:
             log_error("AHRS: Discarding unreasonable gyro reading")
             gyro_rad_s[:] = 0.0
+            gx = gy = gz = 0.0
 
-        ax, ay, az = cast(float, accel[0]), cast(float, accel[1]), cast(float, accel[2])
-        a_norm = cast(float, np.sqrt(ax * ax + ay * ay + az * az))
-        if not np.isfinite(a_norm) or a_norm < AHRS_ACCEL_MIN_NORM:
+        ax, ay, az = float(accel[0]), float(accel[1]), float(accel[2])
+        a_norm = math.sqrt(ax * ax + ay * ay + az * az)
+        if not math.isfinite(a_norm) or a_norm < AHRS_ACCEL_MIN_NORM:
             self._integrate_gyro_only(gyro_rad_s, dt)
             return
 
-        a = cast(
-            NDArray[np.float32], np.array([ax, ay, az], dtype=np.float32) / a_norm
-        )  # Normalized accel measurement
+        # Normalized accel measurement
+        ax /= a_norm
+        ay /= a_norm
+        az /= a_norm
 
         # Estimated "up" direction in body frame from current attitude (the reason we use up is that this is the expected accel from gravity).
-        g_body = cast(
-            NDArray[np.float32],
-            self.current_attitude.inv().apply(
-                np.array([0.0, 0.0, -1.0], dtype=np.float32)
-            ),
-        )
+        # Rotating [0, 0, -1] by the inverse attitude selects the negated third row of the rotation matrix.
+        third_row = self.current_attitude.as_matrix()[2]
+        bx, by, bz = -float(third_row[0]), -float(third_row[1]), -float(third_row[2])
 
         # Error drives estimated up toward measured accel direction.
-        e = np.cross(a, g_body)
+        ex = ay * bz - az * by
+        ey = az * bx - ax * bz
+        ez = ax * by - ay * bx
 
+        integral = self._integral
         if self.ki > 0.0:
-            self._integral += e * (self.ki * dt)
+            gain = self.ki * dt
+            integral[0] += ex * gain
+            integral[1] += ey * gain
+            integral[2] += ez * gain
 
-        omega = np.array(
-            [
-                gyro_rad_s[0] + self.kp * e[0] + self._integral[0],
-                gyro_rad_s[1] + self.kp * e[1] + self._integral[1],
-                gyro_rad_s[2] + self.kp * e[2] + self._integral[2],
-            ],
-            dtype=np.float32,
-        )
+        omega = self._omega_buffer
+        omega[0] = gx + self.kp * ex + integral[0]
+        omega[1] = gy + self.kp * ey + integral[1]
+        omega[2] = gz + self.kp * ez + integral[2]
 
         self._integrate_omega(omega, dt)
 
@@ -164,10 +173,8 @@ class _MahonyAhrs:
             gyro_rad_s (NDArray[np.float32]): Angular velocity vector [rad/s] in body frame (gx, gy, gz).
             dt (float): Time step in seconds over which to integrate.
         """
-        omega = np.array(
-            [gyro_rad_s[0], gyro_rad_s[1], gyro_rad_s[2]],
-            dtype=np.float32,
-        )
+        omega = self._omega_buffer
+        omega[:] = gyro_rad_s
         self._integrate_omega(omega, dt)
 
     def _integrate_omega(self, omega_rad_s: NDArray[np.float32], dt: float) -> None:
@@ -179,15 +186,11 @@ class _MahonyAhrs:
 
         Details:
             - Applies the rotation represented by omega_rad_s * dt to self.current_attitude.
-            - Normalizes the resulting quaternion to unit length and stores it back to self.current_attitude.
+            - Rotation stores unit quaternions internally, so the result stays normalized.
         """
         dtheta = omega_rad_s * dt
         dr = Rotation.from_rotvec(dtheta)
         self.current_attitude = self.current_attitude * dr  # body-to-world update
-
-        q = cast(NDArray[np.float32], self.current_attitude.as_quat())
-        q /= np.linalg.norm(q)
-        self.current_attitude = Rotation.from_quat(q)
 
 
 class Regulator:
@@ -224,15 +227,14 @@ class Regulator:
         self._stabilization_actuation_buffer: NDArray[np.float32] = np.zeros(
             3, dtype=np.float32
         )
-        self._unit_vectors: NDArray[np.float32] = np.eye(3, dtype=np.float32)
         self._world_frame_movement_buffer: NDArray[np.float32] = np.zeros(
             3, dtype=np.float32
         )
 
         self.last_update_ahrs_time: float = 0.0
-        self.delta_t_update_ahrs: float = 1 / THRUSTER_SEND_FREQUENCY
+        self.delta_t_update_ahrs: float = _NOMINAL_DT
         self.last_run_regulator_time: float = 0.0
-        self.delta_t_run_regulator: float = 1 / THRUSTER_SEND_FREQUENCY
+        self.delta_t_run_regulator: float = _NOMINAL_DT
 
         # Quaternion attitude estimator
         self.ahrs: _MahonyAhrs = _MahonyAhrs(kp=AHRS_MAHONY_KP, ki=AHRS_MAHONY_KI)
@@ -268,6 +270,10 @@ class Regulator:
         quaternion operations, clamps pitch to ±PITCH_MAX to avoid gimbal issues, and writes
         desired pitch and roll into state.regulator for UI visualization.
 
+        Axes whose increment is exactly zero contribute an identity rotation, so their
+        quaternion work is skipped. The pitch clamp still runs every tick because
+        fpv_mode leaves the target unclamped.
+
         Parameters:
             direction_vector (ndarray[np.float32]): 8-element NED direction vector where
                 index 2 = heave, 3 = pitch input, 4 = yaw input, 5 = roll input.
@@ -284,71 +290,55 @@ class Regulator:
             self.state.regulator.desired_depth = desired_depth
 
         if self.state.system_status.auto_stabilization:
-            if not self.state.rov_config.regulator.fpv_mode:
-                desired_yaw_change = cast(
-                    float,
-                    direction_vector[4]
-                    * self.delta_t_run_regulator
-                    * self.state.rov_config.regulator.yaw.rate,
-                )
-                yaw_rotation = Rotation.from_rotvec(
-                    [0.0, 0.0, np.deg2rad(desired_yaw_change, dtype=np.float32)]
-                )
-                self.desired_attitude = yaw_rotation * self.desired_attitude
+            regulator_config = self.state.rov_config.regulator
+            dt = self.delta_t_run_regulator
+            desired_yaw_change = (
+                float(direction_vector[4]) * dt * regulator_config.yaw.rate
+            )
+            desired_pitch_change = (
+                float(direction_vector[3]) * dt * regulator_config.pitch.rate
+            )
+            desired_roll_change = (
+                float(direction_vector[5]) * dt * regulator_config.roll.rate
+            )
 
-                desired_pitch_change = cast(
-                    float,
-                    direction_vector[3]
-                    * self.delta_t_run_regulator
-                    * self.state.rov_config.regulator.pitch.rate,
-                )
+            if not regulator_config.fpv_mode:
+                if desired_yaw_change != 0.0:
+                    yaw_rotation = Rotation.from_rotvec(
+                        [0.0, 0.0, math.radians(desired_yaw_change)]
+                    )
+                    self.desired_attitude = yaw_rotation * self.desired_attitude
+
                 yaw, pitch, roll = cast(
                     tuple[float, float, float],
                     self.desired_attitude.as_euler("ZYX", degrees=True),
                 )
-                pitch = pitch + desired_pitch_change
-                pitch = cast(
-                    float, np.clip(pitch, -PITCH_MAX, PITCH_MAX, dtype=np.float32)
-                )
-                self.desired_attitude = Rotation.from_euler(
-                    "ZYX", [yaw, pitch, roll], degrees=True
-                )
+                clamped_pitch = pitch + desired_pitch_change
+                if clamped_pitch > PITCH_MAX:
+                    clamped_pitch = PITCH_MAX
+                elif clamped_pitch < -PITCH_MAX:
+                    clamped_pitch = -PITCH_MAX
+                if clamped_pitch != pitch:
+                    self.desired_attitude = Rotation.from_euler(
+                        "ZYX", [yaw, clamped_pitch, roll], degrees=True
+                    )
 
-                desired_roll_change = cast(
-                    float,
-                    direction_vector[5]
-                    * self.delta_t_run_regulator
-                    * self.state.rov_config.regulator.roll.rate,
-                )
-                roll_rotation = Rotation.from_rotvec(
-                    [np.deg2rad(desired_roll_change, dtype=np.float32), 0.0, 0.0]
-                )
-                self.desired_attitude = self.desired_attitude * roll_rotation
+                if desired_roll_change != 0.0:
+                    roll_rotation = Rotation.from_rotvec(
+                        [math.radians(desired_roll_change), 0.0, 0.0]
+                    )
+                    self.desired_attitude = self.desired_attitude * roll_rotation
 
-            if self.state.rov_config.regulator.fpv_mode:
-                desired_yaw_change = cast(
-                    float,
-                    direction_vector[4]
-                    * self.delta_t_run_regulator
-                    * self.state.rov_config.regulator.yaw.rate,
-                )
-                desired_pitch_change = cast(
-                    float,
-                    direction_vector[3]
-                    * self.delta_t_run_regulator
-                    * self.state.rov_config.regulator.pitch.rate,
-                )
-                desired_roll_change = cast(
-                    float,
-                    direction_vector[5]
-                    * self.delta_t_run_regulator
-                    * self.state.rov_config.regulator.roll.rate,
-                )
+            elif (
+                desired_yaw_change != 0.0
+                or desired_pitch_change != 0.0
+                or desired_roll_change != 0.0
+            ):
                 local_rotation = Rotation.from_rotvec(
                     [
-                        np.deg2rad(desired_roll_change, dtype=np.float32),
-                        np.deg2rad(desired_pitch_change, dtype=np.float32),
-                        np.deg2rad(desired_yaw_change, dtype=np.float32),
+                        math.radians(desired_roll_change),
+                        math.radians(desired_pitch_change),
+                        math.radians(desired_yaw_change),
                     ]
                 )
                 self.desired_attitude = self.desired_attitude * local_rotation
@@ -378,7 +368,7 @@ class Regulator:
         if self.last_update_ahrs_time > 0.0:
             self.delta_t_update_ahrs = _clamp_dt(now - self.last_update_ahrs_time)
         else:
-            self.delta_t_update_ahrs = 1 / THRUSTER_SEND_FREQUENCY
+            self.delta_t_update_ahrs = _NOMINAL_DT
         self.last_update_ahrs_time = now
 
         self.ahrs.update(gyr, accel, self.delta_t_update_ahrs)
@@ -440,20 +430,17 @@ class Regulator:
 
         error = desired_depth - current_depth
 
-        integral_scale = cast(
-            np.float32,
-            np.clip((1.0 - abs(heave_input)), 0.0, 1.0, dtype=np.float32),
-        )
-        self.integral_depth += float(
-            error * self.delta_t_run_regulator * integral_scale
-        )
+        integral_scale = 1.0 - abs(float(heave_input))
+        if integral_scale < 0.0:
+            integral_scale = 0.0
+        elif integral_scale > 1.0:
+            integral_scale = 1.0
+        self.integral_depth += error * self.delta_t_run_regulator * integral_scale
 
-        self.integral_depth = np.clip(
-            self.integral_depth,
-            -DEPTH_INTEGRAL_WINDUP_CLIP,
-            DEPTH_INTEGRAL_WINDUP_CLIP,
-            dtype=np.float32,
-        )
+        if self.integral_depth > DEPTH_INTEGRAL_WINDUP_CLIP:
+            self.integral_depth = DEPTH_INTEGRAL_WINDUP_CLIP
+        elif self.integral_depth < -DEPTH_INTEGRAL_WINDUP_CLIP:
+            self.integral_depth = -DEPTH_INTEGRAL_WINDUP_CLIP
 
         config = self.state.rov_config.regulator
         depth_regulator_actuation = (
@@ -495,48 +482,56 @@ class Regulator:
 
         r_err = current_attitude.inv() * desired_attitude
 
-        err_rotvec = cast(NDArray[np.float32], r_err.as_rotvec().astype(np.float32))
-        if not np.all(np.isfinite(err_rotvec)):
-            err_rotvec = np.zeros(3, dtype=np.float32)
-
-        if np.linalg.norm(direction_vector_attitude[0:3]) < INTEGRAL_RELAX_THRESHOLD:
-            self.integral_attitude_rad += err_rotvec * dt
-
-        clip_rad = cast(
-            np.float32, np.deg2rad(INTEGRAL_WINDUP_CLIP_DEGREES, dtype=np.float32)
+        err_rotvec = r_err.as_rotvec()
+        err_x, err_y, err_z = (
+            float(err_rotvec[0]),
+            float(err_rotvec[1]),
+            float(err_rotvec[2]),
         )
-        self.integral_attitude_rad = np.clip(
-            self.integral_attitude_rad, -clip_rad, clip_rad, dtype=np.float32
-        )
+        if not (math.isfinite(err_x) and math.isfinite(err_y) and math.isfinite(err_z)):
+            err_x = err_y = err_z = 0.0
 
-        omega = self.gyro_rad_s.astype(np.float32, copy=False)
+        ix = float(direction_vector_attitude[0])
+        iy = float(direction_vector_attitude[1])
+        iz = float(direction_vector_attitude[2])
+        integral = self.integral_attitude_rad
+        if math.sqrt(ix * ix + iy * iy + iz * iz) < INTEGRAL_RELAX_THRESHOLD:
+            integral[0] += err_x * dt
+            integral[1] += err_y * dt
+            integral[2] += err_z * dt
+
+        clip = _INTEGRAL_WINDUP_CLIP_RAD
+        for axis in range(3):
+            if integral[axis] > clip:
+                integral[axis] = clip
+            elif integral[axis] < -clip:
+                integral[axis] = -clip
+
+        omega = self.gyro_rad_s
 
         # PID per axis (roll=x, pitch=y, yaw=z)
-        u_roll = cast(
-            float,
-            config.roll.kp * err_rotvec[0]
-            + config.roll.ki * self.integral_attitude_rad[0]
-            + config.roll.kd * (-omega[0]),
+        u_roll = (
+            config.roll.kp * err_x
+            + config.roll.ki * float(integral[0])
+            + config.roll.kd * -float(omega[0])
         )
-        u_pitch = cast(
-            float,
-            config.pitch.kp * err_rotvec[1]
-            + config.pitch.ki * self.integral_attitude_rad[1]
-            + config.pitch.kd * (-omega[1]),
+        u_pitch = (
+            config.pitch.kp * err_y
+            + config.pitch.ki * float(integral[1])
+            + config.pitch.kd * -float(omega[1])
         )
-        u_yaw = cast(
-            float,
-            config.yaw.kp * err_rotvec[2]
-            + config.yaw.ki * self.integral_attitude_rad[2]
-            + config.yaw.kd * (-omega[2]),
+        u_yaw = (
+            config.yaw.kp * err_z
+            + config.yaw.ki * float(integral[2])
+            + config.yaw.kd * -float(omega[2])
         )
 
         stabilization_actuation = self._stabilization_actuation_buffer
-        stabilization_actuation[0] = np.float32(
+        stabilization_actuation[0] = (
             u_pitch / 10.0
         )  # Divide by 10 to avoid unsatisfying PID constant values
-        stabilization_actuation[1] = np.float32(u_yaw / 10.0)
-        stabilization_actuation[2] = np.float32(u_roll / 10.0)
+        stabilization_actuation[1] = u_yaw / 10.0
+        stabilization_actuation[2] = u_roll / 10.0
 
         return stabilization_actuation
 
@@ -557,14 +552,13 @@ class Regulator:
         _yaw, pitch, roll = current_attitude.as_euler("ZYX", degrees=False)
         current_attitude = Rotation.from_euler("ZYX", [0, pitch, roll], degrees=False)
 
-        basis_vectors = cast(
-            NDArray[np.float32], current_attitude.inv().apply(self._unit_vectors)
-        )
+        # Rotating the identity basis by the inverse attitude yields the rotation matrix itself.
+        basis_vectors = cast(_F32, current_attitude.as_matrix())
 
         dir_coeffs = self.state.rov_config.direction_coefficients
-        surge_coeff = dir_coeffs.surge if np.isfinite(dir_coeffs.surge) else 1.0
-        sway_coeff = dir_coeffs.sway if np.isfinite(dir_coeffs.sway) else 1.0
-        heave_coeff = dir_coeffs.heave if np.isfinite(dir_coeffs.heave) else 1.0
+        surge_coeff = dir_coeffs.surge if math.isfinite(dir_coeffs.surge) else 1.0
+        sway_coeff = dir_coeffs.sway if math.isfinite(dir_coeffs.sway) else 1.0
+        heave_coeff = dir_coeffs.heave if math.isfinite(dir_coeffs.heave) else 1.0
 
         surge_heave_ratio = surge_coeff / heave_coeff if heave_coeff != 0 else 0.0
         sway_heave_ratio = sway_coeff / heave_coeff if heave_coeff != 0 else 0.0
@@ -656,7 +650,7 @@ class Regulator:
         if self.last_run_regulator_time > 0.0:
             self.delta_t_run_regulator = _clamp_dt(now - self.last_run_regulator_time)
         else:
-            self.delta_t_run_regulator = 1 / THRUSTER_SEND_FREQUENCY
+            self.delta_t_run_regulator = _NOMINAL_DT
         self.last_run_regulator_time = now
 
         self._update_desired_from_direction_vector(direction_vector)
@@ -1034,9 +1028,7 @@ class Regulator:
         def sine_wave(
             x: NDArray[np.float32], a: float, f: float, phi: float, offset: float
         ) -> NDArray[np.float32]:
-            return cast(
-                NDArray[np.float32], a * np.sin(2 * np.pi * f * x + phi) + offset
-            )
+            return cast(_F32, a * np.sin(2 * np.pi * f * x + phi) + offset)
 
         try:
             params, _ = curve_fit(

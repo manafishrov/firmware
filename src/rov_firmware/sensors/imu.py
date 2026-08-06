@@ -76,7 +76,9 @@ class Imu:
 
         Replaces the bmi270 library's 14 individual register reads with two burst reads
         (accel+gyro in one transaction, temperature in another), reducing I2C overhead
-        from ~14ms to ~2ms per call.
+        from ~14ms to ~2ms per call. The result is built with model_construct because the
+        arrays are constructed here already in the shape and dtype ImuData declares, and
+        numpydantic's per-field validation costs more than the read itself.
 
         Returns:
             ImuData | None: An ImuData instance containing `acceleration` (m/s²), `gyroscope`
@@ -108,7 +110,7 @@ class Imu:
             accel *= np.array([1.0, -1.0, -1.0], dtype=np.float32)
             gyr *= np.array([1.0, -1.0, -1.0], dtype=np.float32)
 
-            return ImuData(
+            return ImuData.model_construct(
                 acceleration=accel,
                 gyroscope=gyr,
                 temperature=temperature,

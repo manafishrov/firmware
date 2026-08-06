@@ -37,6 +37,11 @@ from .toast import ToastContent, cancel_thruster_test_action, toast_content
 _CONFIG_RETRY_INTERVAL_SECONDS = 0.5
 _CONFIG_ACK_WARNING_SECONDS = 5.0
 
+# Subscripting NDArray re-runs the typing machinery on every evaluation, which
+# costs ~8 us per call site. Bind it once so hot-path casts stay free.
+_F32 = NDArray[np.float32]
+_I8 = NDArray[np.int8]
+
 
 class Thrusters:
     """Thrusters control class."""
@@ -119,11 +124,9 @@ class Thrusters:
         direction_vector: NDArray[np.float32],
         out: NDArray[np.float32] | None = None,
     ) -> NDArray[np.float32]:
-        allocation_matrix = cast(
-            NDArray[np.float32], self.state.rov_config.thruster_allocation
-        )
+        allocation_matrix = cast(_F32, self.state.rov_config.thruster_allocation)
         if out is None:
-            return cast(NDArray[np.float32], allocation_matrix @ direction_vector)
+            return cast(_F32, allocation_matrix @ direction_vector)
         np.matmul(allocation_matrix, direction_vector, out=out)
         return out
 
@@ -372,15 +375,13 @@ class Thrusters:
         self, thrust_vector: NDArray[np.float32]
     ) -> None:
         spin_directions = cast(
-            NDArray[np.int8],
+            _I8,
             self.state.rov_config.thruster_pin_setup.spin_directions,
         )
         thrust_vector *= spin_directions
 
     def _reorder_thrust_vector(self, thrust_vector: NDArray[np.float32]) -> None:
-        identifiers = cast(
-            NDArray[np.int8], self.state.rov_config.thruster_pin_setup.identifiers
-        )
+        identifiers = cast(_I8, self.state.rov_config.thruster_pin_setup.identifiers)
         np.take(thrust_vector, identifiers, out=self._reorder_buffer)
         thrust_vector[:] = self._reorder_buffer
 
@@ -415,9 +416,7 @@ class Thrusters:
             thrust_vector (ndarray[float32]): 1D array of motor thrust values in the range [-1.0, 1.0], ordered for hardware output and sized to the configured number of motors.
         """
         direction_vector = self._direction_vector_buffer
-        direction_vector[:] = cast(
-            NDArray[np.float32], self.state.thrusters.direction_vector
-        )
+        direction_vector[:] = cast(_F32, self.state.thrusters.direction_vector)
 
         self._smooth_direction_vector(direction_vector, self.previous_direction_vector)
         self.previous_direction_vector[:] = direction_vector
