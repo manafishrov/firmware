@@ -16,6 +16,21 @@ from rov_firmware.sensors.mcu import McuSensor
 from rov_firmware.serial import SerialManager
 
 
+class _CompletedTask:
+    def done(self) -> bool:
+        return True
+
+
+class _RecordingLoop:
+    def __init__(self) -> None:
+        self.created = 0
+
+    def create_task(self, coroutine) -> _CompletedTask:
+        self.created += 1
+        coroutine.close()
+        return _CompletedTask()
+
+
 def _version_packet(protocol: int, dshot_speed: int) -> bytes:
     packet = bytearray(
         [
@@ -71,6 +86,43 @@ def test_version_packet_does_not_reflash_matching_prerelease_bundle(
     assert rov_state.device_info.mcu_firmware_version == "1.2.3"
 
 
+def test_version_mismatch_auto_flashes_only_once_per_service_start(
+    rov_state, monkeypatch
+):
+    loop = _RecordingLoop()
+    sensor = McuSensor(rov_state, SerialManager(rov_state))
+    monkeypatch.setattr(mcu_module.asyncio, "get_running_loop", lambda: loop)
+    monkeypatch.setattr(mcu_module, "mcu_update_required", lambda *_args: True)
+
+    sensor._auto_update_mcu_if_needed("1.2.2", "1.2.3")
+    sensor._auto_update_mcu_if_needed("1.2.2", "1.2.3")
+
+    assert loop.created == 1
+    assert sensor._mcu_auto_flash_attempted is True
+
+
+def test_esc_mismatch_auto_flashes_only_once_per_service_start(rov_state, monkeypatch):
+    loop = _RecordingLoop()
+    sensor = McuSensor(rov_state, SerialManager(rov_state))
+    monkeypatch.setattr(mcu_module.asyncio, "get_running_loop", lambda: loop)
+    monkeypatch.setattr(
+        mcu_module,
+        "resolve_esc_firmware",
+        lambda: (Path("esc-v2.21.0.bin"), "2.21.0"),
+    )
+    monkeypatch.setattr(
+        mcu_module,
+        "esc_firmware_update_required",
+        lambda *_args: True,
+    )
+
+    sensor._auto_update_esc_firmware_if_needed()
+    sensor._auto_update_esc_firmware_if_needed()
+
+    assert loop.created == 1
+    assert sensor._esc_auto_flash_attempted is True
+
+
 def test_signal_quality_updates_do_not_keep_stale_current_alive(rov_state, monkeypatch):
     now = 10.0
     monkeypatch.setattr(mcu_module.time, "monotonic", lambda: now)
@@ -82,7 +134,26 @@ def test_signal_quality_updates_do_not_keep_stale_current_alive(rov_state, monke
     sensor._expire_stale_telemetry()
 
     assert rov_state.mcu_telemetry.current[0] == 0
+    assert rov_state.mcu_telemetry.current_valid[0] is False
     assert rov_state.mcu_telemetry.signal_quality[0] == 100
+
+
+def test_current_telemetry_preserves_raw_edt_amperes(rov_state):
+    sensor = McuSensor(rov_state, SerialManager(rov_state))
+
+    sensor._update_telemetry_item(2, MCU_TELEMETRY_TYPE_CURRENT, 3)
+
+    assert rov_state.mcu_telemetry.current[2] == 3
+    assert rov_state.mcu_telemetry.current_valid[2] is True
+
+
+def test_current_telemetry_rejects_negative_usb_values(rov_state):
+    sensor = McuSensor(rov_state, SerialManager(rov_state))
+
+    sensor._update_telemetry_item(2, MCU_TELEMETRY_TYPE_CURRENT, -1)
+
+    assert rov_state.mcu_telemetry.current[2] == 0
+    assert rov_state.mcu_telemetry.current_valid[2] is True
 
 
 def test_esc_firmware_version_is_assembled_from_live_telemetry(rov_state, monkeypatch):

@@ -603,8 +603,14 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     config_msg = {"type": "config", "payload": MOCK_CONFIG}
                     await websocket.send(json.dumps(config_msg))
                 elif msg_type == "setConfig":
+                    previous_connection = (
+                        MOCK_CONFIG.get("ipAddress"),
+                        MOCK_CONFIG.get("websocketPort"),
+                    )
                     if isinstance(payload, dict):
                         _update_mock_config(cast(dict[str, Any], payload))
+                    config_msg = {"type": "config", "payload": MOCK_CONFIG}
+                    await websocket.send(json.dumps(config_msg))
                     toast_msg = {
                         "type": "showToast",
                         "payload": {
@@ -619,6 +625,15 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         },
                     }
                     await websocket.send(json.dumps(toast_msg))
+                    current_connection = (
+                        MOCK_CONFIG.get("ipAddress"),
+                        MOCK_CONFIG.get("websocketPort"),
+                    )
+                    if current_connection != previous_connection:
+                        await websocket.close(
+                            reason="Mock ROV connection settings changed"
+                        )
+                        return
                 elif msg_type == "importConfig":
                     if isinstance(payload, dict):
                         _update_mock_config(
@@ -653,6 +668,17 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         },
                     }
                     await websocket.send(json.dumps(log_msg))
+                elif msg_type == "setAutoStabilization":
+                    SYSTEM_STATUS["autoStabilization"] = bool(payload)
+                    log_msg = {
+                        "type": "logMessage",
+                        "payload": {
+                            "origin": "firmware",
+                            "level": "info",
+                            "message": f"Auto stabilization set to {SYSTEM_STATUS['autoStabilization']}",
+                        },
+                    }
+                    await websocket.send(json.dumps(log_msg))
                 elif msg_type == "toggleDepthHold":
                     SYSTEM_STATUS["depthHold"] = not SYSTEM_STATUS["depthHold"]
                     if SYSTEM_STATUS["depthHold"]:
@@ -666,6 +692,29 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                             )
                     else:
                         SYSTEM_STATUS["pendingDesiredDepth"] = None
+                    log_msg = {
+                        "type": "logMessage",
+                        "payload": {
+                            "origin": "firmware",
+                            "level": "info",
+                            "message": f"Depth hold set to {SYSTEM_STATUS['depthHold']}",
+                        },
+                    }
+                    await websocket.send(json.dumps(log_msg))
+                elif msg_type == "setDepthHold":
+                    enabled = bool(payload)
+                    if enabled and not SYSTEM_STATUS["depthHold"]:
+                        pending = SYSTEM_STATUS["pendingDesiredDepth"]
+                        if pending is not None:
+                            SYSTEM_STATUS["desiredDepth"] = pending
+                        else:
+                            current_time = time.time()
+                            SYSTEM_STATUS["desiredDepth"] = 10 + 5 * math.sin(
+                                current_time / 4
+                            )
+                    if not enabled:
+                        SYSTEM_STATUS["pendingDesiredDepth"] = None
+                    SYSTEM_STATUS["depthHold"] = enabled
                     log_msg = {
                         "type": "logMessage",
                         "payload": {

@@ -24,6 +24,7 @@ _MCU_VERSION_RE = re.compile(
     r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
     r"(?:-(?P<prerelease>[0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$"
 )
+_COMPLETE_PERCENT = 100
 
 
 def _version_sort_key(
@@ -116,7 +117,6 @@ def _report_flash_error(
                     if unexpected
                     else "toasts_flash_failed"
                 ),
-                description_key="toasts_flash_board_hint",
             ),
             action=None,
         )
@@ -134,13 +134,15 @@ def _resolve_picotool_path() -> str | None:
 
 
 def _process_flash_output(
-    process: subprocess.Popen[str], toast_identifier: str
-) -> tuple[int, str]:
+    process: subprocess.Popen[str], toast_identifier: str, show_toasts: bool
+) -> tuple[int, str, bool]:
     if process.stdout is None:
-        return -1, ""
+        return -1, "", False
 
     all_output: list[str] = []
     percent = 0
+    verification_reached_100 = False
+    verification_succeeded = False
     while True:
         output = process.stdout.readline()
         if output == "" and process.poll() is not None:
@@ -148,23 +150,72 @@ def _process_flash_output(
         if output:
             line = output.rstrip()
             all_output.append(line)
+            percent = _update_load_progress(
+                line,
+                percent,
+                toast_identifier,
+                show_toasts=show_toasts,
+            )
+            verification_reached_100, verification_succeeded = (
+                _update_verification_status(
+                    line,
+                    verification_reached_100,
+                    verification_succeeded,
+                )
+            )
 
-            if "Loading into Flash:" in line:
-                match = re.search(r"(\d+)%", line)
-                if match:
-                    new_percent = int(match.group(1))
-                    if new_percent != percent:
-                        percent = new_percent
-                        toast_loading(
-                            identifier=toast_identifier,
-                            content=ToastContent(
-                                message_key="toasts_flash_in_progress",
-                                message_args={"percent": percent},
-                            ),
-                            action=None,
-                        )
+    return (
+        cast(int, process.poll()),
+        "\n".join(all_output),
+        verification_succeeded,
+    )
 
-    return cast(int, process.poll()), "\n".join(all_output)
+
+def _picotool_progress(line: str, prefix: str) -> int | None:
+    if prefix not in line:
+        return None
+    match = re.search(r"(\d+)%", line)
+    return int(match.group(1)) if match else None
+
+
+def _update_load_progress(
+    line: str,
+    percent: int,
+    toast_identifier: str,
+    *,
+    show_toasts: bool,
+) -> int:
+    new_percent = _picotool_progress(line, "Loading into Flash:")
+    if new_percent is None or new_percent == percent:
+        return percent
+    if show_toasts:
+        toast_loading(
+            identifier=toast_identifier,
+            content=ToastContent(
+                message_key="toasts_flash_in_progress",
+                message_args={"percent": new_percent},
+            ),
+            action=None,
+        )
+    return new_percent
+
+
+def _update_verification_status(
+    line: str,
+    reached_100: bool,
+    succeeded: bool,
+) -> tuple[bool, bool]:
+    verification_percent = _picotool_progress(line, "Verifying Flash:")
+    if verification_percent is not None and verification_percent >= _COMPLETE_PERCENT:
+        reached_100 = True
+    if reached_100 and line.strip() == "OK":
+        succeeded = True
+    return reached_100, succeeded
+
+
+def _flash_write_completed(return_code: int, verification_succeeded: bool) -> bool:
+    """Accept a verified write even if picotool failed only while executing it."""
+    return return_code == 0 or verification_succeeded
 
 
 async def flash_mcu_firmware(
@@ -213,17 +264,27 @@ async def flash_mcu_firmware(
 
             state.mcu_flashing = True
             process = subprocess.Popen(  # noqa: S603
-                [picotool_path, "load", "-f", "-x", str(firmware_path)],
+                [picotool_path, "load", "-f", "-v", "-x", str(firmware_path)],
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
             )
             loop = asyncio.get_running_loop()
-            rc, output = await loop.run_in_executor(
-                None, _process_flash_output, process, toast_identifier
+            rc, output, verification_succeeded = await loop.run_in_executor(
+                None,
+                _process_flash_output,
+                process,
+                toast_identifier,
+                show_toasts,
             )
 
-            if rc == 0:
+            if _flash_write_completed(rc, verification_succeeded):
+                if rc != 0:
+                    log_warn(
+                        f"picotool returned {rc} after verifying the flashed image; "
+                        "treating the write as successful because only the subsequent "
+                        "execute/reconnect step failed."
+                    )
                 _record_flashed_version(board, firmware_version)
                 log_info("Firmware flash succeeded.")
                 if show_toasts:

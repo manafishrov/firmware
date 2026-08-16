@@ -12,6 +12,7 @@ class McuData(BaseModel):
 
     erpm: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
     current: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
+    current_valid: list[bool] = [False, False, False, False, False, False, False, False]
     voltage: list[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     temperature: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
     signal_quality: list[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]

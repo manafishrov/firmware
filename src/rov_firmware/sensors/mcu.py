@@ -30,7 +30,6 @@ from ..constants import (
     MCU_TELEMETRY_TYPE_VOLTAGE,
     MCU_VERSION_PACKET_SIZE,
     MCU_VERSION_START_BYTE,
-    MOTORS_PER_BUS,
     NUM_MOTORS,
 )
 from ..esc_firmware import (
@@ -40,7 +39,7 @@ from ..esc_firmware import (
     resolve_esc_firmware,
 )
 from ..log import log_error, log_info, log_warn
-from ..models.config import CurrentSensingMode, ThrusterProtocol
+from ..models.config import ThrusterProtocol
 from ..models.log import LogLevel, LogOrigin
 from ..rov_state import RovState
 from ..serial import SerialManager
@@ -108,7 +107,9 @@ class McuSensor:
         ]
         self._startup_time: float = time.monotonic()
         self._flash_task: asyncio.Task[None] | None = None
+        self._mcu_auto_flash_attempted = False
         self._esc_firmware_flash_task: asyncio.Task[None] | None = None
+        self._esc_auto_flash_attempted = False
         self._esc_firmware_reconcile_task: asyncio.Task[None] | None = None
         self._esc_version_lengths: list[int | None] = [None] * NUM_MOTORS
         self._esc_version_buffers: list[bytearray] = [
@@ -390,6 +391,9 @@ class McuSensor:
         if self._flash_task is not None and not self._flash_task.done():
             return
 
+        if self._mcu_auto_flash_attempted:
+            return
+
         if not self._auto_update_window_open():
             log_warn(
                 f"MCU firmware mismatch ({current_version} != {expected_version}) detected, "
@@ -400,6 +404,7 @@ class McuSensor:
         log_warn(
             f"MCU firmware mismatch: current is {current_version}, expected is {expected_version}. Auto-flashing."
         )
+        self._mcu_auto_flash_attempted = True
         self._flash_task = asyncio.get_running_loop().create_task(self._flash_mcu())
 
     async def _flash_mcu(self) -> None:
@@ -421,7 +426,7 @@ class McuSensor:
             return
         if self.state.mcu_flashing:
             return
-        if (
+        if self._esc_auto_flash_attempted or (
             self._esc_firmware_flash_task is not None
             and not self._esc_firmware_flash_task.done()
         ):
@@ -440,6 +445,7 @@ class McuSensor:
         log_warn(
             f"ESC firmware {version} has not been applied. Auto-flashing all ESCs."
         )
+        self._esc_auto_flash_attempted = True
         self._esc_firmware_flash_task = loop.create_task(self._flash_esc_firmware())
 
     async def _flash_esc_firmware(self) -> None:
@@ -483,6 +489,8 @@ class McuSensor:
     def _clear_telemetry_item(self, global_id: int, packet_type: int) -> None:
         field = _TELEMETRY_FIELDS[packet_type]
         getattr(self.state.mcu_telemetry, field)[global_id] = 0
+        if packet_type == MCU_TELEMETRY_TYPE_CURRENT:
+            self.state.mcu_telemetry.current_valid[global_id] = False
         self._last_telemetry_time[global_id][packet_type] = 0.0
 
     def _update_telemetry(self, packet: bytes | bytearray | memoryview) -> None:
@@ -522,15 +530,12 @@ class McuSensor:
             elif packet_type == MCU_TELEMETRY_TYPE_TEMPERATURE:
                 self.state.mcu_telemetry.temperature[global_id] = value
             elif packet_type == MCU_TELEMETRY_TYPE_CURRENT:
-                if (
-                    self.state.rov_config.current_sensing_mode
-                    == CurrentSensingMode.SHARED_BUS
-                ):
-                    self.state.mcu_telemetry.current[global_id] = (
-                        value // MOTORS_PER_BUS
-                    )
-                else:
-                    self.state.mcu_telemetry.current[global_id] = value
+                # EDT current is already in whole amperes. Preserve the raw reading
+                # here so changing the configured sensor topology cannot leave a mix
+                # of divided and undivided samples in state. Shared-bus de-duplication
+                # belongs at aggregation time.
+                self.state.mcu_telemetry.current[global_id] = max(0, value)
+                self.state.mcu_telemetry.current_valid[global_id] = True
             elif packet_type == MCU_TELEMETRY_TYPE_SIGNAL_QUALITY:
                 self.state.mcu_telemetry.signal_quality[global_id] = value / 100
 

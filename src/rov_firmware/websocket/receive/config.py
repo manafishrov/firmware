@@ -99,6 +99,59 @@ async def _restart_firmware() -> bool:
     return True
 
 
+async def _apply_connection_change(
+    state: RovState,
+    previous_config: RovConfig,
+) -> bool:
+    """Apply connection settings, restoring the persisted config on failure."""
+    ip_changed = state.rov_config.ip_address != previous_config.ip_address
+    port_changed = state.rov_config.websocket_port != previous_config.websocket_port
+    if not ip_changed and not port_changed:
+        return True
+
+    if ip_changed:
+        toast_info(
+            identifier=None,
+            content=ToastContent(message_key="toasts_rov_ip_address_changing"),
+            action=None,
+        )
+        applied = await asyncio.to_thread(
+            _apply_ip_address,
+            state.rov_config.ip_address,
+        )
+    else:
+        applied = True
+
+    if applied and port_changed:
+        applied = await _restart_firmware()
+
+    if applied:
+        return True
+
+    failed_ip = state.rov_config.ip_address
+    state.rov_config = previous_config
+    state.rov_config.save()
+    log_warn("Restored the previous ROV connection config after apply failure.")
+
+    if ip_changed:
+        rollback_applied = await asyncio.to_thread(
+            _apply_ip_address,
+            previous_config.ip_address,
+        )
+        if not rollback_applied:
+            log_warn(
+                f"Could not restore network address {previous_config.ip_address} "
+                f"after failed change to {failed_ip}."
+            )
+
+    toast_warn(
+        identifier=None,
+        content=ToastContent(message_key="toasts_rov_connection_restart_failed"),
+        action=None,
+    )
+    return False
+
+
 def _apply_camera() -> None:
     _run_apply_command(
         "manafish-camera",
@@ -117,9 +170,8 @@ async def handle_set_config(
         state: The ROV state.
         payload: Partial ROV configuration update.
     """
-    old_ip = state.rov_config.ip_address
-    old_websocket_port = state.rov_config.websocket_port
-    previous_camera = state.rov_config.camera
+    previous_config = state.rov_config.model_copy(deep=True)
+    previous_camera = previous_config.camera
     current_data = state.rov_config.model_dump(by_alias=False)
     update_data = payload.model_dump(by_alias=False, include=payload.model_fields_set)
     if payload.camera is not None:
@@ -132,33 +184,13 @@ async def handle_set_config(
     state.rov_config = RovConfig.model_validate(current_data)
     state.rov_config.save()
     log_info("Received and applied config update.")
-    connection_restart_failed = False
+    if not await _apply_connection_change(state, previous_config):
+        await get_message_queue().put(Config(payload=state.rov_config))
+        return
 
-    if state.rov_config.ip_address != old_ip:
-        toast_info(
-            identifier=None,
-            content=ToastContent(message_key="toasts_rov_ip_address_changing"),
-            action=None,
-        )
-        connection_restart_failed = not await asyncio.to_thread(
-            _apply_ip_address,
-            state.rov_config.ip_address,
-        )
-    elif state.rov_config.websocket_port != old_websocket_port:
-        connection_restart_failed = not await _restart_firmware()
-
+    await get_message_queue().put(Config(payload=state.rov_config))
     if state.rov_config.camera != previous_camera:
         _apply_camera()
-
-    if connection_restart_failed:
-        toast_warn(
-            identifier=None,
-            content=ToastContent(
-                message_key="toasts_rov_connection_restart_failed",
-            ),
-            action=None,
-        )
-        return
 
     toast_success(
         identifier=None,
@@ -202,9 +234,8 @@ async def handle_import_config(
         payload: Raw config dictionary from the app, possibly from an older or
             newer firmware version.
     """
-    old_ip = state.rov_config.ip_address
-    old_websocket_port = state.rov_config.websocket_port
-    previous_camera = state.rov_config.camera
+    previous_config = state.rov_config.model_copy(deep=True)
+    previous_camera = previous_config.camera
     migration_input = dict(payload)
     board_was_omitted = "mcuBoard" not in migration_input
     if board_was_omitted:
@@ -228,37 +259,16 @@ async def handle_import_config(
     new_config.firmware_version = state.rov_config.firmware_version
     state.rov_config = new_config
     state.rov_config.save()
-    await get_message_queue().put(Config(payload=state.rov_config))
     log_info(
         f"Imported config from app. Skipped fields: {skipped or 'none'}.",
     )
-    connection_restart_failed = False
+    if not await _apply_connection_change(state, previous_config):
+        await get_message_queue().put(Config(payload=state.rov_config))
+        return
 
-    if state.rov_config.ip_address != old_ip:
-        toast_info(
-            identifier=None,
-            content=ToastContent(message_key="toasts_rov_ip_address_changing"),
-            action=None,
-        )
-        connection_restart_failed = not await asyncio.to_thread(
-            _apply_ip_address,
-            state.rov_config.ip_address,
-        )
-    elif state.rov_config.websocket_port != old_websocket_port:
-        connection_restart_failed = not await _restart_firmware()
-
+    await get_message_queue().put(Config(payload=state.rov_config))
     if state.rov_config.camera != previous_camera:
         _apply_camera()
-
-    if connection_restart_failed:
-        toast_warn(
-            identifier=None,
-            content=ToastContent(
-                message_key="toasts_rov_connection_restart_failed",
-            ),
-            action=None,
-        )
-        return
 
     if skipped:
         toast_warn(

@@ -48,7 +48,7 @@
       flake = false;
     };
     esc-firmware = {
-      url = "https://github.com/manafishrov/AM32/releases/download/v2.20.0-rc.3/AM32_SKYSTARS_AM60_V2_F421_2.20.0.bin";
+      url = "https://github.com/manafishrov/AM32/releases/download/v2.21.0-rc.1/AM32_SKYSTARS_AM60_V2_F421_2.21.0.bin";
       flake = false;
     };
   };

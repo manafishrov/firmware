@@ -129,6 +129,22 @@ class ToggleDepthHold(CamelCaseModel):
     type: Literal[MessageType.TOGGLE_DEPTH_HOLD] = MessageType.TOGGLE_DEPTH_HOLD
 
 
+class SetAutoStabilization(CamelCaseModel):
+    """WebSocket message for setting auto stabilization idempotently."""
+
+    type: Literal[MessageType.SET_AUTO_STABILIZATION] = (
+        MessageType.SET_AUTO_STABILIZATION
+    )
+    payload: bool
+
+
+class SetDepthHold(CamelCaseModel):
+    """WebSocket message for setting depth hold idempotently."""
+
+    type: Literal[MessageType.SET_DEPTH_HOLD] = MessageType.SET_DEPTH_HOLD
+    payload: bool
+
+
 class SetDesiredDepth(CamelCaseModel):
     """WebSocket message for setting the desired depth."""
 
@@ -167,6 +183,8 @@ WebsocketMessage = Annotated[
     | CustomAction
     | ToggleAutoStabilization
     | ToggleDepthHold
+    | SetAutoStabilization
+    | SetDepthHold
     | SetDesiredDepth
     | FlashMcuFirmware
     | FlashEscFirmware,
