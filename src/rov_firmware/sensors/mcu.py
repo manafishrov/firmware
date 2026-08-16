@@ -30,7 +30,6 @@ from ..constants import (
     MCU_TELEMETRY_TYPE_VOLTAGE,
     MCU_VERSION_PACKET_SIZE,
     MCU_VERSION_START_BYTE,
-    MOTORS_PER_BUS,
     NUM_MOTORS,
 )
 from ..esc_firmware import (
@@ -40,7 +39,7 @@ from ..esc_firmware import (
     resolve_esc_firmware,
 )
 from ..log import log_error, log_info, log_warn
-from ..models.config import CurrentSensingMode, ThrusterProtocol
+from ..models.config import ThrusterProtocol
 from ..models.log import LogLevel, LogOrigin
 from ..rov_state import RovState
 from ..serial import SerialManager
@@ -483,6 +482,8 @@ class McuSensor:
     def _clear_telemetry_item(self, global_id: int, packet_type: int) -> None:
         field = _TELEMETRY_FIELDS[packet_type]
         getattr(self.state.mcu_telemetry, field)[global_id] = 0
+        if packet_type == MCU_TELEMETRY_TYPE_CURRENT:
+            self.state.mcu_telemetry.current_valid[global_id] = False
         self._last_telemetry_time[global_id][packet_type] = 0.0
 
     def _update_telemetry(self, packet: bytes | bytearray | memoryview) -> None:
@@ -522,15 +523,12 @@ class McuSensor:
             elif packet_type == MCU_TELEMETRY_TYPE_TEMPERATURE:
                 self.state.mcu_telemetry.temperature[global_id] = value
             elif packet_type == MCU_TELEMETRY_TYPE_CURRENT:
-                if (
-                    self.state.rov_config.current_sensing_mode
-                    == CurrentSensingMode.SHARED_BUS
-                ):
-                    self.state.mcu_telemetry.current[global_id] = (
-                        value // MOTORS_PER_BUS
-                    )
-                else:
-                    self.state.mcu_telemetry.current[global_id] = value
+                # EDT current is already in whole amperes. Preserve the raw reading
+                # here so changing the configured sensor topology cannot leave a mix
+                # of divided and undivided samples in state. Shared-bus de-duplication
+                # belongs at aggregation time.
+                self.state.mcu_telemetry.current[global_id] = max(0, value)
+                self.state.mcu_telemetry.current_valid[global_id] = True
             elif packet_type == MCU_TELEMETRY_TYPE_SIGNAL_QUALITY:
                 self.state.mcu_telemetry.signal_quality[global_id] = value / 100
 

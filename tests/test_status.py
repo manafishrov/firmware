@@ -1,3 +1,4 @@
+from rov_firmware.models.config import CurrentSensingMode
 from rov_firmware.websocket.send import status
 
 
@@ -18,3 +19,51 @@ def test_status_reports_read_only_device_versions(rov_state):
 
     assert payload["deviceInfo"]["mcuFirmwareVersion"] == "1.2.3-rc.1"
     assert payload["deviceInfo"]["escFirmwareVersions"] == ["2.20.0-rc.3"] * 8
+
+
+def test_status_counts_each_shared_current_bus_once(rov_state):
+    rov_state.rov_config.current_sensing_mode = CurrentSensingMode.SHARED_BUS
+    rov_state.mcu_telemetry.current = [3, 3, 3, 3, 7, 7, 7, 7]
+    rov_state.mcu_telemetry.current_valid = [True] * 8
+
+    payload = status.build_status_update(rov_state).payload
+
+    assert payload.current_draw == 10
+
+
+def test_status_averages_only_fresh_shared_bus_readings(rov_state):
+    rov_state.rov_config.current_sensing_mode = CurrentSensingMode.SHARED_BUS
+    rov_state.mcu_telemetry.current = [2, 3, 0, 0, 8, 0, 0, 0]
+    rov_state.mcu_telemetry.current_valid = [
+        True,
+        True,
+        False,
+        False,
+        True,
+        False,
+        False,
+        False,
+    ]
+
+    payload = status.build_status_update(rov_state).payload
+
+    assert payload.current_draw == 11
+
+
+def test_status_sums_fresh_per_motor_current(rov_state):
+    rov_state.rov_config.current_sensing_mode = CurrentSensingMode.PER_MOTOR
+    rov_state.mcu_telemetry.current = [1, 2, 3, 4, 5, 6, 7, 8]
+    rov_state.mcu_telemetry.current_valid = [
+        True,
+        True,
+        False,
+        True,
+        True,
+        True,
+        True,
+        True,
+    ]
+
+    payload = status.build_status_update(rov_state).payload
+
+    assert payload.current_draw == 33

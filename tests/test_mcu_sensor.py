@@ -82,7 +82,26 @@ def test_signal_quality_updates_do_not_keep_stale_current_alive(rov_state, monke
     sensor._expire_stale_telemetry()
 
     assert rov_state.mcu_telemetry.current[0] == 0
+    assert rov_state.mcu_telemetry.current_valid[0] is False
     assert rov_state.mcu_telemetry.signal_quality[0] == 100
+
+
+def test_current_telemetry_preserves_raw_edt_amperes(rov_state):
+    sensor = McuSensor(rov_state, SerialManager(rov_state))
+
+    sensor._update_telemetry_item(2, MCU_TELEMETRY_TYPE_CURRENT, 3)
+
+    assert rov_state.mcu_telemetry.current[2] == 3
+    assert rov_state.mcu_telemetry.current_valid[2] is True
+
+
+def test_current_telemetry_rejects_negative_usb_values(rov_state):
+    sensor = McuSensor(rov_state, SerialManager(rov_state))
+
+    sensor._update_telemetry_item(2, MCU_TELEMETRY_TYPE_CURRENT, -1)
+
+    assert rov_state.mcu_telemetry.current[2] == 0
+    assert rov_state.mcu_telemetry.current_valid[2] is True
 
 
 def test_esc_firmware_version_is_assembled_from_live_telemetry(rov_state, monkeypatch):
