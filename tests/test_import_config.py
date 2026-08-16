@@ -158,7 +158,9 @@ def test_import_restarts_firmware_when_websocket_port_changed(rov_state, monkeyp
     assert restart_calls == [None]
 
 
-def test_import_applies_network_once_when_ip_and_port_changed(rov_state, monkeypatch):
+def test_import_applies_network_then_restarts_when_ip_and_port_changed(
+    rov_state, monkeypatch
+):
     network_calls: list[str] = []
     restart_calls: list[None] = []
 
@@ -178,4 +180,4 @@ def test_import_applies_network_once_when_ip_and_port_changed(rov_state, monkeyp
     asyncio.run(handle_import_config(rov_state, payload))
 
     assert network_calls == ["10.10.11.10"]
-    assert restart_calls == []
+    assert restart_calls == [None]

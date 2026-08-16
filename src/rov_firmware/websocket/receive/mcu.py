@@ -134,7 +134,7 @@ def _resolve_picotool_path() -> str | None:
 
 
 def _process_flash_output(
-    process: subprocess.Popen[str], toast_identifier: str
+    process: subprocess.Popen[str], toast_identifier: str, show_toasts: bool
 ) -> tuple[int, str, bool]:
     if process.stdout is None:
         return -1, "", False
@@ -150,7 +150,12 @@ def _process_flash_output(
         if output:
             line = output.rstrip()
             all_output.append(line)
-            percent = _update_load_progress(line, percent, toast_identifier)
+            percent = _update_load_progress(
+                line,
+                percent,
+                toast_identifier,
+                show_toasts=show_toasts,
+            )
             verification_reached_100, verification_succeeded = (
                 _update_verification_status(
                     line,
@@ -173,18 +178,25 @@ def _picotool_progress(line: str, prefix: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def _update_load_progress(line: str, percent: int, toast_identifier: str) -> int:
+def _update_load_progress(
+    line: str,
+    percent: int,
+    toast_identifier: str,
+    *,
+    show_toasts: bool,
+) -> int:
     new_percent = _picotool_progress(line, "Loading into Flash:")
     if new_percent is None or new_percent == percent:
         return percent
-    toast_loading(
-        identifier=toast_identifier,
-        content=ToastContent(
-            message_key="toasts_flash_in_progress",
-            message_args={"percent": new_percent},
-        ),
-        action=None,
-    )
+    if show_toasts:
+        toast_loading(
+            identifier=toast_identifier,
+            content=ToastContent(
+                message_key="toasts_flash_in_progress",
+                message_args={"percent": new_percent},
+            ),
+            action=None,
+        )
     return new_percent
 
 
@@ -259,7 +271,11 @@ async def flash_mcu_firmware(
             )
             loop = asyncio.get_running_loop()
             rc, output, verification_succeeded = await loop.run_in_executor(
-                None, _process_flash_output, process, toast_identifier
+                None,
+                _process_flash_output,
+                process,
+                toast_identifier,
+                show_toasts,
             )
 
             if _flash_write_completed(rc, verification_succeeded):

@@ -120,6 +120,9 @@ async def _apply_connection_change(
             state.rov_config.ip_address,
         )
     else:
+        applied = True
+
+    if applied and port_changed:
         applied = await _restart_firmware()
 
     if applied:

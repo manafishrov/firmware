@@ -96,3 +96,38 @@ def test_verification_requires_complete_progress_followed_by_ok():
     )
     assert reached_100
     assert succeeded
+
+
+def test_load_progress_is_tracked_without_a_toast_when_hidden(monkeypatch):
+    toast_calls: list[None] = []
+    monkeypatch.setattr(
+        mcu, "toast_loading", lambda **_kwargs: toast_calls.append(None)
+    )
+
+    percent = mcu._update_load_progress(
+        "Loading into Flash: [===============] 50%",
+        0,
+        "firmware-flash",
+        show_toasts=False,
+    )
+
+    assert percent == 50
+    assert toast_calls == []
+
+
+def test_load_progress_emits_a_toast_when_visible(monkeypatch):
+    toast_calls: list[dict] = []
+    monkeypatch.setattr(
+        mcu, "toast_loading", lambda **kwargs: toast_calls.append(kwargs)
+    )
+
+    percent = mcu._update_load_progress(
+        "Loading into Flash: [===============] 50%",
+        0,
+        "firmware-flash",
+        show_toasts=True,
+    )
+
+    assert percent == 50
+    assert len(toast_calls) == 1
+    assert toast_calls[0]["identifier"] == "firmware-flash"
