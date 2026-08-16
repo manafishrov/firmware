@@ -27,10 +27,28 @@ from .receive.regulator import (
     handle_start_regulator_auto_tuning,
 )
 from .receive.state import (
+    handle_set_auto_stabilization,
+    handle_set_depth_hold,
     handle_toggle_auto_stabilization,
     handle_toggle_depth_hold,
 )
 from .types import MessageType
+
+
+async def _handle_state_payload_message(
+    state: RovState,
+    payload: object,
+    message_type: MessageType,
+) -> bool:
+    match message_type:
+        case MessageType.SET_AUTO_STABILIZATION:
+            await handle_set_auto_stabilization(state, cast(bool, payload))
+        case MessageType.SET_DEPTH_HOLD:
+            await handle_set_depth_hold(state, cast(bool, payload))
+        case _:
+            return False
+
+    return True
 
 
 async def _handle_payload_message(
@@ -56,7 +74,7 @@ async def _handle_payload_message(
         case MessageType.SET_DESIRED_DEPTH:
             await handle_set_desired_depth(state, cast(float, payload))
         case _:
-            return False
+            return await _handle_state_payload_message(state, payload, message.type)
 
     return True
 

@@ -66,3 +66,33 @@ def test_unmarked_matching_stable_does_not_flash(tmp_path, monkeypatch):
     (tmp_path / "mcu-firmware").mkdir()
 
     assert not mcu.mcu_update_required(McuBoard.PICO2, "1.0.3", "1.0.3")
+
+
+def test_verified_picotool_write_survives_execute_failure():
+    assert mcu._flash_write_completed(return_code=1, verification_succeeded=True)
+
+
+def test_successful_picotool_exit_does_not_need_fallback():
+    assert mcu._flash_write_completed(return_code=0, verification_succeeded=False)
+
+
+def test_unverified_picotool_write_remains_a_failure():
+    assert not mcu._flash_write_completed(return_code=1, verification_succeeded=False)
+
+
+def test_verification_requires_complete_progress_followed_by_ok():
+    reached_100, succeeded = mcu._update_verification_status(
+        "Verifying Flash: [==============================] 100%",
+        reached_100=False,
+        succeeded=False,
+    )
+    assert reached_100
+    assert not succeeded
+
+    reached_100, succeeded = mcu._update_verification_status(
+        "  OK",
+        reached_100=reached_100,
+        succeeded=succeeded,
+    )
+    assert reached_100
+    assert succeeded

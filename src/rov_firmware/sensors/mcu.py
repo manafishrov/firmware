@@ -107,7 +107,9 @@ class McuSensor:
         ]
         self._startup_time: float = time.monotonic()
         self._flash_task: asyncio.Task[None] | None = None
+        self._mcu_auto_flash_attempted = False
         self._esc_firmware_flash_task: asyncio.Task[None] | None = None
+        self._esc_auto_flash_attempted = False
         self._esc_firmware_reconcile_task: asyncio.Task[None] | None = None
         self._esc_version_lengths: list[int | None] = [None] * NUM_MOTORS
         self._esc_version_buffers: list[bytearray] = [
@@ -389,6 +391,9 @@ class McuSensor:
         if self._flash_task is not None and not self._flash_task.done():
             return
 
+        if self._mcu_auto_flash_attempted:
+            return
+
         if not self._auto_update_window_open():
             log_warn(
                 f"MCU firmware mismatch ({current_version} != {expected_version}) detected, "
@@ -399,6 +404,7 @@ class McuSensor:
         log_warn(
             f"MCU firmware mismatch: current is {current_version}, expected is {expected_version}. Auto-flashing."
         )
+        self._mcu_auto_flash_attempted = True
         self._flash_task = asyncio.get_running_loop().create_task(self._flash_mcu())
 
     async def _flash_mcu(self) -> None:
@@ -420,7 +426,7 @@ class McuSensor:
             return
         if self.state.mcu_flashing:
             return
-        if (
+        if self._esc_auto_flash_attempted or (
             self._esc_firmware_flash_task is not None
             and not self._esc_firmware_flash_task.done()
         ):
@@ -439,6 +445,7 @@ class McuSensor:
         log_warn(
             f"ESC firmware {version} has not been applied. Auto-flashing all ESCs."
         )
+        self._esc_auto_flash_attempted = True
         self._esc_firmware_flash_task = loop.create_task(self._flash_esc_firmware())
 
     async def _flash_esc_firmware(self) -> None:

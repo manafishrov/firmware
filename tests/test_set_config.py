@@ -174,7 +174,13 @@ def test_set_config_reports_network_apply_failure_without_success(
 ):
     success_calls: list[None] = []
     warning_keys: list[str] = []
-    monkeypatch.setattr(config_handlers, "_apply_ip_address", lambda _address: False)
+    network_calls: list[str] = []
+
+    def apply_ip_address(address: str) -> bool:
+        network_calls.append(address)
+        return False
+
+    monkeypatch.setattr(config_handlers, "_apply_ip_address", apply_ip_address)
     monkeypatch.setattr(
         config_handlers,
         "toast_success",
@@ -191,6 +197,9 @@ def test_set_config_reports_network_apply_failure_without_success(
 
     assert success_calls == []
     assert warning_keys == ["toasts_rov_connection_restart_failed"]
+    assert network_calls == ["10.10.11.10", "10.10.10.10"]
+    assert rov_state.rov_config.ip_address == "10.10.10.10"
+    assert RovConfig.load().ip_address == "10.10.10.10"
 
 
 def test_set_config_reports_restart_failure_without_success(rov_state, monkeypatch):
@@ -217,3 +226,5 @@ def test_set_config_reports_restart_failure_without_success(rov_state, monkeypat
 
     assert success_calls == []
     assert warning_keys == ["toasts_rov_connection_restart_failed"]
+    assert rov_state.rov_config.websocket_port == 9000
+    assert RovConfig.load().websocket_port == 9000
