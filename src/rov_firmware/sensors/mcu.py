@@ -13,9 +13,12 @@ from ..constants import (
     LOG_PACKET_START_BYTE,
     MCU_AUTO_UPDATE_WINDOW_S,
     MCU_PROTOCOL_DSHOT,
+    MCU_PROTOCOL_PWM,
     MCU_RELEASE_VERSION_MAX_LENGTH,
     MCU_RELEASE_VERSION_PACKET_OVERHEAD,
     MCU_RELEASE_VERSION_START_BYTE,
+    MCU_RUNTIME_CONFIG_STATUS_PACKET_SIZE,
+    MCU_RUNTIME_CONFIG_STATUS_START_BYTE,
     MCU_SERIAL_READ_TIMEOUT_S,
     MCU_TELEMETRY_BATCH_ENTRY_SIZE,
     MCU_TELEMETRY_BATCH_MAX_ITEMS,
@@ -31,8 +34,6 @@ from ..constants import (
     MCU_TELEMETRY_TYPE_SIGNAL_QUALITY,
     MCU_TELEMETRY_TYPE_TEMPERATURE,
     MCU_TELEMETRY_TYPE_VOLTAGE,
-    MCU_VERSION_PACKET_SIZE,
-    MCU_VERSION_START_BYTE,
     NUM_MOTORS,
 )
 from ..esc_firmware import (
@@ -61,7 +62,9 @@ _TELEMETRY_BATCH_MIN_PACKET_SIZE = 3
 _TELEMETRY_START_TOKEN = bytes((MCU_TELEMETRY_START_BYTE,))
 _TELEMETRY_BATCH_START_TOKEN = bytes((MCU_TELEMETRY_BATCH_START_BYTE,))
 _LOG_PACKET_START_TOKEN = bytes((LOG_PACKET_START_BYTE,))
-_VERSION_PACKET_START_TOKEN = bytes((MCU_VERSION_START_BYTE,))
+_RUNTIME_CONFIG_STATUS_PACKET_START_TOKEN = bytes(
+    (MCU_RUNTIME_CONFIG_STATUS_START_BYTE,)
+)
 _RELEASE_VERSION_PACKET_START_TOKEN = bytes((MCU_RELEASE_VERSION_START_BYTE,))
 _TELEMETRY_FIELDS = ("erpm", "voltage", "temperature", "current", "signal_quality")
 _ESC_VERSION_DISCOVERY_DELAY_S = 2.0
@@ -213,8 +216,8 @@ class McuSensor:
             return self._try_consume_telemetry(read_buffer, start_idx)
         if packet_type == LOG_PACKET_START_BYTE:
             return self._try_consume_log(read_buffer, start_idx)
-        if packet_type == MCU_VERSION_START_BYTE:
-            return self._try_consume_version(read_buffer, start_idx)
+        if packet_type == MCU_RUNTIME_CONFIG_STATUS_START_BYTE:
+            return self._try_consume_runtime_config_status(read_buffer, start_idx)
         if packet_type == MCU_RELEASE_VERSION_START_BYTE:
             return self._try_consume_release_version(read_buffer, start_idx)
         return start_idx + 1
@@ -264,15 +267,15 @@ class McuSensor:
             McuSensor._handle_log_packet(packet)
         return end_idx
 
-    def _try_consume_version(
+    def _try_consume_runtime_config_status(
         self, read_buffer: bytearray, start_idx: int
     ) -> int | None:
-        end_idx = start_idx + MCU_VERSION_PACKET_SIZE
+        end_idx = start_idx + MCU_RUNTIME_CONFIG_STATUS_PACKET_SIZE
         if len(read_buffer) < end_idx:
             return None
         packet = memoryview(read_buffer)[start_idx:end_idx]
-        if self._validate_version_packet(packet):
-            self._handle_version_packet(packet)
+        if self._validate_runtime_config_status_packet(packet):
+            self._handle_runtime_config_status_packet(packet)
         return end_idx
 
     def _try_consume_release_version(
@@ -298,7 +301,7 @@ class McuSensor:
             buf.find(_TELEMETRY_START_TOKEN, start),
             buf.find(_TELEMETRY_BATCH_START_TOKEN, start),
             buf.find(_LOG_PACKET_START_TOKEN, start),
-            buf.find(_VERSION_PACKET_START_TOKEN, start),
+            buf.find(_RUNTIME_CONFIG_STATUS_PACKET_START_TOKEN, start),
             buf.find(_RELEASE_VERSION_PACKET_START_TOKEN, start),
         )
         valid_candidates = [idx for idx in candidates if idx >= 0]
@@ -355,10 +358,13 @@ class McuSensor:
         return calculated_checksum == packet[-1]
 
     @staticmethod
-    def _validate_version_packet(packet: bytes | bytearray | memoryview) -> bool:
+    def _validate_runtime_config_status_packet(
+        packet: bytes | bytearray | memoryview,
+    ) -> bool:
         if (
-            len(packet) != MCU_VERSION_PACKET_SIZE
-            or packet[0] != MCU_VERSION_START_BYTE
+            len(packet) != MCU_RUNTIME_CONFIG_STATUS_PACKET_SIZE
+            or packet[0] != MCU_RUNTIME_CONFIG_STATUS_START_BYTE
+            or packet[1] not in (MCU_PROTOCOL_PWM, MCU_PROTOCOL_DSHOT)
         ):
             return False
         calculated_checksum = 0
@@ -428,26 +434,20 @@ class McuSensor:
         log_fn = _LOG_FN_MAP[level]
         log_fn(message, origin=LogOrigin.MCU)
 
-    def _handle_version_packet(self, packet: bytes | bytearray | memoryview) -> None:
-        version = f"{packet[1]}.{packet[2]}.{packet[3]}"
+    def _handle_runtime_config_status_packet(
+        self, packet: bytes | bytearray | memoryview
+    ) -> None:
         protocol = (
             ThrusterProtocol.DSHOT
-            if packet[4] == MCU_PROTOCOL_DSHOT
+            if packet[1] == MCU_PROTOCOL_DSHOT
             else ThrusterProtocol.PWM
         )
-        dshot_speed = packet[5] | (packet[6] << 8)
+        dshot_speed = packet[2] | (packet[3] << 8)
         acknowledged_config = (protocol.value, dshot_speed)
         protocol_changed = (
             self.serial_manager.mcu_protocol_config != acknowledged_config
         )
         self.serial_manager.record_mcu_protocol_config(*acknowledged_config)
-
-        if not self.state.device_info.mcu_firmware_version:
-            # MCU builds predating exact release reporting only send the numeric
-            # packet. Treat that identity as a migration input so they can be
-            # upgraded to a build that reports the full release version.
-            self.state.device_info.mcu_firmware_version = version
-            self._auto_update_mcu_if_needed(version, self._get_expected_version())
 
         if protocol_changed:
             self._reset_telemetry()

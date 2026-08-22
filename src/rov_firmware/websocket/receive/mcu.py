@@ -52,14 +52,6 @@ def resolve_mcu_firmware(board: McuBoard) -> tuple[Path, str] | None:
     return max(candidates, key=lambda candidate: semver_sort_key(candidate[1]))
 
 
-def _remove_legacy_flashed_version_marker(board: McuBoard) -> None:
-    marker = Path.home() / "mcu-firmware" / f".{_BOARD_PREFIXES[board]}-flashed-version"
-    try:
-        marker.unlink(missing_ok=True)
-    except OSError as error:
-        log_warn(f"Could not remove legacy MCU flashed-version marker: {error}")
-
-
 def _report_flash_error(
     message: str,
     *,
@@ -246,7 +238,6 @@ async def flash_mcu_firmware(
                         "execute/reconnect step failed."
                     )
                 log_info("Firmware flash succeeded.")
-                _remove_legacy_flashed_version_marker(board)
                 if show_toasts:
                     toast_success(
                         identifier=toast_identifier,
