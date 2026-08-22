@@ -12,7 +12,8 @@ from ...models.config import PartialRovConfig, RovConfig, apply_migrations
 from ...rov_state import RovState
 from ...toast import ToastContent, toast_info, toast_success, toast_warn
 from ..message import Config
-from ..queue import get_message_queue
+from ..queue import get_message_queue, send_message_and_wait
+from ..state import websocket_state
 
 
 _DEVICE_REPORTED_FIELDS = ("firmwareVersion",)
@@ -122,7 +123,9 @@ async def _apply_connection_change(
     else:
         applied = True
 
-    if applied and port_changed:
+    # The network helper already restarts the firmware after changing the
+    # address. That single restart also applies a simultaneous port change.
+    if applied and port_changed and not ip_changed:
         applied = await _restart_firmware()
 
     if applied:
@@ -150,6 +153,50 @@ async def _apply_connection_change(
         action=None,
     )
     return False
+
+
+def _connection_changed(current: RovConfig, previous: RovConfig) -> bool:
+    return (
+        current.ip_address != previous.ip_address
+        or current.websocket_port != previous.websocket_port
+    )
+
+
+async def _send_config_before_connection_change(state: RovState) -> None:
+    message = Config(payload=state.rov_config)
+    if websocket_state.is_client_connected:
+        await send_message_and_wait(message)
+    else:
+        await get_message_queue().put(message)
+
+
+async def _restore_after_config_send_failure(
+    state: RovState, previous_config: RovConfig, error: Exception
+) -> None:
+    state.rov_config = previous_config
+    state.rov_config.save()
+    log_warn(
+        f"Did not apply connection settings because config acknowledgement failed: {error}"
+    )
+    await get_message_queue().put(Config(payload=state.rov_config))
+    toast_warn(
+        identifier=None,
+        content=ToastContent(message_key="toasts_rov_connection_restart_failed"),
+        action=None,
+    )
+
+
+async def _confirm_connection_config(
+    state: RovState, previous_config: RovConfig
+) -> bool:
+    if not _connection_changed(state.rov_config, previous_config):
+        return True
+    try:
+        await _send_config_before_connection_change(state)
+    except Exception as error:
+        await _restore_after_config_send_failure(state, previous_config, error)
+        return False
+    return True
 
 
 def _apply_camera() -> None:
@@ -184,13 +231,17 @@ async def handle_set_config(
     state.rov_config = RovConfig.model_validate(current_data)
     state.rov_config.save()
     log_info("Received and applied config update.")
+    connection_changed = _connection_changed(state.rov_config, previous_config)
+    if not await _confirm_connection_config(state, previous_config):
+        return
     if not await _apply_connection_change(state, previous_config):
         await get_message_queue().put(Config(payload=state.rov_config))
         return
 
-    await get_message_queue().put(Config(payload=state.rov_config))
+    if not connection_changed:
+        await get_message_queue().put(Config(payload=state.rov_config))
     if state.rov_config.camera != previous_camera:
-        _apply_camera()
+        await asyncio.to_thread(_apply_camera)
 
     toast_success(
         identifier=None,
@@ -262,13 +313,17 @@ async def handle_import_config(
     log_info(
         f"Imported config from app. Skipped fields: {skipped or 'none'}.",
     )
+    connection_changed = _connection_changed(state.rov_config, previous_config)
+    if not await _confirm_connection_config(state, previous_config):
+        return
     if not await _apply_connection_change(state, previous_config):
         await get_message_queue().put(Config(payload=state.rov_config))
         return
 
-    await get_message_queue().put(Config(payload=state.rov_config))
+    if not connection_changed:
+        await get_message_queue().put(Config(payload=state.rov_config))
     if state.rov_config.camera != previous_camera:
-        _apply_camera()
+        await asyncio.to_thread(_apply_camera)
 
     if skipped:
         toast_warn(

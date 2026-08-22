@@ -61,7 +61,7 @@ MOCK_CONFIG: dict[str, Any] = {
     "camera": {
         "width": 1440,
         "height": 1080,
-        "framerate": 40,
+        "framerate": 30,
         "cropFov": False,
         "bitrate": 20000000,
         "keyframeInterval": 30,
@@ -98,6 +98,16 @@ SYSTEM_STATUS: dict[str, Any] = {
         "step": None,
         "startTime": None,
     },
+}
+
+ESC_FIRMWARE_UPDATE: dict[str, Any] = {
+    "active": False,
+    "origin": None,
+    "stage": "idle",
+    "progress": 0,
+    "currentEsc": None,
+    "targetVersion": None,
+    "error": None,
 }
 
 THRUSTER_TEST_TOAST_ID = "thruster-test"
@@ -208,8 +218,9 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     },
                     "deviceInfo": {
                         "mcuFirmwareVersion": "1.0.4-rc.1",
-                        "escFirmwareVersions": ["2.20.0-rc.3"] * ESC_COUNT,
+                        "escFirmwareVersions": ["2.21.0-rc.1"] * ESC_COUNT,
                     },
+                    "escFirmwareUpdate": ESC_FIRMWARE_UPDATE,
                 },
             }
             try:
@@ -496,6 +507,15 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
     async def run_flash_esc_firmware() -> None:
         """Simulate uploading, programming, and verifying all eight ESCs."""
         try:
+            ESC_FIRMWARE_UPDATE.update(
+                active=True,
+                origin="manual",
+                stage="preflight",
+                progress=0,
+                currentEsc=None,
+                targetVersion="2.21.0-rc.1",
+                error=None,
+            )
             start_time = time.time()
             last_percent = -1
 
@@ -515,6 +535,11 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                             ((percent - ESC_UPLOAD_PERCENT) * ESC_COUNT)
                             // ESC_PROGRAM_PERCENT,
                         )
+                    ESC_FIRMWARE_UPDATE.update(
+                        stage="uploading" if motor is None else "programming",
+                        progress=percent,
+                        currentEsc=None if motor is None else motor + 1,
+                    )
                     toast_msg = {
                         "type": "showToast",
                         "payload": {
@@ -558,10 +583,26 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     }
                 )
             )
+            ESC_FIRMWARE_UPDATE.update(
+                active=False,
+                stage="succeeded",
+                progress=PERCENT_COMPLETE,
+                currentEsc=None,
+            )
             logger.info("Mock ESC firmware flash complete")
         except asyncio.CancelledError:
+            ESC_FIRMWARE_UPDATE.update(
+                active=False,
+                stage="failed",
+                error="Mock update cancelled",
+            )
             logger.debug("ESC firmware flash cancelled")
         except Exception:
+            ESC_FIRMWARE_UPDATE.update(
+                active=False,
+                stage="failed",
+                error="Mock update failed",
+            )
             logger.exception("Error in mock ESC firmware flash")
 
     async def reject_concurrent_firmware_flash(
@@ -584,7 +625,6 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
     flash_task: asyncio.Task[None] | None = None
 
     try:
-        await asyncio.sleep(5)
         config_msg = {"type": "config", "payload": MOCK_CONFIG}
         await websocket.send(json.dumps(config_msg))
 
@@ -831,6 +871,7 @@ async def main() -> None:
     )
     args = parser.parse_args()
     host = "127.0.0.1" if cast(bool, args.local) else "10.10.10.10"
+    MOCK_CONFIG["ipAddress"] = host
 
     logger = logging.getLogger(__name__)
 

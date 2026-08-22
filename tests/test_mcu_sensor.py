@@ -3,6 +3,7 @@ from pathlib import Path
 from rov_firmware.constants import (
     MCU_AUTO_UPDATE_WINDOW_S,
     MCU_PROTOCOL_DSHOT,
+    MCU_RELEASE_VERSION_START_BYTE,
     MCU_TELEMETRY_TYPE_CURRENT,
     MCU_TELEMETRY_TYPE_ESC_VERSION_CHUNK,
     MCU_TELEMETRY_TYPE_ESC_VERSION_COMPLETE,
@@ -50,6 +51,16 @@ def _version_packet(protocol: int, dshot_speed: int) -> bytes:
     return bytes(packet)
 
 
+def _release_version_packet(version: str) -> bytes:
+    encoded = version.encode("ascii")
+    packet = bytearray([MCU_RELEASE_VERSION_START_BYTE, len(encoded), *encoded])
+    checksum = 0
+    for value in packet:
+        checksum ^= value
+    packet.append(checksum)
+    return bytes(packet)
+
+
 def test_version_packet_acknowledges_mcu_without_reverting_requested_config(
     rov_state, monkeypatch
 ):
@@ -81,9 +92,26 @@ def test_version_packet_does_not_reflash_matching_prerelease_bundle(
 
     monkeypatch.setattr(sensor, "_flash_mcu", unexpected_flash)
 
+    sensor._handle_release_version_packet(_release_version_packet("1.2.3-rc.1"))
     sensor._handle_version_packet(_version_packet(MCU_PROTOCOL_DSHOT, 600))
 
-    assert rov_state.device_info.mcu_firmware_version == "1.2.3"
+    assert rov_state.device_info.mcu_firmware_version == "1.2.3-rc.1"
+
+
+def test_release_version_packet_rejects_legacy_rc_spelling(rov_state):
+    sensor = McuSensor(rov_state, SerialManager(rov_state))
+
+    sensor._handle_release_version_packet(_release_version_packet("1.2.3-rc1"))
+
+    assert rov_state.device_info.mcu_firmware_version == ""
+
+
+def test_release_version_packet_rejects_uppercase_rc_spelling(rov_state):
+    sensor = McuSensor(rov_state, SerialManager(rov_state))
+
+    sensor._handle_release_version_packet(_release_version_packet("1.2.3-RC.1"))
+
+    assert rov_state.device_info.mcu_firmware_version == ""
 
 
 def test_version_mismatch_auto_flashes_only_once_per_service_start(

@@ -17,7 +17,7 @@ from ..rov_state import RovState
 from ..serial import SerialManager
 from .handler import handle_message
 from .message import LogMessage, WebsocketMessage
-from .queue import get_message_queue
+from .queue import ConfirmedMessage, get_message_queue
 from .send.config import build_config
 from .send.status import build_status_update
 from .send.telemetry import build_telemetry
@@ -58,27 +58,17 @@ class WebsocketServer:
         )
 
         send_task = asyncio.create_task(self._send_from_queue())
-        await flush_pending_logs()
-        status_task = asyncio.create_task(self._send_status_periodically())
-        telemetry_task = asyncio.create_task(self._send_telemetry_periodically())
-
-        async def send_config_on_connect() -> None:
-            await asyncio.sleep(5)
-            try:
-                await self.send_frame(build_config(self.state))
-                log_info(
-                    f"Sent config to {cast(tuple[str, int] | None, websocket.remote_address)}"
-                )
-            except ConnectionClosed:
-                log_warn(
-                    f"Client disconnected before config could be sent to {cast(tuple[str, int] | None, websocket.remote_address)}"
-                )
-            except Exception as e:
-                log_error(f"Error sending initial data: {e}")
-
-        config_task = asyncio.create_task(send_config_on_connect())
-
+        status_task: asyncio.Task[None] | None = None
+        telemetry_task: asyncio.Task[None] | None = None
         try:
+            await flush_pending_logs()
+            await self.send_frame(build_config(self.state))
+            log_info(
+                f"Sent config to {cast(tuple[str, int] | None, websocket.remote_address)}"
+            )
+            status_task = asyncio.create_task(self._send_status_periodically())
+            telemetry_task = asyncio.create_task(self._send_telemetry_periodically())
+
             async for message in websocket:
                 try:
                     data = json.loads(message)
@@ -96,11 +86,17 @@ class WebsocketServer:
             log_info(
                 f"Client connection closed: {cast(tuple[str, int] | None, websocket.remote_address)}"
             )
+        except Exception:
+            _logger.exception("WebSocket connection handler failed")
         finally:
-            _ = send_task.cancel()
-            _ = status_task.cancel()
-            _ = telemetry_task.cancel()
-            _ = config_task.cancel()
+            tasks = [send_task]
+            if status_task is not None:
+                tasks.append(status_task)
+            if telemetry_task is not None:
+                tasks.append(telemetry_task)
+            for task in tasks:
+                _ = task.cancel()
+            _ = await asyncio.gather(*tasks, return_exceptions=True)
             self.client = None
             websocket_state.is_client_connected = False
             log_info("Client disconnected.")
@@ -160,10 +156,22 @@ class WebsocketServer:
     async def _send_from_queue(self) -> None:
         try:
             while True:
-                message = await get_message_queue().get()
+                queued = await get_message_queue().get()
                 try:
-                    await self.send_frame(message)
+                    if isinstance(queued, ConfirmedMessage):
+                        if queued.sent.cancelled():
+                            continue
+                        if self.client is None:
+                            msg = "No WebSocket client is available for a confirmed message"
+                            raise ConnectionError(msg)
+                        await self.send_frame(queued.message)
+                        if not queued.sent.done():
+                            queued.sent.set_result(None)
+                    else:
+                        await self.send_frame(queued)
                 except Exception as e:
+                    if isinstance(queued, ConfirmedMessage) and not queued.sent.done():
+                        queued.sent.set_exception(e)
                     log_error(f"Error sending queued message: {e}")
         except asyncio.CancelledError:
             pass

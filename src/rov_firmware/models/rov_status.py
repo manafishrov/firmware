@@ -1,7 +1,7 @@
 """ROV status data models for the ROV firmware."""
 
 from .base import CamelCaseModel
-from .system import DeviceInfo, SystemHealth
+from .system import DeviceInfo, EscFirmwareUpdate, SystemHealth
 
 
 class RovStatus(CamelCaseModel):
@@ -14,3 +14,4 @@ class RovStatus(CamelCaseModel):
     pi_undervoltage: bool
     health: SystemHealth
     device_info: DeviceInfo
+    esc_firmware_update: EscFirmwareUpdate

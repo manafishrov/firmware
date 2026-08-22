@@ -61,8 +61,22 @@
     treefmt-nix,
     ...
   } @ inputs: let
-    mcuFirmwareVersion = "v1.0.3-rc.2";
-    escFirmwareVersion = "v2.20.0-rc.3";
+    lockedInputs = (builtins.fromJSON (builtins.readFile ./flake.lock)).nodes;
+    releaseVersionFromLock = inputName: let
+      url = lockedInputs.${inputName}.locked.url or "";
+      matched = builtins.match ".*/download/(v[^/]+)/.*" url;
+    in
+      if matched == null
+      then throw "${inputName} must be locked to a versioned GitHub release URL"
+      else builtins.head matched;
+    mcuFirmwareVersion = let
+      pico = releaseVersionFromLock "mcu-firmware-pico";
+      pico2 = releaseVersionFromLock "mcu-firmware-pico2";
+    in
+      if pico == pico2
+      then pico
+      else throw "Pico and Pico 2 firmware inputs must use the same release version";
+    escFirmwareVersion = releaseVersionFromLock "esc-firmware";
     supportedSystems = [
       "aarch64-linux"
       "x86_64-linux"

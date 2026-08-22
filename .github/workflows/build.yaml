@@ -22,6 +22,25 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
+      - name: Validate release identity
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${GITHUB_REF_NAME}"
+          if [[ ! "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?(\+[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "Release tag is not SemVer: $tag" >&2
+            exit 1
+          fi
+          if [[ "${tag,,}" == *-rc* ]] && [[ ! "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-rc\.[1-9][0-9]*(\+[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?$ ]]; then
+            echo "Release candidates must use vX.Y.Z-rc.N: $tag" >&2
+            exit 1
+          fi
+          declared_version="$(sed -nE 's/^version = "([^"]+)"$/\1/p' pyproject.toml | head -n 1)"
+          if [[ "${tag#v}" != "$declared_version" ]]; then
+            echo "Tag $tag does not match pyproject.toml ($declared_version)" >&2
+            exit 1
+          fi
+
       - name: Build, sign and upload firmware artifacts
         uses: ./.github/actions/build-and-upload
         with:
