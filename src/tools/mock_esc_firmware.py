@@ -100,7 +100,9 @@ class MockEscFirmware:
                     )
                     self.update.progress = percent
                     self.update.current_esc = None if motor is None else motor + 1
-                    await send_message(self._progress_toast(percent, motor))
+                    await self._send_message(
+                        send_message, self._progress_toast(percent, motor)
+                    )
 
                 if percent >= PERCENT_COMPLETE:
                     break
@@ -111,7 +113,7 @@ class MockEscFirmware:
             self.update.progress = PERCENT_COMPLETE
             self.update.current_esc = None
             self.versions = [TARGET_VERSION] * ESC_COUNT
-            await send_message(self._success_toast())
+            await self._send_message(send_message, self._success_toast())
             self._logger.info("Mock ESC firmware flash complete")
         except asyncio.CancelledError:
             self.update.active = False
@@ -123,6 +125,18 @@ class MockEscFirmware:
             self.update.stage = EscFirmwareUpdateStage.FAILED
             self.update.error = "Mock update failed"
             self._logger.exception("Error in mock ESC firmware flash")
+
+    async def _send_message(
+        self, send_message: MockMessageSender, message: dict[str, Any]
+    ) -> None:
+        """Send a best-effort toast without coupling state to one client socket."""
+        try:
+            await send_message(message)
+        except Exception:
+            self._logger.debug(
+                "Could not send mock ESC update toast to the initiating client",
+                exc_info=True,
+            )
 
     @staticmethod
     def _progress_toast(percent: int, motor: int | None) -> dict[str, Any]:
