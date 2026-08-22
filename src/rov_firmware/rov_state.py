@@ -5,7 +5,7 @@ import asyncio
 from .models.config import RovConfig
 from .models.regulator import RegulatorData
 from .models.sensors import ImuData, McuData, PressureData
-from .models.system import DeviceInfo, SystemHealth, SystemStatus
+from .models.system import DeviceInfo, EscFirmwareUpdate, SystemHealth, SystemStatus
 from .models.thruster import ThrusterData
 
 
@@ -18,6 +18,7 @@ class RovState:
         self.system_health: SystemHealth = SystemHealth()
         self.system_status: SystemStatus = SystemStatus()
         self.device_info: DeviceInfo = DeviceInfo()
+        self.esc_firmware_update: EscFirmwareUpdate = EscFirmwareUpdate()
         self.imu: ImuData = ImuData()
         self.pressure: PressureData = PressureData()
         self.mcu_telemetry: McuData = McuData()

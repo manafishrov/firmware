@@ -11,8 +11,9 @@ from ...log import log_info, log_warn
 from ...models.config import PartialRovConfig, RovConfig, apply_migrations
 from ...rov_state import RovState
 from ...toast import ToastContent, toast_info, toast_success, toast_warn
-from ..message import Config
-from ..queue import get_message_queue
+from ..message import Config, ConfigPayload
+from ..queue import get_message_queue, send_message_and_wait
+from ..state import websocket_state
 
 
 _DEVICE_REPORTED_FIELDS = ("firmwareVersion",)
@@ -28,7 +29,7 @@ async def handle_get_config(
     Args:
         state: The ROV state.
     """
-    await get_message_queue().put(Config(payload=state.rov_config))
+    await get_message_queue().put(_config_message(state))
     log_info("Sent config to client.")
 
 
@@ -122,7 +123,9 @@ async def _apply_connection_change(
     else:
         applied = True
 
-    if applied and port_changed:
+    # The network helper already restarts the firmware after changing the
+    # address. That single restart also applies a simultaneous port change.
+    if applied and port_changed and not ip_changed:
         applied = await _restart_firmware()
 
     if applied:
@@ -152,6 +155,68 @@ async def _apply_connection_change(
     return False
 
 
+def _connection_changed(current: RovConfig, previous: RovConfig) -> bool:
+    return (
+        current.ip_address != previous.ip_address
+        or current.websocket_port != previous.websocket_port
+    )
+
+
+def _config_message(state: RovState, mutation_id: str | None = None) -> Config:
+    return Config(
+        payload=ConfigPayload(
+            mutation_id=mutation_id,
+            config=state.rov_config,
+        )
+    )
+
+
+async def _send_config_before_connection_change(
+    state: RovState, mutation_id: str | None
+) -> None:
+    message = _config_message(state, mutation_id)
+    if websocket_state.is_client_connected:
+        await send_message_and_wait(message)
+    else:
+        await get_message_queue().put(message)
+
+
+async def _restore_after_config_send_failure(
+    state: RovState,
+    previous_config: RovConfig,
+    error: Exception,
+    mutation_id: str | None,
+) -> None:
+    state.rov_config = previous_config
+    state.rov_config.save()
+    log_warn(
+        f"Did not apply connection settings because config acknowledgement failed: {error}"
+    )
+    await get_message_queue().put(_config_message(state, mutation_id))
+    toast_warn(
+        identifier=None,
+        content=ToastContent(message_key="toasts_rov_connection_restart_failed"),
+        action=None,
+    )
+
+
+async def _confirm_connection_config(
+    state: RovState,
+    previous_config: RovConfig,
+    mutation_id: str | None,
+) -> bool:
+    if not _connection_changed(state.rov_config, previous_config):
+        return True
+    try:
+        await _send_config_before_connection_change(state, mutation_id)
+    except Exception as error:
+        await _restore_after_config_send_failure(
+            state, previous_config, error, mutation_id
+        )
+        return False
+    return True
+
+
 def _apply_camera() -> None:
     _run_apply_command(
         "manafish-camera",
@@ -163,12 +228,14 @@ def _apply_camera() -> None:
 async def handle_set_config(
     state: RovState,
     payload: PartialRovConfig,
+    mutation_id: str | None = None,
 ) -> None:
     """Handle set config message.
 
     Args:
         state: The ROV state.
         payload: Partial ROV configuration update.
+        mutation_id: Identifier echoed in the canonical config response.
     """
     previous_config = state.rov_config.model_copy(deep=True)
     previous_camera = previous_config.camera
@@ -184,13 +251,17 @@ async def handle_set_config(
     state.rov_config = RovConfig.model_validate(current_data)
     state.rov_config.save()
     log_info("Received and applied config update.")
+    connection_changed = _connection_changed(state.rov_config, previous_config)
+    if not await _confirm_connection_config(state, previous_config, mutation_id):
+        return
     if not await _apply_connection_change(state, previous_config):
-        await get_message_queue().put(Config(payload=state.rov_config))
+        await get_message_queue().put(_config_message(state, mutation_id))
         return
 
-    await get_message_queue().put(Config(payload=state.rov_config))
+    if not connection_changed:
+        await get_message_queue().put(_config_message(state, mutation_id))
     if state.rov_config.camera != previous_camera:
-        _apply_camera()
+        await asyncio.to_thread(_apply_camera)
 
     toast_success(
         identifier=None,
@@ -226,6 +297,7 @@ def _tolerant_merge(
 async def handle_import_config(
     state: RovState,
     payload: dict[str, Any],
+    mutation_id: str | None = None,
 ) -> None:
     """Handle a raw config import without enforcing the current schema.
 
@@ -233,6 +305,7 @@ async def handle_import_config(
         state: The ROV state.
         payload: Raw config dictionary from the app, possibly from an older or
             newer firmware version.
+        mutation_id: Identifier echoed in the canonical config response.
     """
     previous_config = state.rov_config.model_copy(deep=True)
     previous_camera = previous_config.camera
@@ -262,13 +335,17 @@ async def handle_import_config(
     log_info(
         f"Imported config from app. Skipped fields: {skipped or 'none'}.",
     )
+    connection_changed = _connection_changed(state.rov_config, previous_config)
+    if not await _confirm_connection_config(state, previous_config, mutation_id):
+        return
     if not await _apply_connection_change(state, previous_config):
-        await get_message_queue().put(Config(payload=state.rov_config))
+        await get_message_queue().put(_config_message(state, mutation_id))
         return
 
-    await get_message_queue().put(Config(payload=state.rov_config))
+    if not connection_changed:
+        await get_message_queue().put(_config_message(state, mutation_id))
     if state.rov_config.camera != previous_camera:
-        _apply_camera()
+        await asyncio.to_thread(_apply_camera)
 
     if skipped:
         toast_warn(

@@ -19,6 +19,7 @@ def test_status_reports_read_only_device_versions(rov_state):
 
     assert payload["deviceInfo"]["mcuFirmwareVersion"] == "1.2.3-rc.1"
     assert payload["deviceInfo"]["escFirmwareVersions"] == ["2.20.0-rc.3"] * 8
+    assert payload["escFirmwareUpdate"]["stage"] == "idle"
 
 
 def test_status_counts_each_shared_current_bus_once(rov_state):

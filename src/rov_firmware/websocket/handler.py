@@ -1,18 +1,17 @@
 """WebSocket message handler for the ROV firmware."""
 
-from typing import Any, cast
+from typing import cast
 
 from ..esc_firmware import flash_esc_firmware
 from ..log import log_warn
 from ..models.actions import CustomAction, DirectionVector
 from ..models.config import (
     McuBoard,
-    PartialRovConfig,
     ThrusterTest,
 )
 from ..rov_state import RovState
 from ..serial import SerialManager
-from .message import WebsocketMessage
+from .message import ImportConfigPayload, SetConfigPayload, WebsocketMessage
 from .receive.actions import (
     handle_cancel_thruster_test,
     handle_custom_action,
@@ -58,9 +57,11 @@ async def _handle_payload_message(
 ) -> bool:
     match message.type:
         case MessageType.SET_CONFIG:
-            await handle_set_config(state, cast(PartialRovConfig, payload))
+            mutation = cast(SetConfigPayload, payload)
+            await handle_set_config(state, mutation.config, mutation.mutation_id)
         case MessageType.IMPORT_CONFIG:
-            await handle_import_config(state, cast(dict[str, Any], payload))
+            mutation = cast(ImportConfigPayload, payload)
+            await handle_import_config(state, mutation.config, mutation.mutation_id)
         case MessageType.FLASH_MCU_FIRMWARE:
             await handle_flash_mcu_firmware(state, cast(McuBoard, payload))
         case MessageType.DIRECTION_VECTOR:

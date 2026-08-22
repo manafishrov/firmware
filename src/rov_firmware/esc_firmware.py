@@ -25,19 +25,18 @@ from .constants import (
     NUM_MOTORS,
 )
 from .log import log_error, log_info, log_warn
+from .models.config import ThrusterProtocol
+from .models.system import EscFirmwareUpdateOrigin, EscFirmwareUpdateStage
 from .models.toast import ToastContent
 from .rov_state import RovState
 from .serial import SerialManager
 from .toast import toast_error, toast_loading, toast_success
+from .version import is_valid_semver, semver_sort_key
 
 
 _TARGET_NAME = b"SKYSTARS_AM60_V2_F421"
 _RELEASE_MAGIC = b"MANAESC1:"
 _ALL_ESCS = 0xFF
-_VERSION_RE = re.compile(
-    r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
-    r"(?:-(?P<prerelease>[0-9A-Za-z.-]+))?(?:\+(?P<build>[0-9A-Za-z.-]+))?$"
-)
 _STATUS_TIMEOUT_S = 8.0
 _DISARM_SETTLE_S = 0.25
 _HEX_RECORD_OVERHEAD = 5
@@ -100,28 +99,6 @@ class EscFirmwareUpdateError(RuntimeError):
     """Raised when an ESC firmware image or update transaction is invalid."""
 
 
-def _version_sort_key(
-    version: str,
-) -> tuple[int, int, int, int, tuple[tuple[int, int | str], ...]]:
-    match = _VERSION_RE.fullmatch(version)
-    if match is None or not is_valid_esc_firmware_version(version):
-        return (-1, -1, -1, -1, ())
-    prerelease = match.group("prerelease")
-    prerelease_key: tuple[tuple[int, int | str], ...] = ()
-    if prerelease is not None:
-        prerelease_key = tuple(
-            (0, int(identifier)) if identifier.isdigit() else (1, identifier)
-            for identifier in prerelease.split(".")
-        )
-    return (
-        int(match.group("major")),
-        int(match.group("minor")),
-        int(match.group("patch")),
-        1 if prerelease is None else 0,
-        prerelease_key,
-    )
-
-
 def resolve_esc_firmware() -> tuple[Path, str] | None:
     """Return the newest bundled ESC firmware image and its SemVer."""
     firmware_dir = Path.home() / "esc-firmware"
@@ -135,7 +112,7 @@ def resolve_esc_firmware() -> tuple[Path, str] | None:
     return max(
         candidates,
         key=lambda candidate: (
-            _version_sort_key(candidate[1]),
+            semver_sort_key(candidate[1]),
             candidate[0].suffix == ".bin",
         ),
     )
@@ -143,20 +120,7 @@ def resolve_esc_firmware() -> tuple[Path, str] | None:
 
 def is_valid_esc_firmware_version(version: str) -> bool:
     """Return whether a reported ESC release string is valid SemVer."""
-    match = _VERSION_RE.fullmatch(version)
-    if match is None:
-        return False
-    prerelease = match.group("prerelease")
-    build = match.group("build")
-    if prerelease is not None:
-        identifiers = prerelease.split(".")
-        if any(
-            not identifier
-            or (identifier.isdigit() and len(identifier) > 1 and identifier[0] == "0")
-            for identifier in identifiers
-        ):
-            return False
-    return build is None or all(build.split("."))
+    return is_valid_semver(version)
 
 
 def esc_firmware_update_required(
@@ -199,10 +163,12 @@ def _toast_esc_flash_progress(percent: int, motor: int | None) -> None:
     )
 
 
-class _EscFlashToastProgress:
-    """Deduplicate progress updates while preserving ESC transitions."""
+class _EscFlashProgress:
+    """Publish live update state and deduplicated toast progress."""
 
-    def __init__(self) -> None:
+    def __init__(self, state: RovState, show_toasts: bool) -> None:
+        self._state = state
+        self._show_toasts = show_toasts
         self._last_percent = -1
         self._last_motor: int | None = None
 
@@ -211,7 +177,16 @@ class _EscFlashToastProgress:
             return
         self._last_percent = percent
         self._last_motor = motor
-        _toast_esc_flash_progress(percent, motor)
+        update = self._state.esc_firmware_update
+        update.progress = percent
+        update.current_esc = None if motor is None else motor + 1
+        update.stage = (
+            EscFirmwareUpdateStage.UPLOADING
+            if motor is None
+            else EscFirmwareUpdateStage.PROGRAMMING
+        )
+        if self._show_toasts:
+            _toast_esc_flash_progress(percent, motor)
 
 
 def _notify_esc_flash_error(show_toasts: bool, error: str) -> None:
@@ -597,69 +572,144 @@ def _resolve_validated_image() -> tuple[Path, str, bytes] | None:
         return None
 
 
+def _start_update(state: RovState, automatic: bool) -> None:
+    update = state.esc_firmware_update
+    update.active = True
+    update.origin = (
+        EscFirmwareUpdateOrigin.AUTOMATIC
+        if automatic
+        else EscFirmwareUpdateOrigin.MANUAL
+    )
+    update.stage = EscFirmwareUpdateStage.PREFLIGHT
+    update.progress = 0
+    update.current_esc = None
+    update.target_version = None
+    update.error = None
+
+
+async def _preflight_update(
+    state: RovState, serial_manager: SerialManager
+) -> tuple[Path, str, bytes]:
+    if state.rov_config.thruster_protocol != ThrusterProtocol.DSHOT:
+        msg = "DShot must be selected before flashing ESC firmware."
+        raise EscFirmwareUpdateError(msg)
+    resolved = _resolve_validated_image()
+    if resolved is None:
+        msg = "No valid bundled ESC firmware image was found."
+        raise EscFirmwareUpdateError(msg)
+    if not await serial_manager.ensure_connection():
+        msg = "The thruster MCU is not connected."
+        raise EscFirmwareUpdateError(msg)
+    if not _thrusters_idle(state):
+        msg = "The thrusters are active."
+        raise EscFirmwareUpdateError(msg)
+    return resolved
+
+
+async def _perform_update(
+    state: RovState,
+    serial_manager: SerialManager,
+    release: tuple[Path, str, bytes],
+    *,
+    show_toasts: bool,
+) -> None:
+    path, version, image = release
+    state.mcu_flashing = True
+    progress = _EscFlashProgress(state, show_toasts)
+    progress(0, None)
+    # Normal thruster writes stop while mcu_flashing is set. Give the Pico's
+    # 200 ms command watchdog time to force every channel to neutral before
+    # asking it to enter the ESC bootloaders.
+    await asyncio.sleep(_DISARM_SETTLE_S)
+    async with serial_manager.io_lock:
+        reader = serial_manager.get_reader()
+        writer = serial_manager.get_writer()
+        log_info(f"Flashing all ESCs with ESC firmware {version} from {path}")
+        await _run_update(reader, writer, image, progress)
+
+
+def _finish_successful_update(
+    state: RovState, version: str, *, show_toasts: bool
+) -> None:
+    log_info(f"ESC firmware {version} flashed and verified on all eight ESCs.")
+    # Programming verification proves the bytes written correctly, but
+    # installed identity remains live telemetry. Clear stale reports and let
+    # the restarted ESCs repopulate them over DShot.
+    state.device_info.esc_firmware_versions = [None] * NUM_MOTORS
+    update = state.esc_firmware_update
+    update.stage = EscFirmwareUpdateStage.AWAITING_TELEMETRY
+    update.progress = 100
+    update.current_esc = None
+    update.active = False
+    _notify_esc_flash_success(show_toasts)
+
+
+async def _abort_update(serial_manager: SerialManager) -> None:
+    with contextlib.suppress(OSError, RuntimeError):
+        await _write_packet(
+            serial_manager.get_writer(), _control_packet(_Command.ABORT)
+        )
+
+
 async def flash_esc_firmware(
-    state: RovState, serial_manager: SerialManager, *, show_toasts: bool = True
+    state: RovState,
+    serial_manager: SerialManager,
+    *,
+    show_toasts: bool = True,
+    automatic: bool = False,
 ) -> bool:
     """Validate and flash the bundled ESC firmware image to all eight ESCs."""
     if state.mcu_flash_lock.locked():
-        log_warn(
-            "Ignoring ESC firmware update because another firmware update is running."
-        )
+        update = state.esc_firmware_update
+        if update.active:
+            log_info("ESC firmware update is already running.")
+            if show_toasts:
+                motor = None if update.current_esc is None else update.current_esc - 1
+                _toast_esc_flash_progress(update.progress, motor)
+        else:
+            message = "Another firmware update is already running."
+            log_warn(message)
+            _notify_esc_flash_error(show_toasts, message)
         return False
 
     async with state.mcu_flash_lock:
-        resolved = _resolve_validated_image()
-        if resolved is None:
-            _notify_esc_flash_error(
-                show_toasts, "No valid bundled ESC firmware image was found."
-            )
-            return False
-        path, version, image = resolved
-        if not await serial_manager.ensure_connection():
-            log_error("ESC firmware update failed: thruster MCU is not connected.")
-            _notify_esc_flash_error(show_toasts, "The thruster MCU is not connected.")
-            return False
-        if not _thrusters_idle(state):
-            log_warn("Skipping ESC firmware update because the thrusters are active.")
-            _notify_esc_flash_error(show_toasts, "The thrusters are active.")
-            return False
-
-        state.mcu_flashing = True
+        update = state.esc_firmware_update
+        _start_update(state, automatic)
         try:
-            progress = _EscFlashToastProgress() if show_toasts else None
-            if progress is not None:
-                progress(0, None)
-            # Normal thruster writes stop while mcu_flashing is set. Give the
-            # Pico's 200 ms command watchdog time to force every channel to
-            # neutral before asking it to enter the ESC bootloaders.
-            await asyncio.sleep(_DISARM_SETTLE_S)
-            async with serial_manager.io_lock:
-                reader = serial_manager.get_reader()
-                writer = serial_manager.get_writer()
-                log_info(f"Flashing all ESCs with ESC firmware {version} from {path}")
-                await _run_update(
-                    reader,
-                    writer,
-                    image,
-                    progress,
-                )
-            log_info(f"ESC firmware {version} flashed and verified on all eight ESCs.")
-            state.device_info.esc_firmware_versions = [version] * NUM_MOTORS
-            _notify_esc_flash_success(show_toasts)
+            release = await _preflight_update(state, serial_manager)
+            _, version, _ = release
+            update.target_version = version
+            await _perform_update(
+                state,
+                serial_manager,
+                release,
+                show_toasts=show_toasts,
+            )
+            _finish_successful_update(state, version, show_toasts=show_toasts)
             return True
         except asyncio.CancelledError:
-            with contextlib.suppress(OSError, RuntimeError):
-                await _write_packet(
-                    serial_manager.get_writer(), _control_packet(_Command.ABORT)
-                )
+            update.active = False
+            update.stage = EscFirmwareUpdateStage.FAILED
+            update.error = "ESC firmware update was cancelled."
+            await _abort_update(serial_manager)
             raise
-        except (EscFirmwareUpdateError, TimeoutError, OSError) as error:
+        except (EscFirmwareUpdateError, TimeoutError, OSError, RuntimeError) as error:
             log_error(f"ESC firmware update failed: {error}")
+            update.active = False
+            update.stage = EscFirmwareUpdateStage.FAILED
+            update.error = str(error)
             _notify_esc_flash_error(show_toasts, str(error))
-            with contextlib.suppress(OSError, RuntimeError):
-                await _write_packet(
-                    serial_manager.get_writer(), _control_packet(_Command.ABORT)
-                )
+            await _abort_update(serial_manager)
             return False
         finally:
             state.mcu_flashing = False
+            update.active = False
+            if update.stage in (
+                EscFirmwareUpdateStage.PREFLIGHT,
+                EscFirmwareUpdateStage.UPLOADING,
+                EscFirmwareUpdateStage.PROGRAMMING,
+            ):
+                update.stage = EscFirmwareUpdateStage.FAILED
+                update.error = (
+                    update.error or "ESC firmware update stopped unexpectedly."
+                )

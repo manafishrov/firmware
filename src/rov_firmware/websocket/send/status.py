@@ -66,5 +66,6 @@ def build_status_update(state: RovState) -> StatusUpdate:
         pi_undervoltage=is_pi_undervoltage_detected(),
         health=state.system_health,
         device_info=state.device_info,
+        esc_firmware_update=state.esc_firmware_update,
     )
     return StatusUpdate(payload=payload)

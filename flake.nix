@@ -61,8 +61,29 @@
     treefmt-nix,
     ...
   } @ inputs: let
-    mcuFirmwareVersion = "v1.0.3-rc.2";
-    escFirmwareVersion = "v2.20.0-rc.3";
+    lockedInputs = (builtins.fromJSON (builtins.readFile ./flake.lock)).nodes;
+    releaseVersionFromLock = inputName: let
+      url = lockedInputs.${inputName}.locked.url or "";
+      matched = builtins.match ".*/download/(v[^/]+)/.*" url;
+      version =
+        if matched == null
+        then ""
+        else builtins.head matched;
+      semver = builtins.match "v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?(\\+[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?" version;
+      rcLike = builtins.match ".*-[rR][cC].*" version != null;
+      canonicalRc = builtins.match "v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)-rc\\.[1-9][0-9]*(\\+[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?" version;
+    in
+      if matched == null || semver == null || (rcLike && canonicalRc == null)
+      then throw "${inputName} must be locked to a versioned GitHub release URL"
+      else version;
+    mcuFirmwareVersion = let
+      pico = releaseVersionFromLock "mcu-firmware-pico";
+      pico2 = releaseVersionFromLock "mcu-firmware-pico2";
+    in
+      if pico == pico2
+      then pico
+      else throw "Pico and Pico 2 firmware inputs must use the same release version";
+    escFirmwareVersion = releaseVersionFromLock "esc-firmware";
     supportedSystems = [
       "aarch64-linux"
       "x86_64-linux"

@@ -14,72 +14,24 @@ from ...models.config import McuBoard
 from ...models.toast import ToastContent
 from ...rov_state import RovState
 from ...toast import toast_error, toast_loading, toast_success
+from ...version import is_valid_semver, semver_sort_key
 
 
 _BOARD_PREFIXES: dict[McuBoard, str] = {
     McuBoard.PICO: "pico",
     McuBoard.PICO2: "pico2",
 }
-_MCU_VERSION_RE = re.compile(
-    r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
-    r"(?:-(?P<prerelease>[0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$"
-)
 _COMPLETE_PERCENT = 100
 
 
-def _version_sort_key(
-    version: str,
-) -> tuple[int, int, int, int, tuple[tuple[int, int | str], ...]]:
-    """Return a SemVer-compatible key for bundled MCU firmware versions."""
-    match = _MCU_VERSION_RE.fullmatch(version)
-    if match is None:
-        return (-1, -1, -1, -1, ())
-
-    prerelease = match.group("prerelease")
-    prerelease_key: tuple[tuple[int, int | str], ...] = ()
-    if prerelease is not None:
-        prerelease_key = tuple(
-            (0, int(identifier)) if identifier.isdigit() else (1, identifier)
-            for identifier in prerelease.split(".")
-        )
-    return (
-        int(match.group("major")),
-        int(match.group("minor")),
-        int(match.group("patch")),
-        1 if prerelease is None else 0,
-        prerelease_key,
-    )
-
-
 def mcu_versions_match(reported: str, bundled: str) -> bool:
-    """Compare the three-part version an MCU can report with a bundled SemVer."""
-    match = _MCU_VERSION_RE.fullmatch(bundled)
-    if match is None:
-        return reported == bundled
-    bundled_core = ".".join(match.group(name) for name in ("major", "minor", "patch"))
-    return reported == bundled_core
+    """Compare the MCU's live release identity with a bundled version."""
+    return reported == bundled and is_valid_semver(reported)
 
 
-def mcu_update_required(board: McuBoard, reported: str, bundled: str) -> bool:
+def mcu_update_required(reported: str, bundled: str) -> bool:
     """Return whether the bundled image still needs to be loaded on the board."""
-    if not mcu_versions_match(reported, bundled):
-        return True
-    marker = Path.home() / "mcu-firmware" / f".{_BOARD_PREFIXES[board]}-flashed-version"
-    try:
-        return marker.read_text(encoding="utf-8").strip() != bundled
-    except OSError:
-        # A stable image may already be installed because its full version is
-        # identical to the three-part version the MCU reports. Prereleases need
-        # the marker because their suffix cannot be read back from the MCU.
-        return "-" in bundled
-
-
-def _record_flashed_version(board: McuBoard, version: str) -> None:
-    marker = Path.home() / "mcu-firmware" / f".{_BOARD_PREFIXES[board]}-flashed-version"
-    try:
-        marker.write_text(f"{version}\n", encoding="utf-8")
-    except OSError as error:
-        log_warn(f"Could not record flashed MCU version: {error}")
+    return not mcu_versions_match(reported, bundled)
 
 
 def resolve_mcu_firmware(board: McuBoard) -> tuple[Path, str] | None:
@@ -93,11 +45,19 @@ def resolve_mcu_firmware(board: McuBoard) -> tuple[Path, str] | None:
     candidates: list[tuple[Path, str]] = []
     for firmware_path in mcu_dir.glob(f"{prefix}-v*.uf2"):
         match = re.match(rf"^{re.escape(prefix)}-v(.+)\.uf2$", firmware_path.name)
-        if match is not None and _MCU_VERSION_RE.fullmatch(match.group(1)) is not None:
+        if match is not None and is_valid_semver(match.group(1)):
             candidates.append((firmware_path, match.group(1)))
     if not candidates:
         return None
-    return max(candidates, key=lambda candidate: _version_sort_key(candidate[1]))
+    return max(candidates, key=lambda candidate: semver_sort_key(candidate[1]))
+
+
+def _remove_legacy_flashed_version_marker(board: McuBoard) -> None:
+    marker = Path.home() / "mcu-firmware" / f".{_BOARD_PREFIXES[board]}-flashed-version"
+    try:
+        marker.unlink(missing_ok=True)
+    except OSError as error:
+        log_warn(f"Could not remove legacy MCU flashed-version marker: {error}")
 
 
 def _report_flash_error(
@@ -249,7 +209,7 @@ async def flash_mcu_firmware(
                 toast_identifier=toast_identifier,
             )
             return False
-        firmware_path, firmware_version = resolved
+        firmware_path, _firmware_version = resolved
         picotool_path = _resolve_picotool_path()
 
         log_info(f"Flashing firmware '{board.value}' from {firmware_path}")
@@ -285,8 +245,8 @@ async def flash_mcu_firmware(
                         "treating the write as successful because only the subsequent "
                         "execute/reconnect step failed."
                     )
-                _record_flashed_version(board, firmware_version)
                 log_info("Firmware flash succeeded.")
+                _remove_legacy_flashed_version_marker(board)
                 if show_toasts:
                     toast_success(
                         identifier=toast_identifier,

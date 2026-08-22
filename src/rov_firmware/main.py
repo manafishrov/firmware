@@ -85,4 +85,5 @@ async def main() -> None:
             _ = task.cancel()
         if tasks:
             _ = await asyncio.gather(*tasks, return_exceptions=True)
+        await mcu.shutdown()
         await serial_manager.shutdown()

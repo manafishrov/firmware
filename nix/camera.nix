@@ -91,7 +91,7 @@
     if [ "$ENCODER_MAX_FRAMERATE" -lt "$MAX_FRAMERATE" ]; then
       MAX_FRAMERATE=$ENCODER_MAX_FRAMERATE
     fi
-    FRAMERATE=$(clamp_int "$(get .camera.framerate)" 1 "$MAX_FRAMERATE" 40)
+    FRAMERATE=$(clamp_int "$(get .camera.framerate)" 1 "$MAX_FRAMERATE" 30)
     BITRATE=$(clamp_int "$(get .camera.bitrate)" 1000000 25000000 20000000)
     KEYFRAME_INTERVAL=$(clamp_int "$(get .camera.keyframeInterval)" 1 300 30)
     ROTATION=$(enum_or "$(get .camera.rotation)" 0 0 180)

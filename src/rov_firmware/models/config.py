@@ -4,7 +4,6 @@ from enum import StrEnum
 from ipaddress import IPv4Address, IPv4Network
 import json
 from pathlib import Path
-import re
 import secrets
 import tempfile
 import tomllib
@@ -15,6 +14,7 @@ from numpy.typing import NDArray as NumpyNDArray
 from numpydantic import NDArraySchema
 from pydantic import Field, field_validator, model_validator
 
+from ..version import compare_semver, match_semver
 from .base import CamelCaseModel
 
 
@@ -34,17 +34,11 @@ _DSHOT_1200 = 1200
 _PICO_SAFE_DSHOT_SPEED = 600
 _MIN_TCP_PORT = 1
 _MAX_TCP_PORT = 65535
-_SEMVER_RE = re.compile(
-    r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)"
-    r"(?:-(?P<prerelease>[0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$"
-)
 
 
 def parse_semver(version: object) -> tuple[int, int, int]:
     """Parse semver string into (major, minor, patch) tuple."""
-    if not isinstance(version, str):
-        return (0, 0, 0)
-    match = _SEMVER_RE.fullmatch(version)
+    match = match_semver(version)
     if match is None:
         return (0, 0, 0)
     return (
@@ -52,43 +46,6 @@ def parse_semver(version: object) -> tuple[int, int, int]:
         int(match.group("minor")),
         int(match.group("patch")),
     )
-
-
-def _semver_sort_key(
-    version: object,
-) -> tuple[int, int, int, int, tuple[tuple[int, int, str], ...]]:
-    if not isinstance(version, str):
-        return (0, 0, 0, 0, ())
-    match = _SEMVER_RE.fullmatch(version)
-    if match is None:
-        return (0, 0, 0, 0, ())
-
-    prerelease = match.group("prerelease")
-    prerelease_key: tuple[tuple[int, int, str], ...] = ()
-    if prerelease is not None:
-        prerelease_key = tuple(
-            (0, int(identifier), "") if identifier.isdigit() else (1, 0, identifier)
-            for identifier in prerelease.split(".")
-        )
-    major, minor, patch = parse_semver(version)
-    return (
-        major,
-        minor,
-        patch,
-        1 if prerelease is None else 0,
-        prerelease_key,
-    )
-
-
-def compare_semver(a: object, b: object) -> int:
-    """Compare two semver strings. Returns -1, 0, or 1."""
-    a_tuple = _semver_sort_key(a)
-    b_tuple = _semver_sort_key(b)
-    if a_tuple < b_tuple:
-        return -1
-    elif a_tuple > b_tuple:
-        return 1
-    return 0
 
 
 def apply_migrations(raw: dict[str, Any]) -> dict[str, Any]:
@@ -352,7 +309,7 @@ class Camera(CamelCaseModel):
 
     width: int = 1440
     height: int = 1080
-    framerate: int = 40
+    framerate: int = 30
     # Whether resolutions smaller than the largest supported crop the field of
     # view (via the imx477's faster 1332x990 sensor mode) instead of scaling
     # down from the full-FOV mode. See _max_framerate_for.

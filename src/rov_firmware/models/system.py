@@ -1,5 +1,7 @@
 """System data models for the ROV firmware."""
 
+from enum import StrEnum
+
 from pydantic import BaseModel, Field
 
 from ..constants import NUM_MOTORS
@@ -21,6 +23,37 @@ class DeviceInfo(CamelCaseModel):
     esc_firmware_versions: list[str | None] = Field(
         default_factory=lambda: [None] * NUM_MOTORS
     )
+
+
+class EscFirmwareUpdateOrigin(StrEnum):
+    """How the current ESC firmware update was started."""
+
+    AUTOMATIC = "automatic"
+    MANUAL = "manual"
+
+
+class EscFirmwareUpdateStage(StrEnum):
+    """Observable stage of the most recent ESC firmware update."""
+
+    IDLE = "idle"
+    PREFLIGHT = "preflight"
+    UPLOADING = "uploading"
+    PROGRAMMING = "programming"
+    AWAITING_TELEMETRY = "awaitingTelemetry"
+    SUCCEEDED = "succeeded"
+    FAILED = "failed"
+
+
+class EscFirmwareUpdate(CamelCaseModel):
+    """Live ESC firmware update state exposed to the desktop app."""
+
+    active: bool = False
+    origin: EscFirmwareUpdateOrigin | None = None
+    stage: EscFirmwareUpdateStage = EscFirmwareUpdateStage.IDLE
+    progress: int = 0
+    current_esc: int | None = None
+    target_version: str | None = None
+    error: str | None = None
 
 
 class SystemStatus(BaseModel):

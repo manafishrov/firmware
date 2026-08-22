@@ -13,6 +13,9 @@ from ..constants import (
     LOG_PACKET_START_BYTE,
     MCU_AUTO_UPDATE_WINDOW_S,
     MCU_PROTOCOL_DSHOT,
+    MCU_RELEASE_VERSION_MAX_LENGTH,
+    MCU_RELEASE_VERSION_PACKET_OVERHEAD,
+    MCU_RELEASE_VERSION_START_BYTE,
     MCU_SERIAL_READ_TIMEOUT_S,
     MCU_TELEMETRY_BATCH_ENTRY_SIZE,
     MCU_TELEMETRY_BATCH_MAX_ITEMS,
@@ -41,8 +44,10 @@ from ..esc_firmware import (
 from ..log import log_error, log_info, log_warn
 from ..models.config import ThrusterProtocol
 from ..models.log import LogLevel, LogOrigin
+from ..models.system import EscFirmwareUpdateStage
 from ..rov_state import RovState
 from ..serial import SerialManager
+from ..version import is_valid_semver
 from ..websocket.receive.mcu import (
     flash_mcu_firmware,
     mcu_update_required,
@@ -57,6 +62,7 @@ _TELEMETRY_START_TOKEN = bytes((MCU_TELEMETRY_START_BYTE,))
 _TELEMETRY_BATCH_START_TOKEN = bytes((MCU_TELEMETRY_BATCH_START_BYTE,))
 _LOG_PACKET_START_TOKEN = bytes((LOG_PACKET_START_BYTE,))
 _VERSION_PACKET_START_TOKEN = bytes((MCU_VERSION_START_BYTE,))
+_RELEASE_VERSION_PACKET_START_TOKEN = bytes((MCU_RELEASE_VERSION_START_BYTE,))
 _TELEMETRY_FIELDS = ("erpm", "voltage", "temperature", "current", "signal_quality")
 _ESC_VERSION_DISCOVERY_DELAY_S = 2.0
 _ESC_VERSION_TYPES = (
@@ -116,6 +122,8 @@ class McuSensor:
             bytearray() for _ in range(NUM_MOTORS)
         ]
         self._esc_version_next_chunks: list[int] = [0] * NUM_MOTORS
+        self._invalid_release_warning_generation = -1
+        self._warned_invalid_release_versions: set[str] = set()
 
     async def read_loop(self) -> None:
         """Read telemetry data from the MCU in a loop."""
@@ -127,6 +135,21 @@ class McuSensor:
                 continue
             self._consume_read_buffer(read_buffer, data)
             self._expire_stale_telemetry()
+
+    async def shutdown(self) -> None:
+        """Cancel MCU-owned ESC tasks before the serial connection closes."""
+        tasks = [
+            task
+            for task in (
+                self._esc_firmware_flash_task,
+                self._esc_firmware_reconcile_task,
+            )
+            if task is not None and not task.done()
+        ]
+        for task in tasks:
+            _ = task.cancel()
+        if tasks:
+            _ = await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _read_chunk(self) -> bytes | None:
         if not await self.serial_manager.ensure_connection():
@@ -192,6 +215,8 @@ class McuSensor:
             return self._try_consume_log(read_buffer, start_idx)
         if packet_type == MCU_VERSION_START_BYTE:
             return self._try_consume_version(read_buffer, start_idx)
+        if packet_type == MCU_RELEASE_VERSION_START_BYTE:
+            return self._try_consume_release_version(read_buffer, start_idx)
         return start_idx + 1
 
     def _try_consume_telemetry(
@@ -250,6 +275,23 @@ class McuSensor:
             self._handle_version_packet(packet)
         return end_idx
 
+    def _try_consume_release_version(
+        self, read_buffer: bytearray, start_idx: int
+    ) -> int | None:
+        header_end_idx = start_idx + 2
+        if len(read_buffer) < header_end_idx:
+            return None
+        version_length = read_buffer[start_idx + 1]
+        if version_length == 0 or version_length > MCU_RELEASE_VERSION_MAX_LENGTH:
+            return start_idx + 1
+        end_idx = start_idx + version_length + MCU_RELEASE_VERSION_PACKET_OVERHEAD
+        if len(read_buffer) < end_idx:
+            return None
+        packet = memoryview(read_buffer)[start_idx:end_idx]
+        if self._validate_release_version_packet(packet):
+            self._handle_release_version_packet(packet)
+        return end_idx
+
     @staticmethod
     def _find_start_byte(buf: bytearray, start: int) -> int:
         candidates = (
@@ -257,6 +299,7 @@ class McuSensor:
             buf.find(_TELEMETRY_BATCH_START_TOKEN, start),
             buf.find(_LOG_PACKET_START_TOKEN, start),
             buf.find(_VERSION_PACKET_START_TOKEN, start),
+            buf.find(_RELEASE_VERSION_PACKET_START_TOKEN, start),
         )
         valid_candidates = [idx for idx in candidates if idx >= 0]
         if not valid_candidates:
@@ -324,6 +367,58 @@ class McuSensor:
         return calculated_checksum == packet[-1]
 
     @staticmethod
+    def _validate_release_version_packet(
+        packet: bytes | bytearray | memoryview,
+    ) -> bool:
+        if len(packet) < MCU_RELEASE_VERSION_PACKET_OVERHEAD:
+            return False
+        version_length = packet[1]
+        if (
+            packet[0] != MCU_RELEASE_VERSION_START_BYTE
+            or version_length == 0
+            or version_length > MCU_RELEASE_VERSION_MAX_LENGTH
+            or len(packet) != version_length + MCU_RELEASE_VERSION_PACKET_OVERHEAD
+        ):
+            return False
+        calculated_checksum = 0
+        for value in packet[:-1]:
+            calculated_checksum ^= value
+        return calculated_checksum == packet[-1]
+
+    def _handle_release_version_packet(
+        self, packet: bytes | bytearray | memoryview
+    ) -> None:
+        version_length = packet[1]
+        try:
+            version = bytes(packet[2 : 2 + version_length]).decode("ascii")
+        except UnicodeDecodeError:
+            encoded = bytes(packet[2 : 2 + version_length])
+            self._warn_invalid_release_version_once(
+                f"non-ascii:{encoded.hex()}",
+                "MCU reported a non-ASCII release version",
+            )
+            return
+        if not is_valid_semver(version):
+            self._warn_invalid_release_version_once(
+                f"invalid:{version}",
+                f"MCU reported an invalid release version: {version!r}",
+            )
+            return
+
+        self.state.device_info.mcu_firmware_version = version
+        self._auto_update_mcu_if_needed(version, self._get_expected_version())
+
+    def _warn_invalid_release_version_once(self, key: str, message: str) -> None:
+        generation = self.serial_manager.connection_generation
+        if generation != self._invalid_release_warning_generation:
+            self._invalid_release_warning_generation = generation
+            self._warned_invalid_release_versions.clear()
+        if key in self._warned_invalid_release_versions:
+            return
+        self._warned_invalid_release_versions.add(key)
+        log_warn(message)
+
+    @staticmethod
     def _handle_log_packet(packet: bytes | bytearray | memoryview) -> None:
         level_byte = packet[1]
         msg_len = packet[2]
@@ -347,12 +442,15 @@ class McuSensor:
         )
         self.serial_manager.record_mcu_protocol_config(*acknowledged_config)
 
-        self.state.device_info.mcu_firmware_version = version
+        if not self.state.device_info.mcu_firmware_version:
+            # MCU builds predating exact release reporting only send the numeric
+            # packet. Treat that identity as a migration input so they can be
+            # upgraded to a build that reports the full release version.
+            self.state.device_info.mcu_firmware_version = version
+            self._auto_update_mcu_if_needed(version, self._get_expected_version())
 
         if protocol_changed:
             self._reset_telemetry()
-        expected = self._get_expected_version()
-        self._auto_update_mcu_if_needed(version, expected)
         mcu_update_scheduled = (
             self._flash_task is not None and not self._flash_task.done()
         )
@@ -378,11 +476,7 @@ class McuSensor:
         if expected_version is None:
             return
 
-        if not mcu_update_required(
-            self.state.rov_config.mcu_board,
-            current_version,
-            expected_version,
-        ):
+        if not mcu_update_required(current_version, expected_version):
             return
 
         if self.state.mcu_flashing:
@@ -449,7 +543,9 @@ class McuSensor:
         self._esc_firmware_flash_task = loop.create_task(self._flash_esc_firmware())
 
     async def _flash_esc_firmware(self) -> None:
-        if not await flash_esc_firmware(self.state, self.serial_manager):
+        if not await flash_esc_firmware(
+            self.state, self.serial_manager, automatic=True
+        ):
             log_error("Auto-flash of ESC firmware failed.")
 
     def _schedule_esc_firmware_reconciliation(self) -> None:
@@ -594,6 +690,13 @@ class McuSensor:
             self.state.device_info.esc_firmware_versions = versions
         self._reset_esc_version_assembly(global_id)
         if all(item is not None for item in versions):
+            update = self.state.esc_firmware_update
+            if (
+                update.stage == EscFirmwareUpdateStage.AWAITING_TELEMETRY
+                and update.target_version is not None
+                and all(item == update.target_version for item in versions)
+            ):
+                update.stage = EscFirmwareUpdateStage.SUCCEEDED
             self._auto_update_esc_firmware_if_needed()
 
     def _reset_esc_version_assembly(self, global_id: int) -> None:

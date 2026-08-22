@@ -1,7 +1,7 @@
 """WebSocket config send handlers for the ROV firmware."""
 
 from ...rov_state import RovState
-from ..message import Config
+from ..message import Config, ConfigPayload
 
 
 def build_config(state: RovState) -> Config:
@@ -13,4 +13,4 @@ def build_config(state: RovState) -> Config:
     Returns:
         The config message ready to be sent.
     """
-    return Config(payload=state.rov_config)
+    return Config(payload=ConfigPayload(config=state.rov_config))

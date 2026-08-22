@@ -142,7 +142,7 @@ def test_set_config_restarts_firmware_when_websocket_port_changed(
     assert restart_calls == [None]
 
 
-def test_set_config_applies_network_then_restarts_when_ip_and_port_changed(
+def test_set_config_uses_network_restart_when_ip_and_port_changed(
     rov_state, monkeypatch
 ):
     network_calls: list[str] = []
@@ -166,10 +166,10 @@ def test_set_config_applies_network_then_restarts_when_ip_and_port_changed(
     asyncio.run(handle_set_config(rov_state, payload))
 
     assert network_calls == ["10.10.11.10"]
-    assert restart_calls == [None]
+    assert restart_calls == []
 
 
-def test_set_config_rolls_back_ip_and_port_when_combined_restart_fails(
+def test_set_config_does_not_run_a_second_restart_after_network_apply(
     rov_state, monkeypatch
 ):
     network_calls: list[str] = []
@@ -189,12 +189,12 @@ def test_set_config_rolls_back_ip_and_port_when_combined_restart_fails(
     )
     asyncio.run(handle_set_config(rov_state, payload))
 
-    assert network_calls == ["10.10.11.10", "10.10.10.10"]
-    assert rov_state.rov_config.ip_address == "10.10.10.10"
-    assert rov_state.rov_config.websocket_port == 9000
+    assert network_calls == ["10.10.11.10"]
+    assert rov_state.rov_config.ip_address == "10.10.11.10"
+    assert rov_state.rov_config.websocket_port == 9100
     persisted = RovConfig.load()
-    assert persisted.ip_address == "10.10.10.10"
-    assert persisted.websocket_port == 9000
+    assert persisted.ip_address == "10.10.11.10"
+    assert persisted.websocket_port == 9100
 
 
 def test_set_config_reports_network_apply_failure_without_success(
@@ -256,3 +256,48 @@ def test_set_config_reports_restart_failure_without_success(rov_state, monkeypat
     assert warning_keys == ["toasts_rov_connection_restart_failed"]
     assert rov_state.rov_config.websocket_port == 9000
     assert RovConfig.load().websocket_port == 9000
+
+
+def test_set_config_confirms_correlated_config_before_connection_apply(
+    rov_state, monkeypatch
+):
+    events: list[str] = []
+
+    async def send_config(message):
+        assert message.payload.mutation_id == "set-1"
+        events.append("confirm")
+
+    async def apply_connection(_state, _previous):
+        events.append("apply")
+        return True
+
+    monkeypatch.setattr(config_handlers.websocket_state, "is_client_connected", True)
+    monkeypatch.setattr(config_handlers, "send_message_and_wait", send_config)
+    monkeypatch.setattr(config_handlers, "_apply_connection_change", apply_connection)
+
+    payload = PartialRovConfig.model_validate({"ipAddress": "10.10.11.10"})
+    asyncio.run(handle_set_config(rov_state, payload, mutation_id="set-1"))
+
+    assert events == ["confirm", "apply"]
+
+
+def test_set_config_restores_config_when_confirmation_times_out(rov_state, monkeypatch):
+    apply_calls: list[None] = []
+
+    async def timeout(_message):
+        raise TimeoutError
+
+    async def apply_connection(_state, _previous):
+        apply_calls.append(None)
+        return True
+
+    monkeypatch.setattr(config_handlers.websocket_state, "is_client_connected", True)
+    monkeypatch.setattr(config_handlers, "send_message_and_wait", timeout)
+    monkeypatch.setattr(config_handlers, "_apply_connection_change", apply_connection)
+
+    payload = PartialRovConfig.model_validate({"ipAddress": "10.10.11.10"})
+    asyncio.run(handle_set_config(rov_state, payload, mutation_id="set-2"))
+
+    assert apply_calls == []
+    assert rov_state.rov_config.ip_address == "10.10.10.10"
+    assert RovConfig.load().ip_address == "10.10.10.10"
