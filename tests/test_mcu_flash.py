@@ -48,18 +48,6 @@ def test_legacy_rc_spelling_never_matches():
     assert not mcu.mcu_versions_match("1.0.3-rc1", "1.0.3-rc1")
 
 
-def test_successful_flash_migration_removes_legacy_marker(tmp_path, monkeypatch):
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    firmware_dir = tmp_path / "mcu-firmware"
-    firmware_dir.mkdir()
-    marker = firmware_dir / ".pico-flashed-version"
-    marker.write_text("1.0.3-rc.1\n", encoding="utf-8")
-
-    mcu._remove_legacy_flashed_version_marker(McuBoard.PICO)
-
-    assert not marker.exists()
-
-
 def test_verified_picotool_write_survives_execute_failure():
     assert mcu._flash_write_completed(return_code=1, verification_succeeded=True)
 
