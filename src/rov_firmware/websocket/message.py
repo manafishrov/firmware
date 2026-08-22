@@ -37,25 +37,46 @@ class GetConfig(CamelCaseModel):
     type: Literal[MessageType.GET_CONFIG] = MessageType.GET_CONFIG
 
 
+class SetConfigPayload(CamelCaseModel):
+    """Correlated partial configuration mutation."""
+
+    mutation_id: str
+    config: PartialRovConfig
+
+
 class SetConfig(CamelCaseModel):
     """WebSocket message for setting config."""
 
     type: Literal[MessageType.SET_CONFIG] = MessageType.SET_CONFIG
-    payload: PartialRovConfig
+    payload: SetConfigPayload
+
+
+class ImportConfigPayload(CamelCaseModel):
+    """Correlated raw configuration import."""
+
+    mutation_id: str
+    config: dict[str, Any]
 
 
 class ImportConfig(CamelCaseModel):
     """WebSocket message for importing a raw, validation-free config snapshot."""
 
     type: Literal[MessageType.IMPORT_CONFIG] = MessageType.IMPORT_CONFIG
-    payload: dict[str, Any]
+    payload: ImportConfigPayload
+
+
+class ConfigPayload(CamelCaseModel):
+    """Canonical configuration plus an optional mutation correlation id."""
+
+    mutation_id: str | None = None
+    config: RovConfig
 
 
 class Config(CamelCaseModel):
     """WebSocket message for config response."""
 
     type: Literal[MessageType.CONFIG] = MessageType.CONFIG
-    payload: RovConfig
+    payload: ConfigPayload
 
 
 class StartThrusterTest(CamelCaseModel):

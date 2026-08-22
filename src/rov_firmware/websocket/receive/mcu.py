@@ -24,21 +24,13 @@ _BOARD_PREFIXES: dict[McuBoard, str] = {
 _COMPLETE_PERCENT = 100
 
 
-def _version_sort_key(
-    version: str,
-) -> tuple[int, int, int, int, tuple[tuple[int, int, str], ...]]:
-    """Return a SemVer-compatible key for bundled MCU firmware versions."""
-    return semver_sort_key(version)
-
-
 def mcu_versions_match(reported: str, bundled: str) -> bool:
     """Compare the MCU's live release identity with a bundled version."""
     return reported == bundled and is_valid_semver(reported)
 
 
-def mcu_update_required(board: McuBoard, reported: str, bundled: str) -> bool:
+def mcu_update_required(reported: str, bundled: str) -> bool:
     """Return whether the bundled image still needs to be loaded on the board."""
-    del board
     return not mcu_versions_match(reported, bundled)
 
 
@@ -57,7 +49,15 @@ def resolve_mcu_firmware(board: McuBoard) -> tuple[Path, str] | None:
             candidates.append((firmware_path, match.group(1)))
     if not candidates:
         return None
-    return max(candidates, key=lambda candidate: _version_sort_key(candidate[1]))
+    return max(candidates, key=lambda candidate: semver_sort_key(candidate[1]))
+
+
+def _remove_legacy_flashed_version_marker(board: McuBoard) -> None:
+    marker = Path.home() / "mcu-firmware" / f".{_BOARD_PREFIXES[board]}-flashed-version"
+    try:
+        marker.unlink(missing_ok=True)
+    except OSError as error:
+        log_warn(f"Could not remove legacy MCU flashed-version marker: {error}")
 
 
 def _report_flash_error(
@@ -246,6 +246,7 @@ async def flash_mcu_firmware(
                         "execute/reconnect step failed."
                     )
                 log_info("Firmware flash succeeded.")
+                _remove_legacy_flashed_version_marker(board)
                 if show_toasts:
                     toast_success(
                         identifier=toast_identifier,

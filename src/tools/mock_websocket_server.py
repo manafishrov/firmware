@@ -12,6 +12,7 @@ import websockets
 from websockets import ServerConnection
 
 from rov_firmware.models.config import CURRENT_FIRMWARE_VERSION
+from tools.mock_esc_firmware import MockEscFirmware
 
 
 WEBSOCKET_PORT = 9000
@@ -100,16 +101,6 @@ SYSTEM_STATUS: dict[str, Any] = {
     },
 }
 
-ESC_FIRMWARE_UPDATE: dict[str, Any] = {
-    "active": False,
-    "origin": None,
-    "stage": "idle",
-    "progress": 0,
-    "currentEsc": None,
-    "targetVersion": None,
-    "error": None,
-}
-
 THRUSTER_TEST_TOAST_ID = "thruster-test"
 AUTO_TUNING_TOAST_ID = "regulator-auto-tuning"
 FLASH_TOAST_ID = "flash-mcu-firmware"
@@ -118,9 +109,8 @@ THRUSTER_TEST_DURATION_SECONDS = 10
 AUTO_TUNING_OSCILLATION_DURATION_SECONDS = 10
 FLASH_DURATION_SECONDS = 3
 PERCENT_COMPLETE = 100
-ESC_COUNT = 8
-ESC_UPLOAD_PERCENT = 10
-ESC_PROGRAM_PERCENT = PERCENT_COMPLETE - ESC_UPLOAD_PERCENT
+MOCK_ESC_FIRMWARE = MockEscFirmware(flash_duration_seconds=FLASH_DURATION_SECONDS)
+MCU_FLASH_TASK: asyncio.Task[None] | None = None
 
 
 def _update_mock_config(payload: dict[str, Any], *, imported: bool = False) -> None:
@@ -137,8 +127,17 @@ def _update_mock_config(payload: dict[str, Any], *, imported: bool = False) -> N
     MOCK_CONFIG.update(update)
 
 
+def _config_message(mutation_id: str | None = None) -> dict[str, Any]:
+    payload: dict[str, Any] = {"config": MOCK_CONFIG}
+    if mutation_id is not None:
+        payload["mutationId"] = mutation_id
+    return {"type": "config", "payload": payload}
+
+
 async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR0912,PLR0915
     """Handle a websocket client connection."""
+    global MCU_FLASH_TASK  # noqa: PLW0603
+
     logger = logging.getLogger(__name__)
     logger.info(
         f"Client connected: {cast(tuple[str, int] | None, websocket.remote_address)}"
@@ -202,6 +201,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             current_time = time.time()
             battery_percentage = int((math.sin(current_time / 5) + 1) * 50)
             current_draw = int(20 + 10 * math.sin(current_time / 4))
+            esc_versions, esc_update = MOCK_ESC_FIRMWARE.status_payload()
 
             status_msg = {
                 "type": "statusUpdate",
@@ -218,9 +218,9 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     },
                     "deviceInfo": {
                         "mcuFirmwareVersion": "1.0.4-rc.1",
-                        "escFirmwareVersions": ["2.21.0-rc.1"] * ESC_COUNT,
+                        "escFirmwareVersions": esc_versions,
                     },
-                    "escFirmwareUpdate": ESC_FIRMWARE_UPDATE,
+                    "escFirmwareUpdate": esc_update,
                 },
             }
             try:
@@ -504,107 +504,6 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
         except Exception:
             logger.exception("Error in mock flash")
 
-    async def run_flash_esc_firmware() -> None:
-        """Simulate uploading, programming, and verifying all eight ESCs."""
-        try:
-            ESC_FIRMWARE_UPDATE.update(
-                active=True,
-                origin="manual",
-                stage="preflight",
-                progress=0,
-                currentEsc=None,
-                targetVersion="2.21.0-rc.1",
-                error=None,
-            )
-            start_time = time.time()
-            last_percent = -1
-
-            while True:
-                elapsed = time.time() - start_time
-                percent = min(
-                    PERCENT_COMPLETE,
-                    int((elapsed / FLASH_DURATION_SECONDS) * PERCENT_COMPLETE),
-                )
-
-                if percent != last_percent:
-                    last_percent = percent
-                    motor = None
-                    if percent >= ESC_UPLOAD_PERCENT:
-                        motor = min(
-                            ESC_COUNT - 1,
-                            ((percent - ESC_UPLOAD_PERCENT) * ESC_COUNT)
-                            // ESC_PROGRAM_PERCENT,
-                        )
-                    ESC_FIRMWARE_UPDATE.update(
-                        stage="uploading" if motor is None else "programming",
-                        progress=percent,
-                        currentEsc=None if motor is None else motor + 1,
-                    )
-                    toast_msg = {
-                        "type": "showToast",
-                        "payload": {
-                            "identifier": ESC_FLASH_TOAST_ID,
-                            "variant": "loading",
-                            "content": {
-                                "messageKey": "toasts_esc_flash_in_progress",
-                                "messageArgs": {"percent": percent},
-                                "descriptionKey": (
-                                    "toasts_esc_flash_uploading"
-                                    if motor is None
-                                    else "toasts_esc_flash_motor_progress"
-                                ),
-                                "descriptionArgs": (
-                                    None
-                                    if motor is None
-                                    else {"esc": motor + 1, "total": ESC_COUNT}
-                                ),
-                            },
-                            "action": None,
-                        },
-                    }
-                    await websocket.send(json.dumps(toast_msg))
-
-                if percent >= PERCENT_COMPLETE:
-                    break
-                await asyncio.sleep(0.05)
-
-            await websocket.send(
-                json.dumps(
-                    {
-                        "type": "showToast",
-                        "payload": {
-                            "identifier": ESC_FLASH_TOAST_ID,
-                            "variant": "success",
-                            "content": {
-                                "messageKey": "toasts_esc_flash_success",
-                            },
-                            "action": None,
-                        },
-                    }
-                )
-            )
-            ESC_FIRMWARE_UPDATE.update(
-                active=False,
-                stage="succeeded",
-                progress=PERCENT_COMPLETE,
-                currentEsc=None,
-            )
-            logger.info("Mock ESC firmware flash complete")
-        except asyncio.CancelledError:
-            ESC_FIRMWARE_UPDATE.update(
-                active=False,
-                stage="failed",
-                error="Mock update cancelled",
-            )
-            logger.debug("ESC firmware flash cancelled")
-        except Exception:
-            ESC_FIRMWARE_UPDATE.update(
-                active=False,
-                stage="failed",
-                error="Mock update failed",
-            )
-            logger.exception("Error in mock ESC firmware flash")
-
     async def reject_concurrent_firmware_flash(
         identifier: str, message_key: str
     ) -> None:
@@ -622,11 +521,11 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             )
         )
 
-    flash_task: asyncio.Task[None] | None = None
+    async def send_mock_message(message: dict[str, Any]) -> None:
+        await websocket.send(json.dumps(message))
 
     try:
-        config_msg = {"type": "config", "payload": MOCK_CONFIG}
-        await websocket.send(json.dumps(config_msg))
+        await websocket.send(json.dumps(_config_message()))
 
         last_direction_vector = None
         async for message in websocket:
@@ -640,17 +539,19 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         logger.info(f"DirectionVector: {payload}")
                         last_direction_vector = payload
                 elif msg_type == "getConfig":
-                    config_msg = {"type": "config", "payload": MOCK_CONFIG}
-                    await websocket.send(json.dumps(config_msg))
+                    await websocket.send(json.dumps(_config_message()))
                 elif msg_type == "setConfig":
                     previous_connection = (
                         MOCK_CONFIG.get("ipAddress"),
                         MOCK_CONFIG.get("websocketPort"),
                     )
+                    mutation_id = None
                     if isinstance(payload, dict):
-                        _update_mock_config(cast(dict[str, Any], payload))
-                    config_msg = {"type": "config", "payload": MOCK_CONFIG}
-                    await websocket.send(json.dumps(config_msg))
+                        mutation_id = payload.get("mutationId")
+                        config = payload.get("config")
+                        if isinstance(config, dict):
+                            _update_mock_config(cast(dict[str, Any], config))
+                    await websocket.send(json.dumps(_config_message(mutation_id)))
                     toast_msg = {
                         "type": "showToast",
                         "payload": {
@@ -675,12 +576,15 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         )
                         return
                 elif msg_type == "importConfig":
+                    mutation_id = None
                     if isinstance(payload, dict):
-                        _update_mock_config(
-                            cast(dict[str, Any], payload), imported=True
-                        )
-                    config_msg = {"type": "config", "payload": MOCK_CONFIG}
-                    await websocket.send(json.dumps(config_msg))
+                        mutation_id = payload.get("mutationId")
+                        config = payload.get("config")
+                        if isinstance(config, dict):
+                            _update_mock_config(
+                                cast(dict[str, Any], config), imported=True
+                            )
+                    await websocket.send(json.dumps(_config_message(mutation_id)))
                     toast_msg = {
                         "type": "showToast",
                         "payload": {
@@ -783,21 +687,27 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     }
                     await websocket.send(json.dumps(log_msg))
                 elif msg_type == "flashMcuFirmware":
-                    if flash_task is not None and not flash_task.done():
+                    if (
+                        MCU_FLASH_TASK is not None and not MCU_FLASH_TASK.done()
+                    ) or MOCK_ESC_FIRMWARE.active:
                         await reject_concurrent_firmware_flash(
                             FLASH_TOAST_ID, "toasts_flash_failed"
                         )
                     else:
-                        flash_task = asyncio.create_task(
+                        MCU_FLASH_TASK = asyncio.create_task(
                             run_flash_firmware(cast(str, payload))
                         )
                 elif msg_type == "flashEscFirmware":
-                    if flash_task is not None and not flash_task.done():
+                    mcu_flash_active = (
+                        MCU_FLASH_TASK is not None and not MCU_FLASH_TASK.done()
+                    )
+                    started = False
+                    if not mcu_flash_active:
+                        started = await MOCK_ESC_FIRMWARE.start(send_mock_message)
+                    if not started:
                         await reject_concurrent_firmware_flash(
                             ESC_FLASH_TOAST_ID, "toasts_esc_flash_failed"
                         )
-                    else:
-                        flash_task = asyncio.create_task(run_flash_esc_firmware())
                 elif msg_type == "customAction":
                     logger.info(f"Custom action: {payload}")
                 elif msg_type == "startThrusterTest":
@@ -857,8 +767,6 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             _ = thruster_test_task.cancel()
         if auto_tuning_task is not None:
             _ = auto_tuning_task.cancel()
-        if flash_task is not None:
-            _ = flash_task.cancel()
 
 
 async def main() -> None:
@@ -883,6 +791,10 @@ async def main() -> None:
     except (KeyboardInterrupt, asyncio.CancelledError):
         logger.info("Server stopped")
     finally:
+        await MOCK_ESC_FIRMWARE.shutdown()
+        if MCU_FLASH_TASK is not None and not MCU_FLASH_TASK.done():
+            _ = MCU_FLASH_TASK.cancel()
+            _ = await asyncio.gather(MCU_FLASH_TASK, return_exceptions=True)
         if server:
             server.close()
             await server.wait_closed()

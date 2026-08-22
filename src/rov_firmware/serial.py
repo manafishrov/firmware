@@ -47,6 +47,7 @@ class SerialManager:
         self.reader = None
         self.writer = None
         self._mcu_protocol_config = None
+        self.state.device_info.mcu_firmware_version = ""
         self.state.system_health.mcu_healthy = False
         if writer is not None:
             writer.close()

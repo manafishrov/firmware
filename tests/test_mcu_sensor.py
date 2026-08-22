@@ -1,8 +1,10 @@
+import asyncio
 from pathlib import Path
 
 from rov_firmware.constants import (
     MCU_AUTO_UPDATE_WINDOW_S,
     MCU_PROTOCOL_DSHOT,
+    MCU_RELEASE_VERSION_MAX_LENGTH,
     MCU_RELEASE_VERSION_START_BYTE,
     MCU_TELEMETRY_TYPE_CURRENT,
     MCU_TELEMETRY_TYPE_ESC_VERSION_CHUNK,
@@ -110,6 +112,69 @@ def test_release_version_packet_rejects_uppercase_rc_spelling(rov_state):
     sensor = McuSensor(rov_state, SerialManager(rov_state))
 
     sensor._handle_release_version_packet(_release_version_packet("1.2.3-RC.1"))
+
+    assert rov_state.device_info.mcu_firmware_version == ""
+
+
+def test_release_version_packet_parses_through_split_read_buffer(rov_state):
+    sensor = McuSensor(rov_state, SerialManager(rov_state))
+    packet = _release_version_packet("1.2.3-rc.1")
+    read_buffer = bytearray()
+
+    sensor._consume_read_buffer(read_buffer, packet[:3])
+    assert rov_state.device_info.mcu_firmware_version == ""
+
+    sensor._consume_read_buffer(read_buffer, packet[3:])
+    assert rov_state.device_info.mcu_firmware_version == "1.2.3-rc.1"
+
+
+def test_release_version_buffer_ignores_bad_checksum_and_resynchronizes(rov_state):
+    sensor = McuSensor(rov_state, SerialManager(rov_state))
+    damaged = bytearray(_release_version_packet("1.2.2"))
+    damaged[-1] ^= 0xFF
+
+    sensor._consume_read_buffer(
+        bytearray(), bytes(damaged) + _release_version_packet("1.2.3")
+    )
+
+    assert rov_state.device_info.mcu_firmware_version == "1.2.3"
+
+
+def test_release_version_buffer_rejects_oversized_length_and_resynchronizes(rov_state):
+    sensor = McuSensor(rov_state, SerialManager(rov_state))
+    oversized_header = bytes(
+        (MCU_RELEASE_VERSION_START_BYTE, MCU_RELEASE_VERSION_MAX_LENGTH + 1)
+    )
+
+    sensor._consume_read_buffer(
+        bytearray(), oversized_header + _release_version_packet("1.2.3")
+    )
+
+    assert rov_state.device_info.mcu_firmware_version == "1.2.3"
+
+
+def test_invalid_release_warning_is_once_per_connection_generation(
+    rov_state, monkeypatch
+):
+    warnings: list[str] = []
+    serial_manager = SerialManager(rov_state)
+    sensor = McuSensor(rov_state, serial_manager)
+    monkeypatch.setattr(mcu_module, "log_warn", warnings.append)
+    packet = _release_version_packet("1.2.3-rc1")
+
+    sensor._handle_release_version_packet(packet)
+    sensor._handle_release_version_packet(packet)
+    serial_manager._connection_generation += 1
+    sensor._handle_release_version_packet(packet)
+
+    assert len(warnings) == 2
+
+
+def test_clearing_serial_connection_clears_live_mcu_identity(rov_state):
+    serial_manager = SerialManager(rov_state)
+    rov_state.device_info.mcu_firmware_version = "1.2.3-rc.1"
+
+    asyncio.run(serial_manager._clear_connection_unlocked())
 
     assert rov_state.device_info.mcu_firmware_version == ""
 

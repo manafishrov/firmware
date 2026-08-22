@@ -386,3 +386,43 @@ def test_cancelled_flash_aborts_updater_and_clears_state(rov_state, monkeypatch)
 
     assert manager.writer.packets[-1][1] == esc_firmware._Command.ABORT
     assert not rov_state.mcu_flashing
+
+
+def test_connection_loss_before_programming_sets_terminal_failure(
+    rov_state, monkeypatch
+):
+    image = _valid_image()
+
+    class DisconnectedSerialManager:
+        def __init__(self):
+            self.io_lock = asyncio.Lock()
+
+        async def ensure_connection(self):
+            return True
+
+        def get_reader(self):
+            msg = "Serial not initialized"
+            raise RuntimeError(msg)
+
+        def get_writer(self):
+            msg = "Serial not initialized"
+            raise RuntimeError(msg)
+
+    monkeypatch.setattr(
+        esc_firmware,
+        "_resolve_validated_image",
+        lambda: (Path("esc-v2.20.0.bin"), "2.20.0", image),
+    )
+    monkeypatch.setattr(esc_firmware, "_DISARM_SETTLE_S", 0)
+
+    succeeded = asyncio.run(
+        esc_firmware.flash_esc_firmware(
+            rov_state,
+            cast(SerialManager, DisconnectedSerialManager()),
+            show_toasts=False,
+        )
+    )
+
+    assert not succeeded
+    assert rov_state.esc_firmware_update.stage == "failed"
+    assert rov_state.esc_firmware_update.error == "Serial not initialized"

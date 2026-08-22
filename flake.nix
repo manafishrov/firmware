@@ -65,10 +65,17 @@
     releaseVersionFromLock = inputName: let
       url = lockedInputs.${inputName}.locked.url or "";
       matched = builtins.match ".*/download/(v[^/]+)/.*" url;
+      version =
+        if matched == null
+        then ""
+        else builtins.head matched;
+      semver = builtins.match "v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?(\\+[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?" version;
+      rcLike = builtins.match ".*-[rR][cC].*" version != null;
+      canonicalRc = builtins.match "v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)-rc\\.[1-9][0-9]*(\\+[0-9A-Za-z]+([.-][0-9A-Za-z]+)*)?" version;
     in
-      if matched == null
+      if matched == null || semver == null || (rcLike && canonicalRc == null)
       then throw "${inputName} must be locked to a versioned GitHub release URL"
-      else builtins.head matched;
+      else version;
     mcuFirmwareVersion = let
       pico = releaseVersionFromLock "mcu-firmware-pico";
       pico2 = releaseVersionFromLock "mcu-firmware-pico2";

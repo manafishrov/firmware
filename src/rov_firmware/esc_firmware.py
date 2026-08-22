@@ -99,12 +99,6 @@ class EscFirmwareUpdateError(RuntimeError):
     """Raised when an ESC firmware image or update transaction is invalid."""
 
 
-def _version_sort_key(
-    version: str,
-) -> tuple[int, int, int, int, tuple[tuple[int, int, str], ...]]:
-    return semver_sort_key(version)
-
-
 def resolve_esc_firmware() -> tuple[Path, str] | None:
     """Return the newest bundled ESC firmware image and its SemVer."""
     firmware_dir = Path.home() / "esc-firmware"
@@ -118,7 +112,7 @@ def resolve_esc_firmware() -> tuple[Path, str] | None:
     return max(
         candidates,
         key=lambda candidate: (
-            _version_sort_key(candidate[1]),
+            semver_sort_key(candidate[1]),
             candidate[0].suffix == ".bin",
         ),
     )
@@ -699,7 +693,7 @@ async def flash_esc_firmware(
             update.error = "ESC firmware update was cancelled."
             await _abort_update(serial_manager)
             raise
-        except (EscFirmwareUpdateError, TimeoutError, OSError) as error:
+        except (EscFirmwareUpdateError, TimeoutError, OSError, RuntimeError) as error:
             log_error(f"ESC firmware update failed: {error}")
             update.active = False
             update.stage = EscFirmwareUpdateStage.FAILED
@@ -710,3 +704,12 @@ async def flash_esc_firmware(
         finally:
             state.mcu_flashing = False
             update.active = False
+            if update.stage in (
+                EscFirmwareUpdateStage.PREFLIGHT,
+                EscFirmwareUpdateStage.UPLOADING,
+                EscFirmwareUpdateStage.PROGRAMMING,
+            ):
+                update.stage = EscFirmwareUpdateStage.FAILED
+                update.error = (
+                    update.error or "ESC firmware update stopped unexpectedly."
+                )

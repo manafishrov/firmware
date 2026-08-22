@@ -122,6 +122,8 @@ class McuSensor:
             bytearray() for _ in range(NUM_MOTORS)
         ]
         self._esc_version_next_chunks: list[int] = [0] * NUM_MOTORS
+        self._invalid_release_warning_generation = -1
+        self._warned_invalid_release_versions: set[str] = set()
 
     async def read_loop(self) -> None:
         """Read telemetry data from the MCU in a loop."""
@@ -133,6 +135,21 @@ class McuSensor:
                 continue
             self._consume_read_buffer(read_buffer, data)
             self._expire_stale_telemetry()
+
+    async def shutdown(self) -> None:
+        """Cancel MCU-owned ESC tasks before the serial connection closes."""
+        tasks = [
+            task
+            for task in (
+                self._esc_firmware_flash_task,
+                self._esc_firmware_reconcile_task,
+            )
+            if task is not None and not task.done()
+        ]
+        for task in tasks:
+            _ = task.cancel()
+        if tasks:
+            _ = await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _read_chunk(self) -> bytes | None:
         if not await self.serial_manager.ensure_connection():
@@ -375,14 +392,31 @@ class McuSensor:
         try:
             version = bytes(packet[2 : 2 + version_length]).decode("ascii")
         except UnicodeDecodeError:
-            log_warn("MCU reported a non-ASCII release version")
+            encoded = bytes(packet[2 : 2 + version_length])
+            self._warn_invalid_release_version_once(
+                f"non-ascii:{encoded.hex()}",
+                "MCU reported a non-ASCII release version",
+            )
             return
         if not is_valid_semver(version):
-            log_warn(f"MCU reported an invalid release version: {version!r}")
+            self._warn_invalid_release_version_once(
+                f"invalid:{version}",
+                f"MCU reported an invalid release version: {version!r}",
+            )
             return
 
         self.state.device_info.mcu_firmware_version = version
         self._auto_update_mcu_if_needed(version, self._get_expected_version())
+
+    def _warn_invalid_release_version_once(self, key: str, message: str) -> None:
+        generation = self.serial_manager.connection_generation
+        if generation != self._invalid_release_warning_generation:
+            self._invalid_release_warning_generation = generation
+            self._warned_invalid_release_versions.clear()
+        if key in self._warned_invalid_release_versions:
+            return
+        self._warned_invalid_release_versions.add(key)
+        log_warn(message)
 
     @staticmethod
     def _handle_log_packet(packet: bytes | bytearray | memoryview) -> None:
@@ -442,11 +476,7 @@ class McuSensor:
         if expected_version is None:
             return
 
-        if not mcu_update_required(
-            self.state.rov_config.mcu_board,
-            current_version,
-            expected_version,
-        ):
+        if not mcu_update_required(current_version, expected_version):
             return
 
         if self.state.mcu_flashing:

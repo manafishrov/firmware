@@ -139,7 +139,7 @@ def test_import_publishes_canonical_config_to_client(rov_state, monkeypatch):
     asyncio.run(handle_import_config(rov_state, {"rovName": "Published"}))
 
     message = queue.get_nowait()
-    assert message.payload.rov_name == "Published"
+    assert message.payload.config.rov_name == "Published"
 
 
 def test_import_restarts_firmware_when_websocket_port_changed(rov_state, monkeypatch):
@@ -179,3 +179,58 @@ def test_import_uses_network_restart_when_ip_and_port_changed(rov_state, monkeyp
 
     assert network_calls == ["10.10.11.10"]
     assert restart_calls == []
+
+
+def test_import_confirms_correlated_config_before_connection_apply(
+    rov_state, monkeypatch
+):
+    events: list[str] = []
+
+    async def send_config(message):
+        assert message.payload.mutation_id == "import-1"
+        events.append("confirm")
+
+    async def apply_connection(_state, _previous):
+        events.append("apply")
+        return True
+
+    monkeypatch.setattr(config_handlers.websocket_state, "is_client_connected", True)
+    monkeypatch.setattr(config_handlers, "send_message_and_wait", send_config)
+    monkeypatch.setattr(config_handlers, "_apply_connection_change", apply_connection)
+
+    asyncio.run(
+        handle_import_config(
+            rov_state,
+            {"ipAddress": "10.10.11.10"},
+            mutation_id="import-1",
+        )
+    )
+
+    assert events == ["confirm", "apply"]
+
+
+def test_import_restores_config_when_confirmation_times_out(rov_state, monkeypatch):
+    apply_calls: list[None] = []
+
+    async def timeout(_message):
+        raise TimeoutError
+
+    async def apply_connection(_state, _previous):
+        apply_calls.append(None)
+        return True
+
+    monkeypatch.setattr(config_handlers.websocket_state, "is_client_connected", True)
+    monkeypatch.setattr(config_handlers, "send_message_and_wait", timeout)
+    monkeypatch.setattr(config_handlers, "_apply_connection_change", apply_connection)
+
+    asyncio.run(
+        handle_import_config(
+            rov_state,
+            {"ipAddress": "10.10.11.10"},
+            mutation_id="import-2",
+        )
+    )
+
+    assert apply_calls == []
+    assert rov_state.rov_config.ip_address == "10.10.10.10"
+    assert RovConfig.load().ip_address == "10.10.10.10"
