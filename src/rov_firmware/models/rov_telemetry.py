@@ -17,5 +17,5 @@ class RovTelemetry(CamelCaseModel):
     water_temperature: float
     electronics_temperature: float
     thruster_rpms: list[int]
-    thruster_signal_qualities: list[float]
+    thruster_signal_qualities: list[float | None]
     work_indicator_percentage: int

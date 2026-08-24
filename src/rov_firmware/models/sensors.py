@@ -16,6 +16,16 @@ class McuData(BaseModel):
     voltage: list[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     temperature: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
     signal_quality: list[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    signal_quality_valid: list[bool] = [
+        False,
+        False,
+        False,
+        False,
+        False,
+        False,
+        False,
+        False,
+    ]
 
 
 class ImuData(BaseModel):

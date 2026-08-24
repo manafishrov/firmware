@@ -12,6 +12,7 @@ class RovStatus(CamelCaseModel):
     battery_percentage: int
     current_draw: int
     pi_undervoltage: bool
+    thruster_control_ready: bool
     health: SystemHealth
     device_info: DeviceInfo
     esc_firmware_update: EscFirmwareUpdate

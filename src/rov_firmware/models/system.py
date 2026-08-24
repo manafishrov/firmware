@@ -62,3 +62,4 @@ class SystemStatus(BaseModel):
     auto_stabilization: bool = False
     depth_hold: bool = False
     battery_percentage: float = 0
+    thruster_control_ready: bool = False

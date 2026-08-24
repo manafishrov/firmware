@@ -9,7 +9,7 @@ from ...models.actions import CustomAction, DirectionVector
 from ...models.config import ThrusterTest
 from ...models.toast import ToastVariant
 from ...rov_state import RovState
-from ...toast import ToastContent, cancel_thruster_test_action, toast_content
+from ...toast import ToastContent, toast_content
 
 
 async def handle_direction_vector(
@@ -36,21 +36,23 @@ async def handle_start_thruster_test(
         state: The ROV state.
         payload: The thruster test index.
     """
-    log_info(f"Starting thruster test: {payload}")
+    if not state.system_status.thruster_control_ready:
+        log_warn(f"Rejecting thruster test {payload}: thruster control is not ready")
+        toast_content(
+            identifier=THRUSTER_TEST_TOAST_ID,
+            variant=ToastVariant.ERROR,
+            content=ToastContent(
+                message_key="toasts_thruster_test_unavailable",
+                description_key="toasts_thruster_test_unavailable_description",
+            ),
+            action=None,
+        )
+        return
+
+    log_info(f"Queueing thruster test: {payload}")
     state.thrusters.test_thruster = payload
-    state.thrusters.test_start_time = time.time()
-    state.thrusters.last_remaining = 10
-    toast_content(
-        identifier=THRUSTER_TEST_TOAST_ID,
-        variant=ToastVariant.LOADING,
-        content=ToastContent(
-            message_key="toasts_thruster_test_title",
-            message_args={"thruster": payload},
-            description_key="toasts_seconds_remaining",
-            description_args={"seconds": 10},
-        ),
-        action=cancel_thruster_test_action(payload),
-    )
+    state.thrusters.test_start_time = None
+    state.thrusters.last_remaining = 0
 
 
 async def handle_cancel_thruster_test(
@@ -65,6 +67,7 @@ async def handle_cancel_thruster_test(
     """
     log_info(f"Cancelling thruster test: {payload}")
     state.thrusters.test_thruster = None
+    state.thrusters.test_start_time = None
     toast_content(
         identifier=THRUSTER_TEST_TOAST_ID,
         variant=ToastVariant.INFO,

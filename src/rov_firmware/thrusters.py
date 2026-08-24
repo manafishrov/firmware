@@ -2,6 +2,7 @@
 
 import asyncio
 from asyncio import StreamWriter
+import math
 import struct
 import time
 from typing import cast
@@ -464,9 +465,17 @@ class Thrusters:
     def _handle_thruster_test(
         self, current_time: float, test_thruster: int
     ) -> NDArray[np.float32] | None:
-        elapsed = current_time - self.state.thrusters.test_start_time
+        start_time = self.state.thrusters.test_start_time
+        if start_time is None:
+            thrust_vector = self._test_thrust_vector
+            thrust_vector.fill(0.0)
+            thrust_vector[test_thruster] = 0.1
+            return thrust_vector
+
+        elapsed = current_time - start_time
         if elapsed >= THRUSTER_TEST_DURATION_SECONDS:
             self.state.thrusters.test_thruster = None
+            self.state.thrusters.test_start_time = None
             toast_content(
                 identifier=THRUSTER_TEST_TOAST_ID,
                 variant=ToastVariant.SUCCESS,
@@ -480,7 +489,7 @@ class Thrusters:
             thrust_vector = self._test_thrust_vector
             thrust_vector.fill(0.0)
             thrust_vector[test_thruster] = 0.1
-            remaining = int(THRUSTER_TEST_DURATION_SECONDS - elapsed)
+            remaining = math.ceil(THRUSTER_TEST_DURATION_SECONDS - elapsed)
             if remaining != self.state.thrusters.last_remaining:
                 self.state.thrusters.last_remaining = remaining
                 toast_content(
@@ -495,6 +504,42 @@ class Thrusters:
                     action=cancel_thruster_test_action(test_thruster),
                 )
             return thrust_vector
+
+    def _mark_thruster_test_started(self, current_time: float) -> None:
+        """Start the countdown after the first test command was written."""
+        test_thruster = self.state.thrusters.test_thruster
+        if test_thruster is None or self.state.thrusters.test_start_time is not None:
+            return
+        self.state.thrusters.test_start_time = current_time
+        self.state.thrusters.last_remaining = THRUSTER_TEST_DURATION_SECONDS
+        toast_content(
+            identifier=THRUSTER_TEST_TOAST_ID,
+            variant=ToastVariant.LOADING,
+            content=ToastContent(
+                message_key="toasts_thruster_test_title",
+                message_args={"thruster": test_thruster},
+                description_key="toasts_seconds_remaining",
+                description_args={"seconds": THRUSTER_TEST_DURATION_SECONDS},
+            ),
+            action=cancel_thruster_test_action(test_thruster),
+        )
+
+    def _fail_thruster_test_unavailable(self) -> None:
+        """End an active or queued test when motor output is unavailable."""
+        if self.state.thrusters.test_thruster is None:
+            return
+        self.state.thrusters.test_thruster = None
+        self.state.thrusters.test_start_time = None
+        self.state.thrusters.last_remaining = 0
+        toast_content(
+            identifier=THRUSTER_TEST_TOAST_ID,
+            variant=ToastVariant.ERROR,
+            content=ToastContent(
+                message_key="toasts_thruster_test_unavailable",
+                description_key="toasts_thruster_test_unavailable_description",
+            ),
+            action=None,
+        )
 
     async def _send_packet(
         self, writer: StreamWriter, thrust_values: list[int]
@@ -536,12 +581,15 @@ class Thrusters:
             self._pending_config_generation = -1
             self._pending_config_since = 0.0
             self._pending_config_warning_logged = False
+            self.state.system_status.thruster_control_ready = True
             return True
 
         # A protocol change is only safe while the Pico's last accepted motor
-        # command is neutral. Hold neutral until its version packet confirms
+        # command is neutral. Hold neutral until its status packet confirms
         # the requested configuration, and retry if either packet was lost or
         # rejected.
+        self.state.system_status.thruster_control_ready = False
+        self._fail_thruster_test_unavailable()
         await self._send_packet(writer, [THRUSTER_NEUTRAL_PULSE_WIDTH] * NUM_MOTORS)
 
         now = time.monotonic()
@@ -559,7 +607,7 @@ class Thrusters:
         ):
             log_error(
                 "Thruster protocol change is still blocked because the MCU has not "
-                "confirmed it. Check power and telemetry for every ESC."
+                "confirmed it. Check the MCU connection and firmware."
             )
             self._pending_config_warning_logged = True
 
@@ -633,6 +681,8 @@ class Thrusters:
         next_tick = time.perf_counter() + interval
         while True:
             if not await self.serial_manager.ensure_connection():
+                self.state.system_status.thruster_control_ready = False
+                self._fail_thruster_test_unavailable()
                 await asyncio.sleep(1)
                 next_tick = time.perf_counter() + interval
                 continue
@@ -666,10 +716,14 @@ class Thrusters:
 
             thrust_values = self._compute_thrust_values(thrust_vector)
             success = await self._send_with_retries(writer, thrust_values)
-            if not success:
+            if success:
+                self._mark_thruster_test_started(time.time())
+            else:
                 await self.serial_manager.handle_connection_lost(
                     "Thruster send failed 3 times, disabling MCU"
                 )
+                self.state.system_status.thruster_control_ready = False
+                self._fail_thruster_test_unavailable()
 
             sleep_time = next_tick - time.perf_counter()
             await asyncio.sleep(max(0.0, sleep_time))

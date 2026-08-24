@@ -47,6 +47,7 @@ class SerialManager:
         self.reader = None
         self.writer = None
         self._mcu_protocol_config = None
+        self.state.system_status.thruster_control_ready = False
         self.state.device_info.mcu_firmware_version = ""
         self.state.system_health.mcu_healthy = False
         if writer is not None:
@@ -89,6 +90,7 @@ class SerialManager:
                 )
                 self._connection_generation += 1
                 self._mcu_protocol_config = None
+                self.state.system_status.thruster_control_ready = False
                 self.state.system_health.mcu_healthy = True
                 log_info("MCU initialized successfully.")
                 return True
@@ -160,8 +162,15 @@ class SerialManager:
         return self._mcu_protocol_config
 
     def record_mcu_protocol_config(self, protocol: str, dshot_speed: int) -> None:
-        """Record a protocol configuration reported by an MCU version packet."""
+        """Record a protocol configuration acknowledged by the MCU."""
         self._mcu_protocol_config = (protocol, dshot_speed)
+        desired = (
+            self.state.rov_config.thruster_protocol.value,
+            self.state.rov_config.dshot_speed,
+        )
+        self.state.system_status.thruster_control_ready = (
+            self._mcu_protocol_config == desired
+        )
 
     async def shutdown(self) -> None:
         """Shutdown the serial connection."""

@@ -64,6 +64,7 @@ def build_status_update(state: RovState) -> StatusUpdate:
         battery_percentage=int(state.system_status.battery_percentage),
         current_draw=current_draw,
         pi_undervoltage=is_pi_undervoltage_detected(),
+        thruster_control_ready=state.system_status.thruster_control_ready,
         health=state.system_health,
         device_info=state.device_info,
         esc_firmware_update=state.esc_firmware_update,

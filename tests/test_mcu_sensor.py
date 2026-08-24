@@ -196,10 +196,20 @@ def test_invalid_release_warning_is_once_per_connection_generation(
 def test_clearing_serial_connection_clears_live_mcu_identity(rov_state):
     serial_manager = SerialManager(rov_state)
     rov_state.device_info.mcu_firmware_version = "1.2.3-rc.1"
+    rov_state.system_status.thruster_control_ready = True
 
     asyncio.run(serial_manager._clear_connection_unlocked())
 
     assert rov_state.device_info.mcu_firmware_version == ""
+    assert rov_state.system_status.thruster_control_ready is False
+
+
+def test_matching_runtime_config_ack_marks_thruster_control_ready(rov_state):
+    serial_manager = SerialManager(rov_state)
+
+    serial_manager.record_mcu_protocol_config("dshot", 300)
+
+    assert rov_state.system_status.thruster_control_ready is True
 
 
 def test_version_mismatch_auto_flashes_only_once_per_service_start(
@@ -252,6 +262,23 @@ def test_signal_quality_updates_do_not_keep_stale_current_alive(rov_state, monke
     assert rov_state.mcu_telemetry.current[0] == 0
     assert rov_state.mcu_telemetry.current_valid[0] is False
     assert rov_state.mcu_telemetry.signal_quality[0] == 100
+    assert rov_state.mcu_telemetry.signal_quality_valid[0] is True
+
+
+def test_stale_signal_quality_becomes_unavailable(rov_state, monkeypatch):
+    now = 10.0
+    monkeypatch.setattr(mcu_module.time, "monotonic", lambda: now)
+    sensor = McuSensor(rov_state, SerialManager(rov_state))
+    sensor._update_telemetry_item(0, MCU_TELEMETRY_TYPE_SIGNAL_QUALITY, 0)
+
+    assert rov_state.mcu_telemetry.signal_quality[0] == 0
+    assert rov_state.mcu_telemetry.signal_quality_valid[0] is True
+
+    now = 14.0
+    sensor._expire_stale_telemetry()
+
+    assert rov_state.mcu_telemetry.signal_quality[0] == 0
+    assert rov_state.mcu_telemetry.signal_quality_valid[0] is False
 
 
 def test_current_telemetry_preserves_raw_edt_amperes(rov_state):
