@@ -20,6 +20,7 @@ from rov_firmware.constants import (
 from rov_firmware.models.config import ThrusterPinSetup
 from rov_firmware.regulator import Regulator as RegulatorController
 from rov_firmware.thrusters import Thrusters
+from rov_firmware.websocket.receive.actions import handle_start_thruster_test
 
 
 class _WriterSpy:
@@ -351,5 +352,91 @@ def test_protocol_config_logs_actionable_error_when_ack_stays_blocked(
 
     assert messages == [
         "Thruster protocol change is still blocked because the MCU has not "
-        "confirmed it. Check power and telemetry for every ESC."
+        "confirmed it. Check the MCU connection and firmware."
     ]
+
+
+def test_thruster_test_countdown_starts_after_first_command_write(
+    thrusters, monkeypatch
+):
+    toasts = []
+    monkeypatch.setattr(
+        thrusters_module, "toast_content", lambda **kwargs: toasts.append(kwargs)
+    )
+    thrusters.state.thrusters.test_thruster = 3
+
+    vector = thrusters._handle_thruster_test(100.0, 3)
+
+    assert vector is not None
+    assert vector[3] == pytest.approx(0.1)
+    assert thrusters.state.thrusters.test_start_time is None
+    assert toasts == []
+
+    thrusters._mark_thruster_test_started(
+        100.0, thrusters.state.thrusters.test_request_id
+    )
+
+    assert thrusters.state.thrusters.test_start_time == 100.0
+    assert thrusters.state.thrusters.last_remaining == 10
+    assert toasts[0]["variant"].value == "loading"
+    assert toasts[0]["content"].description_args == {"seconds": 10}
+
+
+def test_unrelated_write_cannot_start_test_queued_while_drain_yields(
+    thrusters, monkeypatch
+):
+    toasts = []
+    monkeypatch.setattr(
+        thrusters_module, "toast_content", lambda **kwargs: toasts.append(kwargs)
+    )
+    thrusters.state.system_status.thruster_control_ready = True
+
+    async def run_interleaving() -> None:
+        vector, _, selected_request_id = thrusters._determine_thrust_vector(100.0, 0.0)
+        assert vector is not None
+        thrust_values = thrusters._compute_thrust_values(vector)
+
+        class _InterleavingWriter(_WriterSpy):
+            async def drain(self):
+                await asyncio.sleep(0)
+                await handle_start_thruster_test(thrusters.state, 3)
+                await super().drain()
+
+        sent = await thrusters._send_with_retries(
+            cast(Any, _InterleavingWriter()), thrust_values
+        )
+        assert sent is True
+        thrusters._mark_thruster_test_started(100.0, selected_request_id)
+
+        assert thrusters.state.thrusters.test_thruster == 3
+        assert thrusters.state.thrusters.test_start_time is None
+        assert toasts == []
+
+        test_vector, _, test_request_id = thrusters._determine_thrust_vector(101.0, 0.0)
+        assert test_vector is not None
+        sent = await thrusters._send_with_retries(
+            cast(Any, _WriterSpy()), thrusters._compute_thrust_values(test_vector)
+        )
+        assert sent is True
+        thrusters._mark_thruster_test_started(101.0, test_request_id)
+
+    asyncio.run(run_interleaving())
+
+    assert thrusters.state.thrusters.test_start_time == 101.0
+    assert toasts[0]["content"].description_args == {"seconds": 10}
+
+
+def test_lost_readiness_ends_thruster_test_with_terminal_error(thrusters, monkeypatch):
+    toasts = []
+    monkeypatch.setattr(
+        thrusters_module, "toast_content", lambda **kwargs: toasts.append(kwargs)
+    )
+    thrusters.state.thrusters.test_thruster = 2
+    thrusters.state.thrusters.test_start_time = 50.0
+
+    thrusters._fail_thruster_test_unavailable()
+
+    assert thrusters.state.thrusters.test_thruster is None
+    assert thrusters.state.thrusters.test_start_time is None
+    assert toasts[0]["variant"].value == "error"
+    assert toasts[0]["content"].message_key == "toasts_thruster_test_unavailable"

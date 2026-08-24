@@ -211,6 +211,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     "batteryPercentage": battery_percentage,
                     "currentDraw": current_draw,
                     "piUndervoltage": False,
+                    "thrusterControlReady": True,
                     "health": {
                         "mcuHealthy": True,
                         "imuHealthy": True,

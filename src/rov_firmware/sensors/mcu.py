@@ -133,11 +133,11 @@ class McuSensor:
         read_buffer = bytearray()
         while True:
             data = await self._read_chunk()
+            self._expire_stale_telemetry()
             if data is None:
                 await asyncio.sleep(1)
                 continue
             self._consume_read_buffer(read_buffer, data)
-            self._expire_stale_telemetry()
 
     async def shutdown(self) -> None:
         """Cancel MCU-owned ESC tasks before the serial connection closes."""
@@ -587,6 +587,8 @@ class McuSensor:
         getattr(self.state.mcu_telemetry, field)[global_id] = 0
         if packet_type == MCU_TELEMETRY_TYPE_CURRENT:
             self.state.mcu_telemetry.current_valid[global_id] = False
+        elif packet_type == MCU_TELEMETRY_TYPE_SIGNAL_QUALITY:
+            self.state.mcu_telemetry.signal_quality_valid[global_id] = False
         self._last_telemetry_time[global_id][packet_type] = 0.0
 
     def _update_telemetry(self, packet: bytes | bytearray | memoryview) -> None:
@@ -634,6 +636,7 @@ class McuSensor:
                 self.state.mcu_telemetry.current_valid[global_id] = True
             elif packet_type == MCU_TELEMETRY_TYPE_SIGNAL_QUALITY:
                 self.state.mcu_telemetry.signal_quality[global_id] = value / 100
+                self.state.mcu_telemetry.signal_quality_valid[global_id] = True
 
     def _update_esc_firmware_version(
         self, global_id: int, packet_type: int, value: int

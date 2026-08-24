@@ -11,6 +11,14 @@ def test_status_reports_pi_undervoltage(rov_state, monkeypatch):
     assert message.model_dump(by_alias=True)["payload"]["piUndervoltage"] is True
 
 
+def test_status_reports_thruster_control_readiness(rov_state):
+    rov_state.system_status.thruster_control_ready = True
+
+    payload = status.build_status_update(rov_state).model_dump(by_alias=True)["payload"]
+
+    assert payload["thrusterControlReady"] is True
+
+
 def test_status_reports_read_only_device_versions(rov_state):
     rov_state.device_info.mcu_firmware_version = "1.2.3-rc.1"
     rov_state.device_info.esc_firmware_versions = ["2.20.0-rc.3"] * 8
