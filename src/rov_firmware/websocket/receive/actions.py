@@ -50,6 +50,7 @@ async def handle_start_thruster_test(
         return
 
     log_info(f"Queueing thruster test: {payload}")
+    state.thrusters.test_request_id += 1
     state.thrusters.test_thruster = payload
     state.thrusters.test_start_time = None
     state.thrusters.last_remaining = 0
@@ -66,6 +67,7 @@ async def handle_cancel_thruster_test(
         payload: The thruster test configuration.
     """
     log_info(f"Cancelling thruster test: {payload}")
+    state.thrusters.test_request_id += 1
     state.thrusters.test_thruster = None
     state.thrusters.test_start_time = None
     toast_content(

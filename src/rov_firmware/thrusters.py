@@ -505,10 +505,17 @@ class Thrusters:
                 )
             return thrust_vector
 
-    def _mark_thruster_test_started(self, current_time: float) -> None:
+    def _mark_thruster_test_started(
+        self, current_time: float, test_request_id: int | None
+    ) -> None:
         """Start the countdown after the first test command was written."""
         test_thruster = self.state.thrusters.test_thruster
-        if test_thruster is None or self.state.thrusters.test_start_time is not None:
+        if (
+            test_request_id is None
+            or test_request_id != self.state.thrusters.test_request_id
+            or test_thruster is None
+            or self.state.thrusters.test_start_time is not None
+        ):
             return
         self.state.thrusters.test_start_time = current_time
         self.state.thrusters.last_remaining = THRUSTER_TEST_DURATION_SECONDS
@@ -626,7 +633,7 @@ class Thrusters:
 
     def _determine_thrust_vector(
         self, current_time: float, last_send_time: float
-    ) -> tuple[NDArray[np.float32] | None, float]:
+    ) -> tuple[NDArray[np.float32] | None, float, int | None]:
         if self.state.regulator.auto_tuning_active:
             tuning_vector = self.regulator.handle_auto_tuning(current_time)
             if tuning_vector is not None:
@@ -638,28 +645,29 @@ class Thrusters:
                 self._reorder_thrust_vector(thrust_vector)
                 self._clip_thrust_vector(thrust_vector)
                 self.state.thrusters.work_indicator_percentage = 0
-                return thrust_vector, last_send_time
+                return thrust_vector, last_send_time, None
 
         if self.state.thrusters.test_thruster is not None:
+            test_request_id = self.state.thrusters.test_request_id
             test_vector = self._handle_thruster_test(
                 current_time, self.state.thrusters.test_thruster
             )
             if test_vector is not None:
                 self.state.thrusters.work_indicator_percentage = 0
-                return test_vector, last_send_time
+                return test_vector, last_send_time, test_request_id
 
         if (
             self.state.thrusters.last_direction_time > 0
             and current_time - self.state.thrusters.last_direction_time
             < THRUSTER_TIMEOUT_MS / 1000
         ):
-            return self._create_thrust_vector(), current_time
+            return self._create_thrust_vector(), current_time, None
 
         if current_time - last_send_time > THRUSTER_TIMEOUT_MS / 1000:
             self.state.thrusters.work_indicator_percentage = 0
-            return self._zero_thrust_vector, last_send_time
+            return self._zero_thrust_vector, last_send_time, None
 
-        return None, last_send_time
+        return None, last_send_time, None
 
     async def _send_with_retries(
         self, writer: StreamWriter, thrust_values: list[int]
@@ -707,9 +715,11 @@ class Thrusters:
                 continue
 
             current_time = time.time()
-            new_thrust_vector, updated_last_send_time = self._determine_thrust_vector(
-                current_time, last_send_time
-            )
+            (
+                new_thrust_vector,
+                updated_last_send_time,
+                test_request_id,
+            ) = self._determine_thrust_vector(current_time, last_send_time)
             if new_thrust_vector is not None:
                 thrust_vector = new_thrust_vector
                 last_send_time = updated_last_send_time
@@ -717,7 +727,7 @@ class Thrusters:
             thrust_values = self._compute_thrust_values(thrust_vector)
             success = await self._send_with_retries(writer, thrust_values)
             if success:
-                self._mark_thruster_test_started(time.time())
+                self._mark_thruster_test_started(time.time(), test_request_id)
             else:
                 await self.serial_manager.handle_connection_lost(
                     "Thruster send failed 3 times, disabling MCU"

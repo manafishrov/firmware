@@ -17,5 +17,6 @@ class ThrusterData(CamelCaseModel):
     work_indicator_percentage: int = 0
     last_direction_time: float = 0.0
     test_thruster: int | None = None
+    test_request_id: int = 0
     test_start_time: float | None = None
     last_remaining: int = 0
