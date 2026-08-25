@@ -36,15 +36,17 @@ class _WriterSpy:
 
 
 class _SerialManagerSpy:
-    connection_generation = 1
-    mcu_protocol_config: tuple[str, int] | None = None
+    def __init__(self):
+        self.connection_generation = 1
+        self.mcu_protocol_config: tuple[str, int] | None = None
+        self.write_lock = asyncio.Lock()
 
 
 @pytest.fixture
 def thrusters(rov_state):
     return Thrusters(
         rov_state,
-        cast(Any, object()),
+        cast(Any, _SerialManagerSpy()),
         cast(Any, RegulatorController(rov_state)),
     )
 
@@ -122,6 +124,17 @@ def test_create_thrust_vector_runs_full_default_pipeline(thrusters):
         np.array([1.0, -1.0, 0.5, -0.5, 0.25, -0.25, 0.75, -0.75], dtype=np.float32),
     )
     assert thrusters.state.thrusters.work_indicator_percentage == 59
+
+
+def test_stale_input_still_stops_thrusters_with_stabilization_enabled(thrusters):
+    thrusters.state.system_status.auto_stabilization = True
+    thrusters.state.thrusters.direction_vector = np.ones(8, dtype=np.float32)
+    thrusters.state.thrusters.last_direction_time = 0.0
+
+    thrust_vector, _, _ = thrusters._determine_thrust_vector(100.0, 99.0)
+
+    assert thrust_vector is not None
+    assert np.array_equal(thrust_vector, np.zeros(8, dtype=np.float32))
 
 
 def test_correct_thrust_vector_spin_directions_applies_signs(thrusters):
@@ -259,6 +272,22 @@ def test_send_packet_writes_expected_binary_packet(thrusters):
     assert writer.drains == 1
 
 
+def test_send_packet_waits_for_exclusive_serial_writer(thrusters):
+    writer = _WriterSpy()
+
+    async def run_test() -> None:
+        await thrusters.serial_manager.write_lock.acquire()
+        send = asyncio.create_task(thrusters._send_packet(writer, [1500] * NUM_MOTORS))
+        await asyncio.sleep(0)
+        assert writer.writes == []
+        thrusters.serial_manager.write_lock.release()
+        await send
+
+    asyncio.run(run_test())
+
+    assert len(writer.writes) == 1
+
+
 @pytest.mark.parametrize(
     ("protocol", "dshot_speed", "expected_protocol"),
     [("dshot", 300, MCU_PROTOCOL_DSHOT), ("pwm", 600, MCU_PROTOCOL_PWM)],
@@ -330,6 +359,25 @@ def test_protocol_config_retries_after_unacknowledged_attempt(rov_state):
     assert len(writer.writes) == 2
     assert writer.writes[0][0] == THRUSTER_INPUT_START_BYTE
     assert writer.writes[1][0] == MCU_CONFIG_START_BYTE
+
+
+def test_esc_recovery_blocks_runtime_config_and_thruster_readiness(rov_state):
+    serial_manager = _SerialManagerSpy()
+    serial_manager.mcu_protocol_config = ("dshot", 300)
+    thrusters = Thrusters(
+        rov_state,
+        cast(Any, serial_manager),
+        cast(Any, RegulatorController(rov_state)),
+    )
+    writer = _WriterSpy()
+    rov_state.esc_firmware_recovery_required = True
+    rov_state.system_status.thruster_control_ready = True
+
+    confirmed = asyncio.run(thrusters._ensure_config_sent(cast(Any, writer)))
+
+    assert confirmed is False
+    assert not rov_state.system_status.thruster_control_ready
+    assert writer.writes == []
 
 
 def test_protocol_config_logs_actionable_error_when_ack_stays_blocked(

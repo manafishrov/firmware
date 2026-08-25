@@ -12,6 +12,7 @@ from ...constants import FLASH_TOAST_ID
 from ...log import log_error, log_info, log_warn
 from ...models.config import McuBoard
 from ...models.toast import ToastContent
+from ...motor_safety import disruptive_motor_operation_blocker
 from ...rov_state import RovState
 from ...toast import toast_error, toast_loading, toast_success
 from ...version import is_valid_semver, semver_sort_key
@@ -170,7 +171,7 @@ def _flash_write_completed(return_code: int, verification_succeeded: bool) -> bo
     return return_code == 0 or verification_succeeded
 
 
-async def flash_mcu_firmware(
+async def flash_mcu_firmware(  # noqa: PLR0911 - each flash phase has a fail-closed exit
     state: RovState,
     board: McuBoard,
     *,
@@ -190,6 +191,15 @@ async def flash_mcu_firmware(
     """
     if state.mcu_flash_lock.locked():
         log_warn("Ignoring MCU flash request because another flash is already running.")
+        return False
+
+    blocker = disruptive_motor_operation_blocker(state)
+    if blocker is not None:
+        _report_flash_error(
+            f"Firmware flash is blocked because {blocker}.",
+            show_toasts=show_toasts,
+            toast_identifier=toast_identifier,
+        )
         return False
 
     async with state.mcu_flash_lock:
@@ -215,6 +225,8 @@ async def flash_mcu_firmware(
                 return False
 
             state.mcu_flashing = True
+            state.system_status.thruster_control_ready = False
+            state.thrusters.direction_vector = None
             process = subprocess.Popen(  # noqa: S603
                 [picotool_path, "load", "-f", "-v", "-x", str(firmware_path)],
                 stdout=subprocess.PIPE,

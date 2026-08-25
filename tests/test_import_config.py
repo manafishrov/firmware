@@ -198,13 +198,18 @@ def test_import_confirms_correlated_config_before_connection_apply(
     monkeypatch.setattr(config_handlers, "send_message_and_wait", send_config)
     monkeypatch.setattr(config_handlers, "_apply_connection_change", apply_connection)
 
-    asyncio.run(
-        handle_import_config(
+    async def run_test():
+        await handle_import_config(
             rov_state,
             {"ipAddress": "10.10.11.10"},
             mutation_id="import-1",
         )
-    )
+        assert events == ["confirm"]
+        config_handlers.handle_confirm_config(rov_state, "import-1")
+        assert rov_state.connection_change_task is not None
+        await rov_state.connection_change_task
+
+    asyncio.run(run_test())
 
     assert events == ["confirm", "apply"]
 

@@ -94,20 +94,21 @@ in {
 
   environment.systemPackages = [networkScript];
 
-  # The network helper is run by root during boot and by `pi` after a runtime
-  # config change. Give both paths one transient location for the subnet-aware
-  # dnsmasq configuration.
-  systemd.tmpfiles.rules = ["d /run/manafish 0755 pi users -"];
+  # The network helper runs as root during boot and through the privileged
+  # apply unit after a runtime config change. Give both paths one transient
+  # location for the subnet-aware dnsmasq configuration.
+  systemd.tmpfiles.rules = ["d /run/manafish 0755 root root -"];
 
-  # Applying a new ROV address must reload the matching DHCP pool and rebind
-  # the firmware server. Limit the firmware user to those two units.
+  # The firmware user may request the privileged network apply unit or restart
+  # itself after a WebSocket port change. The apply unit performs its own
+  # dnsmasq restart as root.
   security.polkit = {
     enable = true;
     extraConfig = ''
       polkit.addRule(function (action, subject) {
         if (
           action.id == "org.freedesktop.systemd1.manage-units" &&
-          ["dnsmasq.service", "manafish-firmware.service"].indexOf(
+          ["manafish-firmware.service", "manafish-network-apply.service"].indexOf(
             action.lookup("unit")
           ) >= 0 &&
           subject.user == "pi"
@@ -169,8 +170,17 @@ in {
     };
   };
 
-  # The WebSocket config handler runs inside this restricted service.
-  systemd.services.manafish-firmware.path = [networkScript];
+  # Runtime changes are requested by the unprivileged firmware service, then
+  # applied here as root. The helper reads the already validated and persisted
+  # config instead of accepting network values through a privileged argument.
+  systemd.services.manafish-network-apply = {
+    after = ["NetworkManager.service"];
+    wants = ["NetworkManager.service"];
+    serviceConfig = {
+      Type = "oneshot";
+      ExecStart = lib.getExe networkScript;
+    };
+  };
 
   systemd.services.dnsmasq = {
     after = ["manafish-network.service"];

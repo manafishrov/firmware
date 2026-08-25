@@ -474,6 +474,11 @@ class Regulator:
         yaw_rotation = Rotation.from_rotvec([0.0, 0.0, current_yaw])
         self.desired_attitude = yaw_rotation * self.desired_attitude
 
+        yaw, pitch, roll = self.desired_attitude.as_euler("ZYX", degrees=True)
+        self.state.regulator.desired_pitch = pitch
+        self.state.regulator.desired_roll = roll
+        self.state.regulator.desired_yaw = yaw
+
         self.integral_attitude_rad[:] = 0.0
 
     def _handle_stabilization(
@@ -659,8 +664,8 @@ class Regulator:
             self.delta_t_run_regulator = 1 / THRUSTER_SEND_FREQUENCY
         self.last_run_regulator_time = now
 
-        self._update_desired_from_direction_vector(direction_vector)
         self._handle_edges()
+        self._update_desired_from_direction_vector(direction_vector)
 
         if self.state.system_status.depth_hold:
             depth_regulator_actuation = self._handle_depth_hold(

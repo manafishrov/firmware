@@ -25,13 +25,6 @@ class DeviceInfo(CamelCaseModel):
     )
 
 
-class EscFirmwareUpdateOrigin(StrEnum):
-    """How the current ESC firmware update was started."""
-
-    AUTOMATIC = "automatic"
-    MANUAL = "manual"
-
-
 class EscFirmwareUpdateStage(StrEnum):
     """Observable stage of the most recent ESC firmware update."""
 
@@ -41,6 +34,8 @@ class EscFirmwareUpdateStage(StrEnum):
     PROGRAMMING = "programming"
     AWAITING_TELEMETRY = "awaitingTelemetry"
     SUCCEEDED = "succeeded"
+    UNCONFIRMED = "unconfirmed"
+    VERSION_MISMATCH = "versionMismatch"
     FAILED = "failed"
 
 
@@ -48,12 +43,12 @@ class EscFirmwareUpdate(CamelCaseModel):
     """Live ESC firmware update state exposed to the desktop app."""
 
     active: bool = False
-    origin: EscFirmwareUpdateOrigin | None = None
     stage: EscFirmwareUpdateStage = EscFirmwareUpdateStage.IDLE
     progress: int = 0
     current_esc: int | None = None
     target_version: str | None = None
     error: str | None = None
+    recovery_required: bool = False
 
 
 class SystemStatus(BaseModel):

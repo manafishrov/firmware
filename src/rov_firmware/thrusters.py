@@ -557,8 +557,9 @@ class Thrusters:
         for b in packet:
             checksum ^= b
         packet.append(checksum)
-        writer.write(packet)
-        await writer.drain()
+        async with self.serial_manager.write_lock:
+            writer.write(packet)
+            await writer.drain()
 
     async def _send_config_packet(self, writer: StreamWriter) -> None:
         protocol = (
@@ -574,10 +575,16 @@ class Thrusters:
         for b in packet:
             checksum ^= b
         packet.append(checksum)
-        writer.write(packet)
-        await writer.drain()
+        async with self.serial_manager.write_lock:
+            writer.write(packet)
+            await writer.drain()
 
     async def _ensure_config_sent(self, writer: StreamWriter) -> bool:
+        if self.state.esc_firmware_recovery_required:
+            self.state.system_status.thruster_control_ready = False
+            self._fail_thruster_test_unavailable()
+            return False
+
         current = (
             self.state.rov_config.thruster_protocol.value,
             self.state.rov_config.dshot_speed,

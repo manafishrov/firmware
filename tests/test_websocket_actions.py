@@ -1,5 +1,6 @@
 import asyncio
 
+from rov_firmware.models.actions import DirectionVector
 from rov_firmware.websocket.receive import actions
 
 
@@ -28,3 +29,16 @@ def test_thruster_test_is_queued_without_starting_countdown(rov_state, monkeypat
     assert rov_state.thrusters.test_thruster == 4
     assert rov_state.thrusters.test_start_time is None
     assert toasts == []
+
+
+def test_direction_input_is_neutralized_during_firmware_update(rov_state):
+    rov_state.mcu_flashing = True
+
+    asyncio.run(
+        actions.handle_direction_vector(
+            rov_state,
+            DirectionVector.model_validate([1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+        )
+    )
+
+    assert rov_state.thrusters.direction_vector is None

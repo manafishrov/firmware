@@ -11,6 +11,7 @@ class MessageType(StrEnum):
     SET_CONFIG = "setConfig"
     IMPORT_CONFIG = "importConfig"
     CONFIG = "config"
+    CONFIRM_CONFIG = "confirmConfig"
     START_THRUSTER_TEST = "startThrusterTest"
     CANCEL_THRUSTER_TEST = "cancelThrusterTest"
     START_REGULATOR_AUTO_TUNING = "startRegulatorAutoTuning"
