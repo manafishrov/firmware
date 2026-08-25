@@ -24,6 +24,19 @@ def test_auto_stabilization_set_is_idempotent(rov_state):
     assert rov_state.regulator.desired_roll == 0.0
 
 
+def test_auto_stabilization_enable_immediately_publishes_level_target(rov_state):
+    rov_state.regulator.yaw = 47.5
+    rov_state.regulator.desired_pitch = 12.0
+    rov_state.regulator.desired_roll = -8.0
+    rov_state.regulator.desired_yaw = -90.0
+
+    asyncio.run(handle_set_auto_stabilization(rov_state, True))
+
+    assert rov_state.regulator.desired_pitch == 0.0
+    assert rov_state.regulator.desired_roll == 0.0
+    assert rov_state.regulator.desired_yaw == 47.5
+
+
 def test_depth_hold_set_only_captures_depth_on_enable_transition(rov_state):
     rov_state.pressure.depth = 7.5
 

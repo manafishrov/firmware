@@ -125,6 +125,20 @@ def test_apply_command_has_a_timeout(monkeypatch):
     assert warnings and warnings[0].startswith("Failed to apply camera settings:")
 
 
+def test_ip_address_apply_uses_privileged_systemd_service(monkeypatch):
+    calls: list[list[str]] = []
+    systemctl = "/run/current-system/sw/bin/systemctl"
+    monkeypatch.setattr(config_handlers.shutil, "which", lambda _binary: systemctl)
+
+    def run(command, **_kwargs):
+        calls.append(command)
+
+    monkeypatch.setattr(config_handlers.subprocess, "run", run)
+
+    assert config_handlers._apply_ip_address("10.10.10.9") is True
+    assert calls == [[systemctl, "start", "manafish-network-apply.service"]]
+
+
 def test_set_config_restarts_firmware_when_websocket_port_changed(
     rov_state, monkeypatch
 ):

@@ -153,26 +153,6 @@ def test_esc_firmware_version_requires_strict_semver(version, valid):
     assert esc_firmware.is_valid_esc_firmware_version(version) is valid
 
 
-def test_live_versions_are_source_of_truth_when_all_escs_report(tmp_path, monkeypatch):
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-
-    assert not esc_firmware.esc_firmware_update_required(
-        "2.20.0-rc.2", ["2.20.0-rc.2"] * 8
-    )
-    assert esc_firmware.esc_firmware_update_required(
-        "2.20.0-rc.2", ["2.20.0-rc.2"] * 7 + ["2.20.0-rc.1"]
-    )
-
-
-def test_missing_live_version_requires_reconciliation(tmp_path, monkeypatch):
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-
-    assert esc_firmware.esc_firmware_update_required(
-        "2.20.0-rc.2",
-        ["2.20.0-rc.2", "2.20.0-rc.2", None, None, None, None, None, None],
-    )
-
-
 def test_usb_packets_have_fixed_sizes_and_checksums():
     image = _valid_image()
     begin = esc_firmware._control_packet(esc_firmware._Command.BEGIN, image)
@@ -225,6 +205,82 @@ def test_update_preserves_status_bytes_between_upload_and_flash():
     packets = asyncio.run(run_update())
 
     assert len(packets) == 3
+
+
+def test_upload_retries_a_missing_chunk_acknowledgement(monkeypatch):
+    attempts = 0
+
+    class RecordingWriter:
+        def __init__(self):
+            self.packets = []
+
+        def write(self, packet):
+            self.packets.append(packet)
+
+        async def drain(self):
+            return None
+
+    async def fake_expect_status(*_args, **_kwargs):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            msg = "missing acknowledgement"
+            raise esc_firmware._PicoStatusTimeoutError(msg)
+        return 0xFF, ESC_FIRMWARE_USB_DATA_PAYLOAD_SIZE
+
+    async def run_test() -> list[bytes]:
+        writer = RecordingWriter()
+        packet = bytes((esc_firmware.ESC_FIRMWARE_USB_DATA_START_BYTE,))
+        monkeypatch.setattr(esc_firmware, "_expect_status", fake_expect_status)
+        await esc_firmware._write_with_ack_retry(
+            (
+                asyncio.StreamReader(),
+                cast(asyncio.StreamWriter, writer),
+                bytearray(),
+            ),
+            packet,
+            (
+                esc_firmware._Status.RECEIVED,
+                ESC_FIRMWARE_USB_DATA_PAYLOAD_SIZE,
+            ),
+            uploaded_bytes=0,
+        )
+        return writer.packets
+
+    packets = asyncio.run(run_test())
+
+    assert attempts == 2
+    assert packets == [
+        bytes((esc_firmware.ESC_FIRMWARE_USB_DATA_START_BYTE,)),
+        bytes((esc_firmware.ESC_FIRMWARE_USB_DATA_START_BYTE,)),
+    ]
+
+
+def test_expected_status_ignores_stale_upload_acknowledgement():
+    async def run_test() -> tuple[int, int]:
+        reader = asyncio.StreamReader()
+        reader.feed_data(
+            _status_packet(
+                esc_firmware._Status.RECEIVED,
+                ESC_FIRMWARE_USB_DATA_PAYLOAD_SIZE,
+            )
+            + _status_packet(
+                esc_firmware._Status.RECEIVED,
+                ESC_FIRMWARE_USB_DATA_PAYLOAD_SIZE * 2,
+            )
+        )
+        reader.feed_eof()
+        return await esc_firmware._expect_status(
+            reader,
+            bytearray(),
+            esc_firmware._Status.RECEIVED,
+            ESC_FIRMWARE_USB_DATA_PAYLOAD_SIZE * 2,
+        )
+
+    assert asyncio.run(run_test()) == (
+        0,
+        ESC_FIRMWARE_USB_DATA_PAYLOAD_SIZE * 2,
+    )
 
 
 def test_status_reader_resynchronizes_after_false_start_byte():
@@ -285,6 +341,25 @@ def test_flash_status_reports_friendly_one_based_failure():
         )
 
 
+def test_preflight_requires_live_dshot_acknowledgement(rov_state):
+    class UnacknowledgedSerialManager:
+        mcu_protocol_config = None
+
+        async def ensure_connection(self):
+            return True
+
+    with pytest.raises(
+        esc_firmware.EscFirmwareUpdateError,
+        match="has not acknowledged the selected DShot configuration",
+    ):
+        asyncio.run(
+            esc_firmware._preflight_update(
+                rov_state,
+                cast(SerialManager, UnacknowledgedSerialManager()),
+            )
+        )
+
+
 def test_concurrent_flash_request_is_rejected_and_success_updates_live_state(
     rov_state, monkeypatch
 ):
@@ -295,6 +370,8 @@ def test_concurrent_flash_request_is_rejected_and_success_updates_live_state(
     class FakeSerialManager:
         def __init__(self):
             self.io_lock = asyncio.Lock()
+            self.write_lock = asyncio.Lock()
+            self.mcu_protocol_config = ("dshot", rov_state.rov_config.dshot_speed)
 
         async def ensure_connection(self):
             connection_started.set()
@@ -312,6 +389,7 @@ def test_concurrent_flash_request_is_rejected_and_success_updates_live_state(
 
     async def run_test():
         manager = cast(SerialManager, FakeSerialManager())
+        rov_state.system_status.thruster_control_ready = True
         monkeypatch.setattr(
             esc_firmware,
             "_resolve_validated_image",
@@ -352,6 +430,8 @@ def test_cancelled_flash_aborts_updater_and_clears_state(rov_state, monkeypatch)
     class FakeSerialManager:
         def __init__(self):
             self.io_lock = asyncio.Lock()
+            self.write_lock = asyncio.Lock()
+            self.mcu_protocol_config = ("dshot", rov_state.rov_config.dshot_speed)
             self.writer = RecordingWriter()
 
         async def ensure_connection(self):
@@ -367,6 +447,7 @@ def test_cancelled_flash_aborts_updater_and_clears_state(rov_state, monkeypatch)
         raise asyncio.CancelledError
 
     manager = FakeSerialManager()
+    rov_state.system_status.thruster_control_ready = True
     monkeypatch.setattr(
         esc_firmware,
         "_resolve_validated_image",
@@ -396,6 +477,8 @@ def test_connection_loss_before_programming_sets_terminal_failure(
     class DisconnectedSerialManager:
         def __init__(self):
             self.io_lock = asyncio.Lock()
+            self.write_lock = asyncio.Lock()
+            self.mcu_protocol_config = ("dshot", rov_state.rov_config.dshot_speed)
 
         async def ensure_connection(self):
             return True
@@ -414,6 +497,7 @@ def test_connection_loss_before_programming_sets_terminal_failure(
         lambda: (Path("esc-v2.20.0.bin"), "2.20.0", image),
     )
     monkeypatch.setattr(esc_firmware, "_DISARM_SETTLE_S", 0)
+    rov_state.system_status.thruster_control_ready = True
 
     succeeded = asyncio.run(
         esc_firmware.flash_esc_firmware(

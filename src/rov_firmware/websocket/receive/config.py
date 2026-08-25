@@ -33,7 +33,12 @@ async def handle_get_config(
     log_info("Sent config to client.")
 
 
-def _run_apply_command(binary: str, success_message: str, failure_message: str) -> bool:
+def _run_apply_command(
+    binary: str,
+    success_message: str,
+    failure_message: str,
+    *arguments: str,
+) -> bool:
     """Run a bounded system configuration helper and report its result."""
     path = shutil.which(binary)
     if path is None:
@@ -41,7 +46,7 @@ def _run_apply_command(binary: str, success_message: str, failure_message: str) 
         return False
     try:
         subprocess.run(  # noqa: S603
-            [path],
+            [path, *arguments],
             check=True,
             capture_output=True,
             timeout=_APPLY_COMMAND_TIMEOUT_SECONDS,
@@ -55,9 +60,11 @@ def _run_apply_command(binary: str, success_message: str, failure_message: str) 
 
 def _apply_ip_address(ip_address: str) -> bool:
     return _run_apply_command(
-        "manafish-network",
+        "systemctl",
         f"Applied IP address change to {ip_address}.",
         f"Failed to apply IP address change to {ip_address}",
+        "start",
+        "manafish-network-apply.service",
     )
 
 

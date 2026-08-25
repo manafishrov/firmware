@@ -1,12 +1,11 @@
 import asyncio
-from pathlib import Path
 
 from rov_firmware.constants import (
-    MCU_AUTO_UPDATE_WINDOW_S,
     MCU_PROTOCOL_DSHOT,
     MCU_RELEASE_VERSION_MAX_LENGTH,
     MCU_RELEASE_VERSION_START_BYTE,
     MCU_RUNTIME_CONFIG_STATUS_START_BYTE,
+    MCU_TELEMETRY_SIGNAL_QUALITY_UNAVAILABLE,
     MCU_TELEMETRY_TYPE_CURRENT,
     MCU_TELEMETRY_TYPE_ESC_VERSION_CHUNK,
     MCU_TELEMETRY_TYPE_ESC_VERSION_COMPLETE,
@@ -227,28 +226,6 @@ def test_version_mismatch_auto_flashes_only_once_per_service_start(
     assert sensor._mcu_auto_flash_attempted is True
 
 
-def test_esc_mismatch_auto_flashes_only_once_per_service_start(rov_state, monkeypatch):
-    loop = _RecordingLoop()
-    sensor = McuSensor(rov_state, SerialManager(rov_state))
-    monkeypatch.setattr(mcu_module.asyncio, "get_running_loop", lambda: loop)
-    monkeypatch.setattr(
-        mcu_module,
-        "resolve_esc_firmware",
-        lambda: (Path("esc-v2.21.0.bin"), "2.21.0"),
-    )
-    monkeypatch.setattr(
-        mcu_module,
-        "esc_firmware_update_required",
-        lambda *_args: True,
-    )
-
-    sensor._auto_update_esc_firmware_if_needed()
-    sensor._auto_update_esc_firmware_if_needed()
-
-    assert loop.created == 1
-    assert sensor._esc_auto_flash_attempted is True
-
-
 def test_signal_quality_updates_do_not_keep_stale_current_alive(rov_state, monkeypatch):
     now = 10.0
     monkeypatch.setattr(mcu_module.time, "monotonic", lambda: now)
@@ -281,6 +258,19 @@ def test_stale_signal_quality_becomes_unavailable(rov_state, monkeypatch):
     assert rov_state.mcu_telemetry.signal_quality_valid[0] is False
 
 
+def test_signal_quality_sentinel_is_reported_as_unavailable(rov_state):
+    sensor = McuSensor(rov_state, SerialManager(rov_state))
+
+    sensor._update_telemetry_item(
+        0,
+        MCU_TELEMETRY_TYPE_SIGNAL_QUALITY,
+        MCU_TELEMETRY_SIGNAL_QUALITY_UNAVAILABLE,
+    )
+
+    assert rov_state.mcu_telemetry.signal_quality[0] == 0.0
+    assert rov_state.mcu_telemetry.signal_quality_valid[0] is False
+
+
 def test_current_telemetry_preserves_raw_edt_amperes(rov_state):
     sensor = McuSensor(rov_state, SerialManager(rov_state))
 
@@ -299,17 +289,12 @@ def test_current_telemetry_rejects_negative_usb_values(rov_state):
     assert rov_state.mcu_telemetry.current_valid[2] is True
 
 
-def test_esc_firmware_version_is_assembled_from_live_telemetry(rov_state, monkeypatch):
+def test_esc_firmware_version_is_assembled_from_live_telemetry(rov_state):
     sensor = McuSensor(rov_state, SerialManager(rov_state))
     version = b"2.20.1-rc.3"
     reported_versions: list[str | None] = [version.decode()] * 8
     rov_state.device_info.esc_firmware_versions = reported_versions
     rov_state.device_info.esc_firmware_versions[3] = None
-    monkeypatch.setattr(
-        mcu_module,
-        "resolve_esc_firmware",
-        lambda: (Path("esc-v2.20.2.bin"), "2.20.2"),
-    )
 
     def report_version(motor: int, checksum: int) -> None:
         sensor._update_telemetry_item(
@@ -333,23 +318,3 @@ def test_esc_firmware_version_is_assembled_from_live_telemetry(rov_state, monkey
 
     assert rov_state.device_info.esc_firmware_versions[3] == "2.20.1-rc.3"
     assert rov_state.device_info.esc_firmware_versions[4] is None
-
-
-def test_runtime_config_status_stops_scheduling_esc_reconciliation_after_startup_window(
-    rov_state, monkeypatch
-):
-    sensor = McuSensor(rov_state, SerialManager(rov_state))
-    sensor._startup_time = 0.0
-    scheduled = []
-    monkeypatch.setattr(
-        mcu_module.time, "monotonic", lambda: MCU_AUTO_UPDATE_WINDOW_S + 1
-    )
-    monkeypatch.setattr(
-        sensor, "_schedule_esc_firmware_reconciliation", lambda: scheduled.append(True)
-    )
-
-    sensor._handle_runtime_config_status_packet(
-        _runtime_config_status_packet(MCU_PROTOCOL_DSHOT, 600)
-    )
-
-    assert scheduled == []

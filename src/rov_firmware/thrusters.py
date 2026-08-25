@@ -557,8 +557,9 @@ class Thrusters:
         for b in packet:
             checksum ^= b
         packet.append(checksum)
-        writer.write(packet)
-        await writer.drain()
+        async with self.serial_manager.write_lock:
+            writer.write(packet)
+            await writer.drain()
 
     async def _send_config_packet(self, writer: StreamWriter) -> None:
         protocol = (
@@ -574,8 +575,9 @@ class Thrusters:
         for b in packet:
             checksum ^= b
         packet.append(checksum)
-        writer.write(packet)
-        await writer.drain()
+        async with self.serial_manager.write_lock:
+            writer.write(packet)
+            await writer.drain()
 
     async def _ensure_config_sent(self, writer: StreamWriter) -> bool:
         current = (

@@ -8,7 +8,6 @@ from typing import Any
 
 from rov_firmware.models.system import (
     EscFirmwareUpdate,
-    EscFirmwareUpdateOrigin,
     EscFirmwareUpdateStage,
 )
 
@@ -71,7 +70,6 @@ class MockEscFirmware:
         try:
             self.update = EscFirmwareUpdate(
                 active=True,
-                origin=EscFirmwareUpdateOrigin.MANUAL,
                 stage=EscFirmwareUpdateStage.PREFLIGHT,
                 target_version=TARGET_VERSION,
             )

@@ -25,13 +25,6 @@ class DeviceInfo(CamelCaseModel):
     )
 
 
-class EscFirmwareUpdateOrigin(StrEnum):
-    """How the current ESC firmware update was started."""
-
-    AUTOMATIC = "automatic"
-    MANUAL = "manual"
-
-
 class EscFirmwareUpdateStage(StrEnum):
     """Observable stage of the most recent ESC firmware update."""
 
@@ -48,7 +41,6 @@ class EscFirmwareUpdate(CamelCaseModel):
     """Live ESC firmware update state exposed to the desktop app."""
 
     active: bool = False
-    origin: EscFirmwareUpdateOrigin | None = None
     stage: EscFirmwareUpdateStage = EscFirmwareUpdateStage.IDLE
     progress: int = 0
     current_esc: int | None = None

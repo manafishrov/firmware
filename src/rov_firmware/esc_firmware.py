@@ -1,4 +1,4 @@
-"""Automatic ESC firmware updates through the thruster MCU."""
+"""Manual ESC firmware updates through the thruster MCU."""
 
 import asyncio
 from collections.abc import Callable
@@ -26,7 +26,7 @@ from .constants import (
 )
 from .log import log_error, log_info, log_warn
 from .models.config import ThrusterProtocol
-from .models.system import EscFirmwareUpdateOrigin, EscFirmwareUpdateStage
+from .models.system import EscFirmwareUpdateStage
 from .models.toast import ToastContent
 from .rov_state import RovState
 from .serial import SerialManager
@@ -38,6 +38,8 @@ _TARGET_NAME = b"SKYSTARS_AM60_V2_F421"
 _RELEASE_MAGIC = b"MANAESC1:"
 _ALL_ESCS = 0xFF
 _STATUS_TIMEOUT_S = 8.0
+_UPLOAD_ACK_TIMEOUT_S = 2.0
+_UPLOAD_RETRY_ATTEMPTS = 3
 _DISARM_SETTLE_S = 0.25
 _HEX_RECORD_OVERHEAD = 5
 _HEX_DATA = 0
@@ -99,6 +101,18 @@ class EscFirmwareUpdateError(RuntimeError):
     """Raised when an ESC firmware image or update transaction is invalid."""
 
 
+class _PicoStatusTimeoutError(EscFirmwareUpdateError):
+    """Raised when the Pico does not acknowledge an updater packet in time."""
+
+
+type _UploadTransport = tuple[
+    asyncio.StreamReader,
+    asyncio.StreamWriter,
+    bytearray,
+]
+type _ExpectedUploadAck = tuple[_Status, int]
+
+
 def resolve_esc_firmware() -> tuple[Path, str] | None:
     """Return the newest bundled ESC firmware image and its SemVer."""
     firmware_dir = Path.home() / "esc-firmware"
@@ -121,15 +135,6 @@ def resolve_esc_firmware() -> tuple[Path, str] | None:
 def is_valid_esc_firmware_version(version: str) -> bool:
     """Return whether a reported ESC release string is valid SemVer."""
     return is_valid_semver(version)
-
-
-def esc_firmware_update_required(
-    version: str, installed_versions: list[str | None]
-) -> bool:
-    """Return whether any ESC differs from the bundled firmware version."""
-    return len(installed_versions) != NUM_MOTORS or any(
-        installed != version for installed in installed_versions
-    )
 
 
 def _toast_esc_flash_error(error: str) -> None:
@@ -436,9 +441,12 @@ async def _write_packet(writer: asyncio.StreamWriter, packet: bytes) -> None:
 
 
 async def _read_status(
-    reader: asyncio.StreamReader, read_buffer: bytearray
+    reader: asyncio.StreamReader,
+    read_buffer: bytearray,
+    *,
+    timeout: float = _STATUS_TIMEOUT_S,
 ) -> tuple[_Status, int, int, int]:
-    deadline = time.monotonic() + _STATUS_TIMEOUT_S
+    deadline = time.monotonic() + timeout
     while True:
         start = read_buffer.find(bytes((ESC_FIRMWARE_USB_STATUS_START_BYTE,)))
         if (
@@ -465,8 +473,12 @@ async def _read_status(
         remaining = deadline - time.monotonic()
         if remaining <= 0:
             msg = "Timed out waiting for the Pico ESC firmware updater"
-            raise EscFirmwareUpdateError(msg)
-        data = await asyncio.wait_for(reader.read(128), timeout=remaining)
+            raise _PicoStatusTimeoutError(msg)
+        try:
+            data = await asyncio.wait_for(reader.read(128), timeout=remaining)
+        except TimeoutError as error:
+            msg = "Timed out waiting for the Pico ESC firmware updater"
+            raise _PicoStatusTimeoutError(msg) from error
         if not data:
             msg = "MCU serial stream closed during ESC firmware update"
             raise EscFirmwareUpdateError(msg)
@@ -478,14 +490,65 @@ async def _expect_status(
     read_buffer: bytearray,
     expected: _Status,
     expected_value: int | None = None,
+    *,
+    timeout: float = _STATUS_TIMEOUT_S,
 ) -> tuple[int, int]:
-    status, motor, error, value = await _read_status(reader, read_buffer)
-    if status == _Status.FAILED:
-        raise EscFirmwareUpdateError(_format_updater_failure(motor, error))
-    if status != expected or (expected_value is not None and value != expected_value):
+    while True:
+        status, motor, error, value = await _read_status(
+            reader, read_buffer, timeout=timeout
+        )
+        if status == _Status.FAILED:
+            raise EscFirmwareUpdateError(_format_updater_failure(motor, error))
+        if status == expected and (expected_value is None or value == expected_value):
+            return motor, value
+        if (
+            status == _Status.RECEIVED
+            and expected == _Status.RECEIVED
+            and expected_value is not None
+            and value < expected_value
+        ):
+            # A delayed acknowledgement from an earlier retry can remain in
+            # the stream. Ignore it and wait for the current cumulative
+            # offset instead of failing the whole upload.
+            continue
         msg = f"Unexpected Pico ESC firmware status {status.name} (value {value})"
         raise EscFirmwareUpdateError(msg)
-    return motor, value
+
+
+async def _write_with_ack_retry(
+    transport: _UploadTransport,
+    packet: bytes,
+    expected_ack: _ExpectedUploadAck,
+    *,
+    uploaded_bytes: int,
+) -> None:
+    reader, writer, read_buffer = transport
+    expected, expected_value = expected_ack
+    for attempt in range(1, _UPLOAD_RETRY_ATTEMPTS + 1):
+        await _write_packet(writer, packet)
+        try:
+            await _expect_status(
+                reader,
+                read_buffer,
+                expected,
+                expected_value,
+                timeout=_UPLOAD_ACK_TIMEOUT_S,
+            )
+            return
+        except _PicoStatusTimeoutError:
+            if attempt < _UPLOAD_RETRY_ATTEMPTS:
+                log_warn(
+                    "Pico ESC firmware upload acknowledgement timed out at "
+                    f"byte {uploaded_bytes}; retrying ({attempt + 1}/"
+                    f"{_UPLOAD_RETRY_ATTEMPTS})."
+                )
+                continue
+            msg = (
+                "Upload to the Pico timed out at "
+                f"{uploaded_bytes} bytes after {_UPLOAD_RETRY_ATTEMPTS} attempts. "
+                "No ESC was modified."
+            )
+            raise EscFirmwareUpdateError(msg) from None
 
 
 async def _upload_image(
@@ -495,13 +558,22 @@ async def _upload_image(
     read_buffer: bytearray,
     progress: Callable[[int, int | None], None] | None = None,
 ) -> None:
-    await _write_packet(writer, _control_packet(_Command.BEGIN, image))
-    await _expect_status(reader, read_buffer, _Status.READY, len(image))
+    transport = (reader, writer, read_buffer)
+    await _write_with_ack_retry(
+        transport,
+        _control_packet(_Command.BEGIN, image),
+        (_Status.READY, len(image)),
+        uploaded_bytes=0,
+    )
 
     for offset in range(0, len(image), ESC_FIRMWARE_USB_DATA_PAYLOAD_SIZE):
         packet, received = _data_packet(image, offset)
-        await _write_packet(writer, packet)
-        await _expect_status(reader, read_buffer, _Status.RECEIVED, received)
+        await _write_with_ack_retry(
+            transport,
+            packet,
+            (_Status.RECEIVED, received),
+            uploaded_bytes=offset,
+        )
         if progress is not None:
             progress(max(1, received * 10 // len(image)), None)
 
@@ -572,14 +644,9 @@ def _resolve_validated_image() -> tuple[Path, str, bytes] | None:
         return None
 
 
-def _start_update(state: RovState, automatic: bool) -> None:
+def _start_update(state: RovState) -> None:
     update = state.esc_firmware_update
     update.active = True
-    update.origin = (
-        EscFirmwareUpdateOrigin.AUTOMATIC
-        if automatic
-        else EscFirmwareUpdateOrigin.MANUAL
-    )
     update.stage = EscFirmwareUpdateStage.PREFLIGHT
     update.progress = 0
     update.current_esc = None
@@ -593,15 +660,28 @@ async def _preflight_update(
     if state.rov_config.thruster_protocol != ThrusterProtocol.DSHOT:
         msg = "DShot must be selected before flashing ESC firmware."
         raise EscFirmwareUpdateError(msg)
-    resolved = _resolve_validated_image()
-    if resolved is None:
-        msg = "No valid bundled ESC firmware image was found."
-        raise EscFirmwareUpdateError(msg)
     if not await serial_manager.ensure_connection():
         msg = "The thruster MCU is not connected."
         raise EscFirmwareUpdateError(msg)
+    desired_config = (
+        ThrusterProtocol.DSHOT.value,
+        state.rov_config.dshot_speed,
+    )
+    if (
+        not state.system_status.thruster_control_ready
+        or serial_manager.mcu_protocol_config != desired_config
+    ):
+        msg = (
+            "The thruster MCU has not acknowledged the selected DShot configuration. "
+            "Wait for thruster control to become ready before flashing ESC firmware."
+        )
+        raise EscFirmwareUpdateError(msg)
     if not _thrusters_idle(state):
         msg = "The thrusters are active."
+        raise EscFirmwareUpdateError(msg)
+    resolved = _resolve_validated_image()
+    if resolved is None:
+        msg = "No valid bundled ESC firmware image was found."
         raise EscFirmwareUpdateError(msg)
     return resolved
 
@@ -621,7 +701,7 @@ async def _perform_update(
     # 200 ms command watchdog time to force every channel to neutral before
     # asking it to enter the ESC bootloaders.
     await asyncio.sleep(_DISARM_SETTLE_S)
-    async with serial_manager.io_lock:
+    async with serial_manager.write_lock, serial_manager.io_lock:
         reader = serial_manager.get_reader()
         writer = serial_manager.get_writer()
         log_info(f"Flashing all ESCs with ESC firmware {version} from {path}")
@@ -646,9 +726,10 @@ def _finish_successful_update(
 
 async def _abort_update(serial_manager: SerialManager) -> None:
     with contextlib.suppress(OSError, RuntimeError):
-        await _write_packet(
-            serial_manager.get_writer(), _control_packet(_Command.ABORT)
-        )
+        async with serial_manager.write_lock:
+            await _write_packet(
+                serial_manager.get_writer(), _control_packet(_Command.ABORT)
+            )
 
 
 async def flash_esc_firmware(
@@ -656,7 +737,6 @@ async def flash_esc_firmware(
     serial_manager: SerialManager,
     *,
     show_toasts: bool = True,
-    automatic: bool = False,
 ) -> bool:
     """Validate and flash the bundled ESC firmware image to all eight ESCs."""
     if state.mcu_flash_lock.locked():
@@ -674,7 +754,7 @@ async def flash_esc_firmware(
 
     async with state.mcu_flash_lock:
         update = state.esc_firmware_update
-        _start_update(state, automatic)
+        _start_update(state)
         try:
             release = await _preflight_update(state, serial_manager)
             _, version, _ = release

@@ -12,8 +12,13 @@ async def handle_toggle_auto_stabilization(
     Args:
         state: The ROV state.
     """
-    state.system_status.auto_stabilization = not state.system_status.auto_stabilization
-    if not state.system_status.auto_stabilization:
+    enabled = not state.system_status.auto_stabilization
+    state.system_status.auto_stabilization = enabled
+    if enabled:
+        state.regulator.desired_pitch = 0.0
+        state.regulator.desired_roll = 0.0
+        state.regulator.desired_yaw = state.regulator.yaw
+    else:
         state.regulator.desired_pitch = 0.0
         state.regulator.desired_roll = 0.0
     log_info(f"Toggled auto stabilization to {state.system_status.auto_stabilization}")
@@ -21,8 +26,13 @@ async def handle_toggle_auto_stabilization(
 
 async def handle_set_auto_stabilization(state: RovState, enabled: bool) -> None:
     """Set auto stabilization to the requested state."""
+    was_enabled = state.system_status.auto_stabilization
     state.system_status.auto_stabilization = enabled
-    if not enabled:
+    if enabled and not was_enabled:
+        state.regulator.desired_pitch = 0.0
+        state.regulator.desired_roll = 0.0
+        state.regulator.desired_yaw = state.regulator.yaw
+    elif not enabled:
         state.regulator.desired_pitch = 0.0
         state.regulator.desired_roll = 0.0
     log_info(f"Set auto stabilization to {enabled}")

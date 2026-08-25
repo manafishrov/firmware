@@ -24,6 +24,7 @@ from ..constants import (
     MCU_TELEMETRY_BATCH_MAX_ITEMS,
     MCU_TELEMETRY_BATCH_START_BYTE,
     MCU_TELEMETRY_PACKET_SIZE,
+    MCU_TELEMETRY_SIGNAL_QUALITY_UNAVAILABLE,
     MCU_TELEMETRY_STALE_TIMEOUT_S,
     MCU_TELEMETRY_START_BYTE,
     MCU_TELEMETRY_TYPE_CURRENT,
@@ -36,12 +37,7 @@ from ..constants import (
     MCU_TELEMETRY_TYPE_VOLTAGE,
     NUM_MOTORS,
 )
-from ..esc_firmware import (
-    esc_firmware_update_required,
-    flash_esc_firmware,
-    is_valid_esc_firmware_version,
-    resolve_esc_firmware,
-)
+from ..esc_firmware import is_valid_esc_firmware_version
 from ..log import log_error, log_info, log_warn
 from ..models.config import ThrusterProtocol
 from ..models.log import LogLevel, LogOrigin
@@ -67,7 +63,6 @@ _RUNTIME_CONFIG_STATUS_PACKET_START_TOKEN = bytes(
 )
 _RELEASE_VERSION_PACKET_START_TOKEN = bytes((MCU_RELEASE_VERSION_START_BYTE,))
 _TELEMETRY_FIELDS = ("erpm", "voltage", "temperature", "current", "signal_quality")
-_ESC_VERSION_DISCOVERY_DELAY_S = 2.0
 _ESC_VERSION_TYPES = (
     MCU_TELEMETRY_TYPE_ESC_VERSION_LENGTH,
     MCU_TELEMETRY_TYPE_ESC_VERSION_CHUNK,
@@ -117,9 +112,6 @@ class McuSensor:
         self._startup_time: float = time.monotonic()
         self._flash_task: asyncio.Task[None] | None = None
         self._mcu_auto_flash_attempted = False
-        self._esc_firmware_flash_task: asyncio.Task[None] | None = None
-        self._esc_auto_flash_attempted = False
-        self._esc_firmware_reconcile_task: asyncio.Task[None] | None = None
         self._esc_version_lengths: list[int | None] = [None] * NUM_MOTORS
         self._esc_version_buffers: list[bytearray] = [
             bytearray() for _ in range(NUM_MOTORS)
@@ -138,21 +130,6 @@ class McuSensor:
                 await asyncio.sleep(1)
                 continue
             self._consume_read_buffer(read_buffer, data)
-
-    async def shutdown(self) -> None:
-        """Cancel MCU-owned ESC tasks before the serial connection closes."""
-        tasks = [
-            task
-            for task in (
-                self._esc_firmware_flash_task,
-                self._esc_firmware_reconcile_task,
-            )
-            if task is not None and not task.done()
-        ]
-        for task in tasks:
-            _ = task.cancel()
-        if tasks:
-            _ = await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _read_chunk(self) -> bytes | None:
         if not await self.serial_manager.ensure_connection():
@@ -451,15 +428,6 @@ class McuSensor:
 
         if protocol_changed:
             self._reset_telemetry()
-        mcu_update_scheduled = (
-            self._flash_task is not None and not self._flash_task.done()
-        )
-        if (
-            protocol == ThrusterProtocol.DSHOT
-            and not mcu_update_scheduled
-            and self._auto_update_window_open()
-        ):
-            self._schedule_esc_firmware_reconciliation()
 
     def _auto_update_window_open(self) -> bool:
         return time.monotonic() - self._startup_time <= MCU_AUTO_UPDATE_WINDOW_S
@@ -509,62 +477,6 @@ class McuSensor:
         )
         if not succeeded:
             log_error("Auto-flash of MCU firmware failed.")
-
-    def _auto_update_esc_firmware_if_needed(self) -> None:
-        resolved = resolve_esc_firmware()
-        if resolved is None:
-            return
-        _, version = resolved
-        installed_versions = self.state.device_info.esc_firmware_versions
-        if not esc_firmware_update_required(version, installed_versions):
-            return
-        if self.state.mcu_flashing:
-            return
-        if self._esc_auto_flash_attempted or (
-            self._esc_firmware_flash_task is not None
-            and not self._esc_firmware_flash_task.done()
-        ):
-            return
-        if not self._auto_update_window_open():
-            log_warn(
-                f"ESC firmware {version} has not been applied, but skipping auto-flash "
-                f"because the service has been running for more than {MCU_AUTO_UPDATE_WINDOW_S} seconds."
-            )
-            return
-
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
-        log_warn(
-            f"ESC firmware {version} has not been applied. Auto-flashing all ESCs."
-        )
-        self._esc_auto_flash_attempted = True
-        self._esc_firmware_flash_task = loop.create_task(self._flash_esc_firmware())
-
-    async def _flash_esc_firmware(self) -> None:
-        if not await flash_esc_firmware(
-            self.state, self.serial_manager, automatic=True
-        ):
-            log_error("Auto-flash of ESC firmware failed.")
-
-    def _schedule_esc_firmware_reconciliation(self) -> None:
-        if (
-            self._esc_firmware_reconcile_task is not None
-            and not self._esc_firmware_reconcile_task.done()
-        ):
-            return
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
-        self._esc_firmware_reconcile_task = loop.create_task(
-            self._reconcile_esc_firmware()
-        )
-
-    async def _reconcile_esc_firmware(self) -> None:
-        await asyncio.sleep(_ESC_VERSION_DISCOVERY_DELAY_S)
-        self._auto_update_esc_firmware_if_needed()
 
     def _reset_telemetry(self) -> None:
         for i in range(NUM_MOTORS):
@@ -635,8 +547,12 @@ class McuSensor:
                 self.state.mcu_telemetry.current[global_id] = max(0, value)
                 self.state.mcu_telemetry.current_valid[global_id] = True
             elif packet_type == MCU_TELEMETRY_TYPE_SIGNAL_QUALITY:
-                self.state.mcu_telemetry.signal_quality[global_id] = value / 100
-                self.state.mcu_telemetry.signal_quality_valid[global_id] = True
+                if value == MCU_TELEMETRY_SIGNAL_QUALITY_UNAVAILABLE:
+                    self.state.mcu_telemetry.signal_quality[global_id] = 0.0
+                    self.state.mcu_telemetry.signal_quality_valid[global_id] = False
+                else:
+                    self.state.mcu_telemetry.signal_quality[global_id] = value / 100
+                    self.state.mcu_telemetry.signal_quality_valid[global_id] = True
 
     def _update_esc_firmware_version(
         self, global_id: int, packet_type: int, value: int
@@ -700,7 +616,6 @@ class McuSensor:
                 and all(item == update.target_version for item in versions)
             ):
                 update.stage = EscFirmwareUpdateStage.SUCCEEDED
-            self._auto_update_esc_firmware_if_needed()
 
     def _reset_esc_version_assembly(self, global_id: int) -> None:
         self._esc_version_lengths[global_id] = None
