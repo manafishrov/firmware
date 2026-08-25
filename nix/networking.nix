@@ -97,7 +97,7 @@ in {
   # The network helper runs as root during boot and through the privileged
   # apply unit after a runtime config change. Give both paths one transient
   # location for the subnet-aware dnsmasq configuration.
-  systemd.tmpfiles.rules = ["d /run/manafish 0755 pi users -"];
+  systemd.tmpfiles.rules = ["d /run/manafish 0755 root root -"];
 
   # The firmware user may request the privileged network apply unit or restart
   # itself after a WebSocket port change. The apply unit performs its own

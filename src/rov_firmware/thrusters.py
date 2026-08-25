@@ -580,6 +580,11 @@ class Thrusters:
             await writer.drain()
 
     async def _ensure_config_sent(self, writer: StreamWriter) -> bool:
+        if self.state.esc_firmware_recovery_required:
+            self.state.system_status.thruster_control_ready = False
+            self._fail_thruster_test_unavailable()
+            return False
+
         current = (
             self.state.rov_config.thruster_protocol.value,
             self.state.rov_config.dshot_speed,

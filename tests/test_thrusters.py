@@ -361,6 +361,25 @@ def test_protocol_config_retries_after_unacknowledged_attempt(rov_state):
     assert writer.writes[1][0] == MCU_CONFIG_START_BYTE
 
 
+def test_esc_recovery_blocks_runtime_config_and_thruster_readiness(rov_state):
+    serial_manager = _SerialManagerSpy()
+    serial_manager.mcu_protocol_config = ("dshot", 300)
+    thrusters = Thrusters(
+        rov_state,
+        cast(Any, serial_manager),
+        cast(Any, RegulatorController(rov_state)),
+    )
+    writer = _WriterSpy()
+    rov_state.esc_firmware_recovery_required = True
+    rov_state.system_status.thruster_control_ready = True
+
+    confirmed = asyncio.run(thrusters._ensure_config_sent(cast(Any, writer)))
+
+    assert confirmed is False
+    assert not rov_state.system_status.thruster_control_ready
+    assert writer.writes == []
+
+
 def test_protocol_config_logs_actionable_error_when_ack_stays_blocked(
     rov_state, monkeypatch
 ):

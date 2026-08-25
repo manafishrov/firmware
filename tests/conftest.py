@@ -30,5 +30,6 @@ def rov_state():
     state.regulator = RegulatorData()
     state.thrusters = ThrusterData(direction_vector=np.zeros(8, dtype=np.float32))
     state.mcu_flashing = False
+    state.esc_firmware_recovery_required = False
     state.mcu_flash_lock = asyncio.Lock()
     return state

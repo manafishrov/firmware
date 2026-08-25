@@ -207,6 +207,31 @@ def test_update_preserves_status_bytes_between_upload_and_flash():
     assert len(packets) == 3
 
 
+def test_precommit_updater_failure_confirms_no_esc_was_modified():
+    class RecordingWriter:
+        def write(self, _packet):
+            return None
+
+        async def drain(self):
+            return None
+
+    async def run_update() -> None:
+        reader = asyncio.StreamReader()
+        reader.feed_data(_status_packet(esc_firmware._Status.FAILED))
+        reader.feed_eof()
+        await esc_firmware._run_update(
+            reader,
+            cast(asyncio.StreamWriter, RecordingWriter()),
+            b"x",
+        )
+
+    with pytest.raises(
+        esc_firmware.EscFirmwareUpdateError,
+        match=r"No ESC was modified\.$",
+    ):
+        asyncio.run(run_update())
+
+
 def test_upload_retries_a_missing_chunk_acknowledgement(monkeypatch):
     attempts = 0
 
@@ -283,6 +308,24 @@ def test_expected_status_ignores_stale_upload_acknowledgement():
     )
 
 
+def test_expected_status_ignores_stale_abort_from_previous_attempt():
+    async def run_test() -> tuple[int, int]:
+        reader = asyncio.StreamReader()
+        reader.feed_data(
+            _status_packet(esc_firmware._Status.ABORTED)
+            + _status_packet(esc_firmware._Status.READY, ESC_FIRMWARE_IMAGE_SIZE)
+        )
+        reader.feed_eof()
+        return await esc_firmware._expect_status(
+            reader,
+            bytearray(),
+            esc_firmware._Status.READY,
+            ESC_FIRMWARE_IMAGE_SIZE,
+        )
+
+    assert asyncio.run(run_test()) == (0, ESC_FIRMWARE_IMAGE_SIZE)
+
+
 def test_status_reader_resynchronizes_after_false_start_byte():
     status = bytearray(ESC_FIRMWARE_USB_STATUS_PACKET_SIZE)
     status[0] = esc_firmware.ESC_FIRMWARE_USB_STATUS_START_BYTE
@@ -348,6 +391,7 @@ def test_preflight_requires_live_dshot_acknowledgement(rov_state):
         async def ensure_connection(self):
             return True
 
+    rov_state.system_status.thruster_control_ready = True
     with pytest.raises(
         esc_firmware.EscFirmwareUpdateError,
         match="has not acknowledged the selected DShot configuration",
@@ -358,6 +402,33 @@ def test_preflight_requires_live_dshot_acknowledgement(rov_state):
                 cast(SerialManager, UnacknowledgedSerialManager()),
             )
         )
+
+
+def test_preflight_allows_recovery_retry_without_runtime_config_ack(
+    rov_state, monkeypatch
+):
+    class RecoverySerialManager:
+        mcu_protocol_config = None
+
+        async def ensure_connection(self):
+            return True
+
+    image = _valid_image()
+    rov_state.esc_firmware_recovery_required = True
+    monkeypatch.setattr(
+        esc_firmware,
+        "_resolve_validated_image",
+        lambda: (Path("esc-v2.20.0.bin"), "2.20.0", image),
+    )
+
+    release = asyncio.run(
+        esc_firmware._preflight_update(
+            rov_state,
+            cast(SerialManager, RecoverySerialManager()),
+        )
+    )
+
+    assert release == (Path("esc-v2.20.0.bin"), "2.20.0", image)
 
 
 def test_concurrent_flash_request_is_rejected_and_success_updates_live_state(
@@ -384,8 +455,11 @@ def test_concurrent_flash_request_is_rejected_and_success_updates_live_state(
         def get_writer(self):
             return object()
 
-    async def fake_run_update(_reader, _writer, firmware, _progress):
+    async def fake_run_update(
+        _reader, _writer, firmware, _progress, *, on_commit_started
+    ):
         assert firmware == image
+        on_commit_started()
 
     async def run_test():
         manager = cast(SerialManager, FakeSerialManager())
@@ -412,6 +486,7 @@ def test_concurrent_flash_request_is_rejected_and_success_updates_live_state(
     assert rov_state.device_info.esc_firmware_versions == [None] * 8
     assert rov_state.esc_firmware_update.stage == "awaitingTelemetry"
     assert rov_state.esc_firmware_update.target_version == "2.20.0"
+    assert not rov_state.esc_firmware_recovery_required
 
 
 def test_cancelled_flash_aborts_updater_and_clears_state(rov_state, monkeypatch):
@@ -443,7 +518,7 @@ def test_cancelled_flash_aborts_updater_and_clears_state(rov_state, monkeypatch)
         def get_writer(self):
             return self.writer
 
-    async def cancelled_update(_reader, _writer, _firmware, _progress):
+    async def cancelled_update(_reader, _writer, _firmware, _progress, **_kwargs):
         raise asyncio.CancelledError
 
     manager = FakeSerialManager()
@@ -467,6 +542,64 @@ def test_cancelled_flash_aborts_updater_and_clears_state(rov_state, monkeypatch)
 
     assert manager.writer.packets[-1][1] == esc_firmware._Command.ABORT
     assert not rov_state.mcu_flashing
+
+
+def test_failure_after_commit_keeps_thrusters_blocked_for_recovery_retry(
+    rov_state, monkeypatch
+):
+    image = _valid_image()
+
+    class RecordingWriter:
+        def write(self, _packet):
+            return None
+
+        async def drain(self):
+            return None
+
+    class FakeSerialManager:
+        def __init__(self):
+            self.io_lock = asyncio.Lock()
+            self.write_lock = asyncio.Lock()
+            self.mcu_protocol_config = ("dshot", rov_state.rov_config.dshot_speed)
+            self.writer = RecordingWriter()
+
+        async def ensure_connection(self):
+            return True
+
+        def get_reader(self):
+            return object()
+
+        def get_writer(self):
+            return self.writer
+
+    async def failed_update(
+        _reader, _writer, _firmware, _progress, *, on_commit_started
+    ):
+        on_commit_started()
+        msg = "ESC 1 failed"
+        raise esc_firmware.EscFirmwareUpdateError(msg)
+
+    manager = FakeSerialManager()
+    rov_state.system_status.thruster_control_ready = True
+    monkeypatch.setattr(
+        esc_firmware,
+        "_resolve_validated_image",
+        lambda: (Path("esc-v2.20.0.bin"), "2.20.0", image),
+    )
+    monkeypatch.setattr(esc_firmware, "_run_update", failed_update)
+    monkeypatch.setattr(esc_firmware, "_DISARM_SETTLE_S", 0)
+
+    succeeded = asyncio.run(
+        esc_firmware.flash_esc_firmware(
+            rov_state,
+            cast(SerialManager, manager),
+            show_toasts=False,
+        )
+    )
+
+    assert not succeeded
+    assert rov_state.esc_firmware_recovery_required
+    assert not rov_state.system_status.thruster_control_ready
 
 
 def test_connection_loss_before_programming_sets_terminal_failure(

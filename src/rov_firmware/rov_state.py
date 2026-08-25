@@ -25,4 +25,5 @@ class RovState:
         self.regulator: RegulatorData = RegulatorData()
         self.thrusters: ThrusterData = ThrusterData()
         self.mcu_flashing: bool = False
+        self.esc_firmware_recovery_required: bool = False
         self.mcu_flash_lock = asyncio.Lock()

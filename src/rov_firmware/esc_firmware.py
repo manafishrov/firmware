@@ -497,6 +497,10 @@ async def _expect_status(
         status, motor, error, value = await _read_status(
             reader, read_buffer, timeout=timeout
         )
+        if status == _Status.ABORTED:
+            # A best-effort abort from the previous attempt can still be in
+            # the serial stream when the user starts a recovery retry.
+            continue
         if status == _Status.FAILED:
             raise EscFirmwareUpdateError(_format_updater_failure(motor, error))
         if status == expected and (expected_value is None or value == expected_value):
@@ -577,7 +581,12 @@ async def _upload_image(
         if progress is not None:
             progress(max(1, received * 10 // len(image)), None)
 
-    await _write_packet(writer, _control_packet(_Command.COMMIT))
+
+def _precommit_error(error: Exception) -> EscFirmwareUpdateError:
+    message = str(error).rstrip(". ")
+    if "No ESC was modified" not in message:
+        message = f"{message}. No ESC was modified"
+    return EscFirmwareUpdateError(f"{message}.")
 
 
 async def _flash_all_escs(
@@ -625,9 +634,18 @@ async def _run_update(
     writer: asyncio.StreamWriter,
     image: bytes,
     progress: Callable[[int, int | None], None] | None = None,
+    *,
+    on_commit_started: Callable[[], None] | None = None,
 ) -> None:
     read_buffer = bytearray()
-    await _upload_image(reader, writer, image, read_buffer, progress)
+    try:
+        await _upload_image(reader, writer, image, read_buffer, progress)
+    except (EscFirmwareUpdateError, TimeoutError, OSError, RuntimeError) as error:
+        raise _precommit_error(error) from error
+
+    if on_commit_started is not None:
+        on_commit_started()
+    await _write_packet(writer, _control_packet(_Command.COMMIT))
     await _flash_all_escs(reader, read_buffer, len(image), progress)
 
 
@@ -667,7 +685,7 @@ async def _preflight_update(
         ThrusterProtocol.DSHOT.value,
         state.rov_config.dshot_speed,
     )
-    if (
+    if not state.esc_firmware_recovery_required and (
         not state.system_status.thruster_control_ready
         or serial_manager.mcu_protocol_config != desired_config
     ):
@@ -705,7 +723,19 @@ async def _perform_update(
         reader = serial_manager.get_reader()
         writer = serial_manager.get_writer()
         log_info(f"Flashing all ESCs with ESC firmware {version} from {path}")
-        await _run_update(reader, writer, image, progress)
+
+        def mark_commit_started() -> None:
+            state.esc_firmware_recovery_required = True
+            state.system_status.thruster_control_ready = False
+
+        await _run_update(
+            reader,
+            writer,
+            image,
+            progress,
+            on_commit_started=mark_commit_started,
+        )
+        state.esc_firmware_recovery_required = False
 
 
 def _finish_successful_update(
