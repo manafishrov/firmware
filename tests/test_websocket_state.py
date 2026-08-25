@@ -51,3 +51,13 @@ def test_depth_hold_set_only_captures_depth_on_enable_transition(rov_state):
     asyncio.run(handle_set_depth_hold(rov_state, False))
     assert rov_state.system_status.depth_hold is False
     assert rov_state.regulator.pending_desired_depth is None
+
+
+def test_stabilization_cannot_be_enabled_during_firmware_update(rov_state):
+    rov_state.mcu_flashing = True
+
+    asyncio.run(handle_set_auto_stabilization(rov_state, True))
+    asyncio.run(handle_set_depth_hold(rov_state, True))
+
+    assert rov_state.system_status.auto_stabilization is False
+    assert rov_state.system_status.depth_hold is False

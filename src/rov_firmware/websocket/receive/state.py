@@ -1,6 +1,7 @@
 """WebSocket state handlers for the ROV firmware."""
 
-from ...log import log_info
+from ...log import log_info, log_warn
+from ...motor_safety import motor_firmware_operation_blocker
 from ...rov_state import RovState
 
 
@@ -13,6 +14,10 @@ async def handle_toggle_auto_stabilization(
         state: The ROV state.
     """
     enabled = not state.system_status.auto_stabilization
+    blocker = motor_firmware_operation_blocker(state) if enabled else None
+    if blocker is not None:
+        log_warn(f"Cannot enable auto stabilization because {blocker}")
+        return
     state.system_status.auto_stabilization = enabled
     if enabled:
         state.regulator.desired_pitch = 0.0
@@ -26,6 +31,10 @@ async def handle_toggle_auto_stabilization(
 
 async def handle_set_auto_stabilization(state: RovState, enabled: bool) -> None:
     """Set auto stabilization to the requested state."""
+    blocker = motor_firmware_operation_blocker(state) if enabled else None
+    if blocker is not None:
+        log_warn(f"Cannot enable auto stabilization because {blocker}")
+        return
     was_enabled = state.system_status.auto_stabilization
     state.system_status.auto_stabilization = enabled
     if enabled and not was_enabled:
@@ -46,7 +55,12 @@ async def handle_toggle_depth_hold(
     Args:
         state: The ROV state.
     """
-    state.system_status.depth_hold = not state.system_status.depth_hold
+    enabled = not state.system_status.depth_hold
+    blocker = motor_firmware_operation_blocker(state) if enabled else None
+    if blocker is not None:
+        log_warn(f"Cannot enable depth hold because {blocker}")
+        return
+    state.system_status.depth_hold = enabled
     if state.system_status.depth_hold:
         pending = state.regulator.pending_desired_depth
         if pending is not None:
@@ -60,6 +74,10 @@ async def handle_toggle_depth_hold(
 
 async def handle_set_depth_hold(state: RovState, enabled: bool) -> None:
     """Set depth hold to the requested state."""
+    blocker = motor_firmware_operation_blocker(state) if enabled else None
+    if blocker is not None:
+        log_warn(f"Cannot enable depth hold because {blocker}")
+        return
     if enabled and not state.system_status.depth_hold:
         pending = state.regulator.pending_desired_depth
         state.regulator.desired_depth = (

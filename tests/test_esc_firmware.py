@@ -232,6 +232,51 @@ def test_precommit_updater_failure_confirms_no_esc_was_modified():
         asyncio.run(run_update())
 
 
+def test_recovery_journal_failure_prevents_commit(rov_state, monkeypatch):
+    image = b"x"
+
+    class RecordingWriter:
+        def __init__(self):
+            self.packets = []
+
+        def write(self, packet):
+            self.packets.append(packet)
+
+        async def drain(self):
+            return None
+
+    def fail_journal(_target_version):
+        msg = "journal unavailable"
+        raise OSError(msg)
+
+    async def run_update():
+        reader = asyncio.StreamReader()
+        reader.feed_data(
+            _status_packet(esc_firmware._Status.READY, len(image))
+            + _status_packet(esc_firmware._Status.RECEIVED, len(image))
+        )
+        reader.feed_eof()
+        writer = RecordingWriter()
+        await esc_firmware._run_update(
+            reader,
+            cast(asyncio.StreamWriter, writer),
+            image,
+            on_commit_started=lambda: esc_firmware.set_esc_firmware_recovery_required(
+                rov_state, "2.20.0"
+            ),
+        )
+
+    monkeypatch.setattr(esc_firmware, "mark_recovery_required", fail_journal)
+
+    with pytest.raises(
+        esc_firmware.EscFirmwareUpdateError,
+        match=r"journal unavailable\. No ESC was modified\.$",
+    ):
+        asyncio.run(run_update())
+
+    assert not rov_state.esc_firmware_recovery_required
+
+
 def test_upload_retries_a_missing_chunk_acknowledgement(monkeypatch):
     attempts = 0
 
@@ -443,6 +488,7 @@ def test_concurrent_flash_request_is_rejected_and_success_updates_live_state(
             self.io_lock = asyncio.Lock()
             self.write_lock = asyncio.Lock()
             self.mcu_protocol_config = ("dshot", rov_state.rov_config.dshot_speed)
+            self.protocol_config_invalidated = False
 
         async def ensure_connection(self):
             connection_started.set()
@@ -455,6 +501,10 @@ def test_concurrent_flash_request_is_rejected_and_success_updates_live_state(
         def get_writer(self):
             return object()
 
+        def invalidate_mcu_protocol_config(self):
+            self.mcu_protocol_config = None
+            self.protocol_config_invalidated = True
+
     async def fake_run_update(
         _reader, _writer, firmware, _progress, *, on_commit_started
     ):
@@ -462,7 +512,8 @@ def test_concurrent_flash_request_is_rejected_and_success_updates_live_state(
         on_commit_started()
 
     async def run_test():
-        manager = cast(SerialManager, FakeSerialManager())
+        fake_manager = FakeSerialManager()
+        manager = cast(SerialManager, fake_manager)
         rov_state.system_status.thruster_control_ready = True
         monkeypatch.setattr(
             esc_firmware,
@@ -481,6 +532,7 @@ def test_concurrent_flash_request_is_rejected_and_success_updates_live_state(
         )
         allow_connection.set()
         assert await first
+        assert fake_manager.protocol_config_invalidated
 
     asyncio.run(run_test())
     assert rov_state.device_info.esc_firmware_versions == [None] * 8
@@ -643,3 +695,49 @@ def test_connection_loss_before_programming_sets_terminal_failure(
     assert not succeeded
     assert rov_state.esc_firmware_update.stage == "failed"
     assert rov_state.esc_firmware_update.error == "Serial not initialized"
+
+
+def test_live_version_confirmation_succeeds_only_when_all_escs_match(rov_state):
+    rov_state.esc_firmware_update.stage = (
+        esc_firmware.EscFirmwareUpdateStage.AWAITING_TELEMETRY
+    )
+    rov_state.esc_firmware_update.target_version = "2.20.0"
+    rov_state.esc_firmware_confirmation_deadline = 100.0
+    rov_state.device_info.esc_firmware_versions = ["2.20.0"] * 8
+
+    esc_firmware.check_esc_firmware_confirmation(rov_state, now=1.0)
+
+    assert rov_state.esc_firmware_update.stage == "succeeded"
+    assert rov_state.esc_firmware_confirmation_deadline is None
+
+
+def test_live_version_confirmation_reports_mismatched_escs(rov_state):
+    rov_state.esc_firmware_update.stage = (
+        esc_firmware.EscFirmwareUpdateStage.AWAITING_TELEMETRY
+    )
+    rov_state.esc_firmware_update.target_version = "2.20.0"
+    rov_state.esc_firmware_confirmation_deadline = 100.0
+    rov_state.device_info.esc_firmware_versions = ["2.20.0"] * 7 + ["2.19.0"]
+
+    esc_firmware.check_esc_firmware_confirmation(rov_state, now=1.0)
+
+    assert rov_state.esc_firmware_update.stage == "versionMismatch"
+    assert rov_state.esc_firmware_update.error == (
+        "Live firmware version did not match on ESCs 8."
+    )
+
+
+def test_live_version_confirmation_has_a_bounded_timeout(rov_state):
+    rov_state.esc_firmware_update.stage = (
+        esc_firmware.EscFirmwareUpdateStage.AWAITING_TELEMETRY
+    )
+    rov_state.esc_firmware_update.target_version = "2.20.0"
+    rov_state.esc_firmware_confirmation_deadline = 10.0
+    rov_state.device_info.esc_firmware_versions = ["2.20.0"] * 7 + [None]
+
+    esc_firmware.check_esc_firmware_confirmation(rov_state, now=10.0)
+
+    assert rov_state.esc_firmware_update.stage == "unconfirmed"
+    assert rov_state.esc_firmware_update.error == (
+        "Live firmware version was not reported by ESCs 8."
+    )

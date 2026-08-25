@@ -34,6 +34,8 @@ class EscFirmwareUpdateStage(StrEnum):
     PROGRAMMING = "programming"
     AWAITING_TELEMETRY = "awaitingTelemetry"
     SUCCEEDED = "succeeded"
+    UNCONFIRMED = "unconfirmed"
+    VERSION_MISMATCH = "versionMismatch"
     FAILED = "failed"
 
 
@@ -46,6 +48,7 @@ class EscFirmwareUpdate(CamelCaseModel):
     current_esc: int | None = None
     target_version: str | None = None
     error: str | None = None
+    recovery_required: bool = False
 
 
 class SystemStatus(BaseModel):

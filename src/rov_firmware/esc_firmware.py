@@ -24,13 +24,15 @@ from .constants import (
     ESC_FIRMWARE_USB_STATUS_START_BYTE,
     NUM_MOTORS,
 )
+from .esc_recovery import clear_recovery_required, mark_recovery_required
 from .log import log_error, log_info, log_warn
 from .models.config import ThrusterProtocol
 from .models.system import EscFirmwareUpdateStage
 from .models.toast import ToastContent
+from .motor_safety import disruptive_motor_operation_blocker
 from .rov_state import RovState
 from .serial import SerialManager
-from .toast import toast_error, toast_loading, toast_success
+from .toast import toast_error, toast_loading, toast_success, toast_warn
 from .version import is_valid_semver, semver_sort_key
 
 
@@ -41,6 +43,7 @@ _STATUS_TIMEOUT_S = 8.0
 _UPLOAD_ACK_TIMEOUT_S = 2.0
 _UPLOAD_RETRY_ATTEMPTS = 3
 _DISARM_SETTLE_S = 0.25
+_TELEMETRY_CONFIRMATION_TIMEOUT_S = 15.0
 _HEX_RECORD_OVERHEAD = 5
 _HEX_DATA = 0
 _HEX_EOF = 1
@@ -56,6 +59,7 @@ class _Command(IntEnum):
     BEGIN = 1
     COMMIT = 2
     ABORT = 3
+    RECOVER_BEGIN = 4
 
 
 class _Status(IntEnum):
@@ -67,6 +71,7 @@ class _Status(IntEnum):
     COMPLETE = 6
     FAILED = 7
     ABORTED = 8
+    RECOVERY_REQUIRED = 9
 
 
 class _Error(IntEnum):
@@ -103,6 +108,14 @@ class EscFirmwareUpdateError(RuntimeError):
 
 class _PicoStatusTimeoutError(EscFirmwareUpdateError):
     """Raised when the Pico does not acknowledge an updater packet in time."""
+
+
+class _PostCommitFailureError(EscFirmwareUpdateError):
+    """Updater failure with an explicit Pico recovery-state result."""
+
+    def __init__(self, message: str, *, recovery_required: bool) -> None:
+        super().__init__(message)
+        self.recovery_required = recovery_required
 
 
 type _UploadTransport = tuple[
@@ -220,17 +233,21 @@ def _format_updater_failure(motor: int, error: int) -> str:
     return f"{scope} failed because {detail}"
 
 
-def _thrusters_idle(state: RovState) -> bool:
-    direction = state.thrusters.direction_vector
-    no_requested_motion = direction is None or all(
-        float(value) == 0.0 for value in direction
-    )
-    return (
-        no_requested_motion
-        and state.thrusters.test_thruster is None
-        and not state.system_status.auto_stabilization
-        and not state.system_status.depth_hold
-    )
+def set_esc_firmware_recovery_required(
+    state: RovState, target_version: str | None
+) -> None:
+    """Persist and expose the ESC bank's recovery-only state."""
+    mark_recovery_required(target_version)
+    state.esc_firmware_recovery_required = True
+    state.esc_firmware_update.recovery_required = True
+    state.system_status.thruster_control_ready = False
+
+
+def clear_esc_firmware_recovery_required(state: RovState) -> None:
+    """Clear recovery state after a verified success or pre-write failure."""
+    clear_recovery_required()
+    state.esc_firmware_recovery_required = False
+    state.esc_firmware_update.recovery_required = False
 
 
 def _decode_hex_record(line: str, line_number: int) -> tuple[int, int, int, bytes]:
@@ -400,7 +417,7 @@ def _checksum(data: bytes | bytearray) -> int:
 
 
 def _control_packet(command: _Command, image: bytes | None = None) -> bytes:
-    if command == _Command.BEGIN:
+    if command in (_Command.BEGIN, _Command.RECOVER_BEGIN):
         if image is None:
             msg = "BEGIN requires an ESC firmware image"
             raise ValueError(msg)
@@ -485,13 +502,14 @@ async def _read_status(
         read_buffer.extend(data)
 
 
-async def _expect_status(
+async def _expect_status(  # noqa: PLR0913 - wire status policy is explicit at each call
     reader: asyncio.StreamReader,
     read_buffer: bytearray,
     expected: _Status,
     expected_value: int | None = None,
     *,
     timeout: float = _STATUS_TIMEOUT_S,
+    ignore_recovery_notice: bool = False,
 ) -> tuple[int, int]:
     while True:
         status, motor, error, value = await _read_status(
@@ -501,6 +519,16 @@ async def _expect_status(
             # A best-effort abort from the previous attempt can still be in
             # the serial stream when the user starts a recovery retry.
             continue
+        if status == _Status.RECOVERY_REQUIRED:
+            if ignore_recovery_notice:
+                # A recovery notice sent in response to an earlier runtime-
+                # config packet can still precede RECOVER_BEGIN's READY.
+                continue
+            msg = "The Pico reports that ESC firmware recovery is required. Retry the update"
+            raise _PostCommitFailureError(
+                msg,
+                recovery_required=True,
+            )
         if status == _Status.FAILED:
             raise EscFirmwareUpdateError(_format_updater_failure(motor, error))
         if status == expected and (expected_value is None or value == expected_value):
@@ -525,6 +553,7 @@ async def _write_with_ack_retry(
     expected_ack: _ExpectedUploadAck,
     *,
     uploaded_bytes: int,
+    ignore_recovery_notice: bool = False,
 ) -> None:
     reader, writer, read_buffer = transport
     expected, expected_value = expected_ack
@@ -537,6 +566,7 @@ async def _write_with_ack_retry(
                 expected,
                 expected_value,
                 timeout=_UPLOAD_ACK_TIMEOUT_S,
+                ignore_recovery_notice=ignore_recovery_notice,
             )
             return
         except _PicoStatusTimeoutError:
@@ -555,19 +585,25 @@ async def _write_with_ack_retry(
             raise EscFirmwareUpdateError(msg) from None
 
 
-async def _upload_image(
+async def _upload_image(  # noqa: PLR0913 - transport and update policy are separate inputs
     reader: asyncio.StreamReader,
     writer: asyncio.StreamWriter,
     image: bytes,
     read_buffer: bytearray,
     progress: Callable[[int, int | None], None] | None = None,
+    *,
+    recovery: bool = False,
 ) -> None:
     transport = (reader, writer, read_buffer)
     await _write_with_ack_retry(
         transport,
-        _control_packet(_Command.BEGIN, image),
+        _control_packet(
+            _Command.RECOVER_BEGIN if recovery else _Command.BEGIN,
+            image,
+        ),
         (_Status.READY, len(image)),
         uploaded_bytes=0,
+        ignore_recovery_notice=recovery,
     )
 
     for offset in range(0, len(image), ESC_FIRMWARE_USB_DATA_PAYLOAD_SIZE):
@@ -608,7 +644,10 @@ def _handle_flash_status(
 ) -> bool:
     status, motor, error, value = status_packet
     if status == _Status.FAILED:
-        raise EscFirmwareUpdateError(_format_updater_failure(motor, error))
+        raise _PostCommitFailureError(
+            _format_updater_failure(motor, error),
+            recovery_required=value != 0,
+        )
     if status == _Status.ENTERING_BOOTLOADER and progress is not None:
         progress(10, None)
     elif status == _Status.MOTOR_BEGIN:
@@ -629,22 +668,37 @@ def _handle_flash_status(
     return False
 
 
-async def _run_update(
+async def _run_update(  # noqa: PLR0913 - transaction hooks remain explicit for safety
     reader: asyncio.StreamReader,
     writer: asyncio.StreamWriter,
     image: bytes,
     progress: Callable[[int, int | None], None] | None = None,
     *,
     on_commit_started: Callable[[], None] | None = None,
+    recovery: bool = False,
 ) -> None:
     read_buffer = bytearray()
     try:
-        await _upload_image(reader, writer, image, read_buffer, progress)
+        await _upload_image(
+            reader,
+            writer,
+            image,
+            read_buffer,
+            progress,
+            recovery=recovery,
+        )
+    except _PostCommitFailureError:
+        raise
     except (EscFirmwareUpdateError, TimeoutError, OSError, RuntimeError) as error:
         raise _precommit_error(error) from error
 
     if on_commit_started is not None:
-        on_commit_started()
+        try:
+            on_commit_started()
+        except EscFirmwareUpdateError:
+            raise
+        except OSError as error:
+            raise _precommit_error(error) from error
     await _write_packet(writer, _control_packet(_Command.COMMIT))
     await _flash_all_escs(reader, read_buffer, len(image), progress)
 
@@ -694,8 +748,12 @@ async def _preflight_update(
             "Wait for thruster control to become ready before flashing ESC firmware."
         )
         raise EscFirmwareUpdateError(msg)
-    if not _thrusters_idle(state):
-        msg = "The thrusters are active."
+    blocker = disruptive_motor_operation_blocker(
+        state,
+        allow_esc_recovery=True,
+    )
+    if blocker is not None:
+        msg = f"ESC firmware flashing is blocked because {blocker}."
         raise EscFirmwareUpdateError(msg)
     resolved = _resolve_validated_image()
     if resolved is None:
@@ -712,7 +770,10 @@ async def _perform_update(
     show_toasts: bool,
 ) -> None:
     path, version, image = release
+    recovery = state.esc_firmware_recovery_required
     state.mcu_flashing = True
+    state.system_status.thruster_control_ready = False
+    state.thrusters.direction_vector = None
     progress = _EscFlashProgress(state, show_toasts)
     progress(0, None)
     # Normal thruster writes stop while mcu_flashing is set. Give the Pico's
@@ -725,17 +786,30 @@ async def _perform_update(
         log_info(f"Flashing all ESCs with ESC firmware {version} from {path}")
 
         def mark_commit_started() -> None:
-            state.esc_firmware_recovery_required = True
-            state.system_status.thruster_control_ready = False
+            set_esc_firmware_recovery_required(state, version)
 
-        await _run_update(
-            reader,
-            writer,
-            image,
-            progress,
-            on_commit_started=mark_commit_started,
-        )
-        state.esc_firmware_recovery_required = False
+        if recovery:
+            await _run_update(
+                reader,
+                writer,
+                image,
+                progress,
+                on_commit_started=mark_commit_started,
+                recovery=True,
+            )
+        else:
+            await _run_update(
+                reader,
+                writer,
+                image,
+                progress,
+                on_commit_started=mark_commit_started,
+            )
+        # Force the normal serial reader to request and observe a fresh config
+        # acknowledgement. That request starts a new version-discovery round
+        # after the updater has released exclusive ownership of the reader.
+        serial_manager.invalidate_mcu_protocol_config()
+        clear_esc_firmware_recovery_required(state)
 
 
 def _finish_successful_update(
@@ -751,7 +825,80 @@ def _finish_successful_update(
     update.progress = 100
     update.current_esc = None
     update.active = False
-    _notify_esc_flash_success(show_toasts)
+    update.recovery_required = False
+    state.esc_firmware_confirmation_deadline = (
+        time.monotonic() + _TELEMETRY_CONFIRMATION_TIMEOUT_S
+    )
+    state.esc_firmware_confirmation_toasts = show_toasts
+    if show_toasts:
+        toast_loading(
+            identifier=ESC_FIRMWARE_FLASH_TOAST_ID,
+            content=ToastContent(message_key="toasts_esc_flash_confirming"),
+            action=None,
+        )
+
+
+def check_esc_firmware_confirmation(
+    state: RovState, *, now: float | None = None
+) -> None:
+    """Finish bounded live-version confirmation after programming succeeds."""
+    update = state.esc_firmware_update
+    if update.stage != EscFirmwareUpdateStage.AWAITING_TELEMETRY:
+        return
+
+    versions = state.device_info.esc_firmware_versions
+    target = update.target_version
+    complete = all(version is not None for version in versions)
+    show_toasts = state.esc_firmware_confirmation_toasts
+    if complete and target is not None:
+        mismatched = [
+            index + 1 for index, version in enumerate(versions) if version != target
+        ]
+        state.esc_firmware_confirmation_deadline = None
+        state.esc_firmware_confirmation_toasts = False
+        if not mismatched:
+            update.stage = EscFirmwareUpdateStage.SUCCEEDED
+            _notify_esc_flash_success(show_toasts)
+            return
+
+        joined = ", ".join(str(index) for index in mismatched)
+        update.stage = EscFirmwareUpdateStage.VERSION_MISMATCH
+        update.error = f"Live firmware version did not match on ESCs {joined}."
+        if show_toasts:
+            toast_warn(
+                identifier=ESC_FIRMWARE_FLASH_TOAST_ID,
+                content=ToastContent(
+                    message_key="toasts_esc_flash_version_mismatch",
+                    description_key="toasts_esc_flash_version_mismatch_description",
+                    description_args={"escs": joined},
+                ),
+                action=None,
+            )
+        return
+
+    deadline = state.esc_firmware_confirmation_deadline
+    current_time = time.monotonic() if now is None else now
+    if deadline is None or current_time < deadline:
+        return
+
+    missing = [
+        str(index + 1) for index, version in enumerate(versions) if version is None
+    ]
+    joined = ", ".join(missing)
+    update.stage = EscFirmwareUpdateStage.UNCONFIRMED
+    update.error = f"Live firmware version was not reported by ESCs {joined}."
+    state.esc_firmware_confirmation_deadline = None
+    state.esc_firmware_confirmation_toasts = False
+    if show_toasts:
+        toast_warn(
+            identifier=ESC_FIRMWARE_FLASH_TOAST_ID,
+            content=ToastContent(
+                message_key="toasts_esc_flash_unconfirmed",
+                description_key="toasts_esc_flash_unconfirmed_description",
+                description_args={"escs": joined},
+            ),
+            action=None,
+        )
 
 
 async def _abort_update(serial_manager: SerialManager) -> None:
@@ -804,6 +951,14 @@ async def flash_esc_firmware(
             await _abort_update(serial_manager)
             raise
         except (EscFirmwareUpdateError, TimeoutError, OSError, RuntimeError) as error:
+            if isinstance(error, _PostCommitFailureError):
+                try:
+                    if error.recovery_required:
+                        set_esc_firmware_recovery_required(state, update.target_version)
+                    else:
+                        clear_esc_firmware_recovery_required(state)
+                except OSError as journal_error:
+                    log_error(f"Could not update ESC recovery journal: {journal_error}")
             log_error(f"ESC firmware update failed: {error}")
             update.active = False
             update.stage = EscFirmwareUpdateStage.FAILED

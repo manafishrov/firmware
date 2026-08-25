@@ -529,6 +529,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
         await websocket.send(json.dumps(_config_message()))
 
         last_direction_vector = None
+        pending_connection_mutation: str | None = None
         async for message in websocket:
             try:
                 data = cast(dict[str, Any], json.loads(message))
@@ -571,12 +572,21 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         MOCK_CONFIG.get("ipAddress"),
                         MOCK_CONFIG.get("websocketPort"),
                     )
-                    if current_connection != previous_connection:
+                    if current_connection != previous_connection and isinstance(
+                        mutation_id, str
+                    ):
+                        pending_connection_mutation = mutation_id
+                elif msg_type == "confirmConfig":
+                    if payload == pending_connection_mutation:
                         await websocket.close(
                             reason="Mock ROV connection settings changed"
                         )
                         return
                 elif msg_type == "importConfig":
+                    previous_connection = (
+                        MOCK_CONFIG.get("ipAddress"),
+                        MOCK_CONFIG.get("websocketPort"),
+                    )
                     mutation_id = None
                     if isinstance(payload, dict):
                         mutation_id = payload.get("mutationId")
@@ -600,6 +610,14 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         },
                     }
                     await websocket.send(json.dumps(toast_msg))
+                    current_connection = (
+                        MOCK_CONFIG.get("ipAddress"),
+                        MOCK_CONFIG.get("websocketPort"),
+                    )
+                    if current_connection != previous_connection and isinstance(
+                        mutation_id, str
+                    ):
+                        pending_connection_mutation = mutation_id
                 elif msg_type == "toggleAutoStabilization":
                     SYSTEM_STATUS["autoStabilization"] = not SYSTEM_STATUS[
                         "autoStabilization"

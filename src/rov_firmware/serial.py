@@ -112,6 +112,9 @@ class SerialManager:
     async def _auto_flash_first_boot(self) -> None:
         from .websocket.receive.mcu import flash_mcu_firmware  # noqa: PLC0415
 
+        if self.state.esc_firmware_recovery_required:
+            log_warn("Skipping automatic MCU flash while ESC recovery is required.")
+            return
         self._first_boot_flashed = True
         board = self.state.rov_config.mcu_board
         log_warn(
@@ -170,8 +173,15 @@ class SerialManager:
             self.state.rov_config.dshot_speed,
         )
         self.state.system_status.thruster_control_ready = (
-            self._mcu_protocol_config == desired
+            not self.state.esc_firmware_recovery_required
+            and not self.state.mcu_flashing
+            and self._mcu_protocol_config == desired
         )
+
+    def invalidate_mcu_protocol_config(self) -> None:
+        """Require a fresh MCU acknowledgement before thruster output resumes."""
+        self._mcu_protocol_config = None
+        self.state.system_status.thruster_control_ready = False
 
     async def shutdown(self) -> None:
         """Shutdown the serial connection."""

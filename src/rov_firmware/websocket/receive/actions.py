@@ -22,6 +22,9 @@ async def handle_direction_vector(
         state: The ROV state.
         payload: The direction vector.
     """
+    if state.mcu_flashing or state.esc_firmware_recovery_required:
+        state.thrusters.direction_vector = None
+        return
     state.thrusters.direction_vector = payload.root
     state.thrusters.last_direction_time = time.time()
 

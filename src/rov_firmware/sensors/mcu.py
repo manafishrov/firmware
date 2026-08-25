@@ -5,6 +5,9 @@ import struct
 import time
 
 from ..constants import (
+    ESC_FIRMWARE_UPDATE_STATUS_RECOVERY_REQUIRED,
+    ESC_FIRMWARE_USB_STATUS_PACKET_SIZE,
+    ESC_FIRMWARE_USB_STATUS_START_BYTE,
     ESC_FIRMWARE_VERSION_MAX_LENGTH,
     LOG_LEVEL_ERROR,
     LOG_LEVEL_INFO,
@@ -37,11 +40,14 @@ from ..constants import (
     MCU_TELEMETRY_TYPE_VOLTAGE,
     NUM_MOTORS,
 )
-from ..esc_firmware import is_valid_esc_firmware_version
+from ..esc_firmware import (
+    check_esc_firmware_confirmation,
+    is_valid_esc_firmware_version,
+    set_esc_firmware_recovery_required,
+)
 from ..log import log_error, log_info, log_warn
 from ..models.config import ThrusterProtocol
 from ..models.log import LogLevel, LogOrigin
-from ..models.system import EscFirmwareUpdateStage
 from ..rov_state import RovState
 from ..serial import SerialManager
 from ..version import is_valid_semver
@@ -62,6 +68,7 @@ _RUNTIME_CONFIG_STATUS_PACKET_START_TOKEN = bytes(
     (MCU_RUNTIME_CONFIG_STATUS_START_BYTE,)
 )
 _RELEASE_VERSION_PACKET_START_TOKEN = bytes((MCU_RELEASE_VERSION_START_BYTE,))
+_ESC_FIRMWARE_STATUS_START_TOKEN = bytes((ESC_FIRMWARE_USB_STATUS_START_BYTE,))
 _TELEMETRY_FIELDS = ("erpm", "voltage", "temperature", "current", "signal_quality")
 _ESC_VERSION_TYPES = (
     MCU_TELEMETRY_TYPE_ESC_VERSION_LENGTH,
@@ -126,6 +133,7 @@ class McuSensor:
         while True:
             data = await self._read_chunk()
             self._expire_stale_telemetry()
+            check_esc_firmware_confirmation(self.state)
             if data is None:
                 await asyncio.sleep(1)
                 continue
@@ -183,7 +191,7 @@ class McuSensor:
                 read_buffer.clear()
                 return
 
-    def _consume_next_packet(
+    def _consume_next_packet(  # noqa: PLR0911 - packet types have distinct parsers
         self, read_buffer: bytearray, start_idx: int
     ) -> int | None:
         packet_type = read_buffer[start_idx]
@@ -197,7 +205,36 @@ class McuSensor:
             return self._try_consume_runtime_config_status(read_buffer, start_idx)
         if packet_type == MCU_RELEASE_VERSION_START_BYTE:
             return self._try_consume_release_version(read_buffer, start_idx)
+        if packet_type == ESC_FIRMWARE_USB_STATUS_START_BYTE:
+            return self._try_consume_esc_firmware_status(read_buffer, start_idx)
         return start_idx + 1
+
+    def _try_consume_esc_firmware_status(
+        self, read_buffer: bytearray, start_idx: int
+    ) -> int | None:
+        end_idx = start_idx + ESC_FIRMWARE_USB_STATUS_PACKET_SIZE
+        if len(read_buffer) < end_idx:
+            return None
+        packet = memoryview(read_buffer)[start_idx:end_idx]
+        checksum = 0
+        for value in packet[:-1]:
+            checksum ^= value
+        if (
+            checksum == packet[-1]
+            and packet[1] == ESC_FIRMWARE_UPDATE_STATUS_RECOVERY_REQUIRED
+        ):
+            self._handle_esc_firmware_recovery_required()
+        return end_idx
+
+    def _handle_esc_firmware_recovery_required(self) -> None:
+        try:
+            set_esc_firmware_recovery_required(self.state, None)
+        except OSError as error:
+            log_error(f"Could not persist Pico ESC recovery state: {error}")
+            self.state.esc_firmware_recovery_required = True
+            self.state.esc_firmware_update.recovery_required = True
+            self.state.system_status.thruster_control_ready = False
+        log_warn("Pico reports that ESC firmware recovery is required")
 
     def _try_consume_telemetry(
         self, read_buffer: bytearray, start_idx: int
@@ -280,6 +317,7 @@ class McuSensor:
             buf.find(_LOG_PACKET_START_TOKEN, start),
             buf.find(_RUNTIME_CONFIG_STATUS_PACKET_START_TOKEN, start),
             buf.find(_RELEASE_VERSION_PACKET_START_TOKEN, start),
+            buf.find(_ESC_FIRMWARE_STATUS_START_TOKEN, start),
         )
         valid_candidates = [idx for idx in candidates if idx >= 0]
         if not valid_candidates:
@@ -447,7 +485,7 @@ class McuSensor:
         if not mcu_update_required(current_version, expected_version):
             return
 
-        if self.state.mcu_flashing:
+        if self.state.mcu_flashing or self.state.esc_firmware_recovery_required:
             return
 
         if self._flash_task is not None and not self._flash_task.done():
@@ -608,14 +646,7 @@ class McuSensor:
             versions[global_id] = version
             self.state.device_info.esc_firmware_versions = versions
         self._reset_esc_version_assembly(global_id)
-        if all(item is not None for item in versions):
-            update = self.state.esc_firmware_update
-            if (
-                update.stage == EscFirmwareUpdateStage.AWAITING_TELEMETRY
-                and update.target_version is not None
-                and all(item == update.target_version for item in versions)
-            ):
-                update.stage = EscFirmwareUpdateStage.SUCCEEDED
+        check_esc_firmware_confirmation(self.state)
 
     def _reset_esc_version_assembly(self, global_id: int) -> None:
         self._esc_version_lengths[global_id] = None

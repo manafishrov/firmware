@@ -1,6 +1,8 @@
 import asyncio
 
 from rov_firmware.constants import (
+    ESC_FIRMWARE_UPDATE_STATUS_RECOVERY_REQUIRED,
+    ESC_FIRMWARE_USB_STATUS_START_BYTE,
     MCU_PROTOCOL_DSHOT,
     MCU_RELEASE_VERSION_MAX_LENGTH,
     MCU_RELEASE_VERSION_START_BYTE,
@@ -12,6 +14,7 @@ from rov_firmware.constants import (
     MCU_TELEMETRY_TYPE_ESC_VERSION_LENGTH,
     MCU_TELEMETRY_TYPE_SIGNAL_QUALITY,
 )
+from rov_firmware.esc_recovery import recovery_journal_exists
 from rov_firmware.models.config import ThrusterProtocol
 from rov_firmware.sensors import mcu as mcu_module
 from rov_firmware.sensors.mcu import McuSensor
@@ -52,6 +55,29 @@ def _runtime_config_status_packet(protocol: int, dshot_speed: int) -> bytes:
 def _release_version_packet(version: str) -> bytes:
     encoded = version.encode("ascii")
     packet = bytearray([MCU_RELEASE_VERSION_START_BYTE, len(encoded), *encoded])
+    checksum = 0
+    for value in packet:
+        checksum ^= value
+    packet.append(checksum)
+    return bytes(packet)
+
+
+def _esc_recovery_status_packet() -> bytes:
+    packet = bytearray(
+        [
+            ESC_FIRMWARE_USB_STATUS_START_BYTE,
+            ESC_FIRMWARE_UPDATE_STATUS_RECOVERY_REQUIRED,
+            0xFF,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+    )
     checksum = 0
     for value in packet:
         checksum ^= value
@@ -137,6 +163,18 @@ def test_release_version_packet_parses_through_split_read_buffer(rov_state):
     assert rov_state.device_info.mcu_firmware_version == "1.2.3-rc.1"
 
 
+def test_pico_recovery_status_durably_blocks_thruster_control(rov_state):
+    rov_state.system_status.thruster_control_ready = True
+    sensor = McuSensor(rov_state, SerialManager(rov_state))
+
+    sensor._consume_read_buffer(bytearray(), _esc_recovery_status_packet())
+
+    assert rov_state.esc_firmware_recovery_required
+    assert rov_state.esc_firmware_update.recovery_required
+    assert not rov_state.system_status.thruster_control_ready
+    assert recovery_journal_exists()
+
+
 def test_release_identity_and_runtime_config_status_parse_in_wire_order(rov_state):
     serial_manager = SerialManager(rov_state)
     sensor = McuSensor(rov_state, serial_manager)
@@ -209,6 +247,16 @@ def test_matching_runtime_config_ack_marks_thruster_control_ready(rov_state):
     serial_manager.record_mcu_protocol_config("dshot", 300)
 
     assert rov_state.system_status.thruster_control_ready is True
+
+
+def test_runtime_config_ack_stays_blocked_during_esc_recovery(rov_state):
+    serial_manager = SerialManager(rov_state)
+    rov_state.esc_firmware_recovery_required = True
+
+    serial_manager.record_mcu_protocol_config("dshot", 300)
+
+    assert serial_manager.mcu_protocol_config == ("dshot", 300)
+    assert rov_state.system_status.thruster_control_ready is False
 
 
 def test_version_mismatch_auto_flashes_only_once_per_service_start(
