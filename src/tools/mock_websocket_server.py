@@ -134,6 +134,22 @@ def _config_message(mutation_id: str | None = None) -> dict[str, Any]:
     return {"type": "config", "payload": payload}
 
 
+def _success_toast(message_key: str) -> dict[str, Any]:
+    return {
+        "type": "showToast",
+        "payload": {
+            "identifier": None,
+            "variant": "success",
+            "content": {
+                "messageKey": message_key,
+                "descriptionKey": None,
+                "descriptionArgs": None,
+            },
+            "action": None,
+        },
+    }
+
+
 async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR0912,PLR0915
     """Handle a websocket client connection."""
     global MCU_FLASH_TASK  # noqa: PLW0603
@@ -530,6 +546,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
 
         last_direction_vector = None
         pending_connection_mutation: str | None = None
+        pending_connection_toast: dict[str, Any] | None = None
         async for message in websocket:
             try:
                 data = cast(dict[str, Any], json.loads(message))
@@ -554,20 +571,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         if isinstance(config, dict):
                             _update_mock_config(cast(dict[str, Any], config))
                     await websocket.send(json.dumps(_config_message(mutation_id)))
-                    toast_msg = {
-                        "type": "showToast",
-                        "payload": {
-                            "identifier": None,
-                            "variant": "success",
-                            "content": {
-                                "messageKey": "toasts_rov_config_set_successfully",
-                                "descriptionKey": None,
-                                "descriptionArgs": None,
-                            },
-                            "action": None,
-                        },
-                    }
-                    await websocket.send(json.dumps(toast_msg))
+                    toast_msg = _success_toast("toasts_rov_config_set_successfully")
                     current_connection = (
                         MOCK_CONFIG.get("ipAddress"),
                         MOCK_CONFIG.get("websocketPort"),
@@ -576,8 +580,13 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         mutation_id, str
                     ):
                         pending_connection_mutation = mutation_id
+                        pending_connection_toast = toast_msg
+                    else:
+                        await websocket.send(json.dumps(toast_msg))
                 elif msg_type == "confirmConfig":
                     if payload == pending_connection_mutation:
+                        if pending_connection_toast is not None:
+                            await websocket.send(json.dumps(pending_connection_toast))
                         await websocket.close(
                             reason="Mock ROV connection settings changed"
                         )
@@ -596,20 +605,7 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                                 cast(dict[str, Any], config), imported=True
                             )
                     await websocket.send(json.dumps(_config_message(mutation_id)))
-                    toast_msg = {
-                        "type": "showToast",
-                        "payload": {
-                            "identifier": None,
-                            "variant": "success",
-                            "content": {
-                                "messageKey": "toasts_rov_config_imported",
-                                "descriptionKey": None,
-                                "descriptionArgs": None,
-                            },
-                            "action": None,
-                        },
-                    }
-                    await websocket.send(json.dumps(toast_msg))
+                    toast_msg = _success_toast("toasts_rov_config_imported")
                     current_connection = (
                         MOCK_CONFIG.get("ipAddress"),
                         MOCK_CONFIG.get("websocketPort"),
@@ -618,6 +614,9 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         mutation_id, str
                     ):
                         pending_connection_mutation = mutation_id
+                        pending_connection_toast = toast_msg
+                    else:
+                        await websocket.send(json.dumps(toast_msg))
                 elif msg_type == "toggleAutoStabilization":
                     SYSTEM_STATUS["autoStabilization"] = not SYSTEM_STATUS[
                         "autoStabilization"
