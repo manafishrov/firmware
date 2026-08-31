@@ -6,7 +6,12 @@ from pathlib import Path
 
 from serial_asyncio_fast import open_serial_connection
 
-from .constants import MCU_FIRST_BOOT_RETRY_LIMIT
+from .constants import (
+    MCU_FIRST_BOOT_RETRY_LIMIT,
+    MCU_RUNTIME_CONFIG_STATE_APPLIED,
+    MCU_RUNTIME_CONFIG_STATE_APPLYING,
+    MCU_RUNTIME_CONFIG_STATE_REJECTED,
+)
 from .log import log_error, log_info, log_warn
 from .models.toast import ToastContent
 from .rov_state import RovState
@@ -32,6 +37,7 @@ class SerialManager:
         self._first_boot_flashed: bool = False
         self._connection_generation: int = 0
         self._mcu_protocol_config: tuple[str, int] | None = None
+        self._mcu_protocol_request_id: int | None = None
 
     async def _find_mcu_port(self, *, log_missing: bool = True) -> str | None:
         mcu_ports = list(Path("/dev/serial/by-id/").glob("usb-Raspberry_Pi_Pico*"))
@@ -48,8 +54,12 @@ class SerialManager:
         self.reader = None
         self.writer = None
         self._mcu_protocol_config = None
+        self._mcu_protocol_request_id = None
         self.state.system_status.thruster_control_ready = False
+        self.state.system_status.thruster_protocol_state = "disconnected"
+        self.state.system_status.thruster_protocol_error = None
         self.state.device_info.mcu_firmware_version = ""
+        self.state.device_info.mcu_firmware_version_status = "querying"
         self.state.system_health.mcu_healthy = False
         if writer is not None:
             writer.close()
@@ -91,7 +101,10 @@ class SerialManager:
                 )
                 self._connection_generation += 1
                 self._mcu_protocol_config = None
+                self._mcu_protocol_request_id = None
                 self.state.system_status.thruster_control_ready = False
+                self.state.system_status.thruster_protocol_state = "synchronizing"
+                self.state.system_status.thruster_protocol_error = None
                 self.state.system_health.mcu_healthy = True
                 log_info("MCU initialized successfully.")
                 return True
@@ -172,16 +185,69 @@ class SerialManager:
             self.state.rov_config.thruster_protocol.value,
             self.state.rov_config.dshot_speed,
         )
-        self.state.system_status.thruster_control_ready = (
-            not self.state.esc_firmware_recovery_required
-            and not self.state.mcu_flashing
-            and self._mcu_protocol_config == desired
-        )
+        if self._mcu_protocol_config != desired:
+            self.state.system_status.thruster_control_ready = False
+            self.state.system_status.thruster_protocol_state = "failed"
+            self.state.system_status.thruster_protocol_error = "The thruster protocol reported by the MCU does not match the saved settings."
+        elif self.state.esc_firmware_recovery_required:
+            self.state.system_status.thruster_control_ready = False
+            self.state.system_status.thruster_protocol_state = "failed"
+            self.state.system_status.thruster_protocol_error = (
+                "ESC firmware recovery is required before thruster control can resume."
+            )
+        elif self.state.mcu_flashing:
+            self.state.system_status.thruster_control_ready = False
+            self.state.system_status.thruster_protocol_state = "synchronizing"
+            self.state.system_status.thruster_protocol_error = None
+        else:
+            self.state.system_status.thruster_control_ready = True
+            self.state.system_status.thruster_protocol_state = "ready"
+            self.state.system_status.thruster_protocol_error = None
+
+    def begin_mcu_protocol_request(self, request_id: int) -> None:
+        """Track the current correlated runtime-config request."""
+        self._mcu_protocol_request_id = request_id
+        self.state.system_status.thruster_control_ready = False
+        self.state.system_status.thruster_protocol_state = "applying"
+        self.state.system_status.thruster_protocol_error = None
+
+    def record_mcu_protocol_status(
+        self,
+        request_id: int,
+        status: int,
+        error: int,
+        protocol: str,
+        dshot_speed: int,
+    ) -> None:
+        """Apply a correlated runtime-config state reported by the MCU."""
+        if request_id != self._mcu_protocol_request_id:
+            return
+        if status == MCU_RUNTIME_CONFIG_STATE_APPLYING:
+            self.state.system_status.thruster_protocol_state = "applying"
+            self.state.system_status.thruster_protocol_error = None
+            return
+        if status == MCU_RUNTIME_CONFIG_STATE_REJECTED:
+            self.state.system_status.thruster_control_ready = False
+            self.state.system_status.thruster_protocol_state = "failed"
+            errors = {
+                1: "The MCU rejected the change because the thrusters were active.",
+                2: "ESC firmware recovery is required before thruster control can resume.",
+                3: "The MCU is still applying the previous thruster protocol change.",
+            }
+            self.state.system_status.thruster_protocol_error = errors.get(
+                error, f"The MCU rejected the protocol change (error {error})."
+            )
+            return
+        if status == MCU_RUNTIME_CONFIG_STATE_APPLIED:
+            self.record_mcu_protocol_config(protocol, dshot_speed)
 
     def invalidate_mcu_protocol_config(self) -> None:
         """Require a fresh MCU acknowledgement before thruster output resumes."""
         self._mcu_protocol_config = None
+        self._mcu_protocol_request_id = None
         self.state.system_status.thruster_control_ready = False
+        self.state.system_status.thruster_protocol_state = "synchronizing"
+        self.state.system_status.thruster_protocol_error = None
 
     async def shutdown(self) -> None:
         """Shutdown the serial connection."""

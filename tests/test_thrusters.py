@@ -8,6 +8,7 @@ import pytest
 from rov_firmware import thrusters as thrusters_module
 from rov_firmware.constants import (
     MCU_CONFIG_START_BYTE,
+    MCU_CONTROL_COMMAND_APPLY_CONFIG,
     MCU_PROTOCOL_DSHOT,
     MCU_PROTOCOL_PWM,
     NUM_MOTORS,
@@ -40,6 +41,10 @@ class _SerialManagerSpy:
         self.connection_generation = 1
         self.mcu_protocol_config: tuple[str, int] | None = None
         self.write_lock = asyncio.Lock()
+        self.request_id: int | None = None
+
+    def begin_mcu_protocol_request(self, request_id: int) -> None:
+        self.request_id = request_id
 
 
 @pytest.fixture
@@ -299,11 +304,18 @@ def test_send_config_packet_writes_expected_binary_packet(
     thrusters.state.rov_config.thruster_protocol = protocol
     thrusters.state.rov_config.dshot_speed = dshot_speed
 
-    asyncio.run(thrusters._send_config_packet(writer))
-
-    expected = bytearray([MCU_CONFIG_START_BYTE, expected_protocol]) + bytearray(
-        struct.pack("<H", dshot_speed)
+    asyncio.run(
+        thrusters._send_control_packet(writer, MCU_CONTROL_COMMAND_APPLY_CONFIG, 42)
     )
+
+    expected = bytearray(
+        [
+            MCU_CONFIG_START_BYTE,
+            MCU_CONTROL_COMMAND_APPLY_CONFIG,
+            42,
+            expected_protocol,
+        ]
+    ) + bytearray(struct.pack("<H", dshot_speed))
     checksum = 0
     for value in expected:
         checksum ^= value

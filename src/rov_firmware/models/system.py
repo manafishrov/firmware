@@ -20,9 +20,11 @@ class DeviceInfo(CamelCaseModel):
     """Read-only firmware information reported by connected devices."""
 
     mcu_firmware_version: str = ""
+    mcu_firmware_version_status: str = "querying"
     esc_firmware_versions: list[str | None] = Field(
         default_factory=lambda: [None] * NUM_MOTORS
     )
+    esc_firmware_version_status: str = "discovering"
 
 
 class EscFirmwareUpdateStage(StrEnum):
@@ -58,3 +60,5 @@ class SystemStatus(BaseModel):
     depth_hold: bool = False
     battery_percentage: float = 0
     thruster_control_ready: bool = False
+    thruster_protocol_state: str = "disconnected"
+    thruster_protocol_error: str | None = None

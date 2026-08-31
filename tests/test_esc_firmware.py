@@ -35,11 +35,19 @@ def _hex_record(record_type: int, address: int, data: bytes) -> str:
     return f":{record.hex().upper()}"
 
 
-def _status_packet(status: esc_firmware._Status, value: int = 0) -> bytes:
+def _status_packet(
+    status: esc_firmware._Status,
+    value: int = 0,
+    *,
+    transaction_id: int = 1,
+    sequence: int = 0,
+) -> bytes:
     packet = bytearray(ESC_FIRMWARE_USB_STATUS_PACKET_SIZE)
     packet[0] = esc_firmware.ESC_FIRMWARE_USB_STATUS_START_BYTE
     packet[1] = status
     struct.pack_into("<I", packet, 4, value)
+    packet[8] = transaction_id
+    struct.pack_into("<H", packet, 9, sequence)
     packet[-1] = esc_firmware._checksum(packet[:-1])
     return bytes(packet)
 
@@ -155,12 +163,12 @@ def test_esc_firmware_version_requires_strict_semver(version, valid):
 
 def test_usb_packets_have_fixed_sizes_and_checksums():
     image = _valid_image()
-    begin = esc_firmware._control_packet(esc_firmware._Command.BEGIN, image)
-    data, received = esc_firmware._data_packet(image, 0)
+    begin = esc_firmware._control_packet(esc_firmware._Command.BEGIN, 1, image)
+    data, received = esc_firmware._data_packet(image, 1, 1, 0)
 
     assert len(begin) == ESC_FIRMWARE_USB_CONTROL_PACKET_SIZE
     assert esc_firmware._checksum(begin[:-1]) == begin[-1]
-    assert len(data) == 1 + 2 + 1 + ESC_FIRMWARE_USB_DATA_PAYLOAD_SIZE + 1
+    assert len(data) == 64
     assert esc_firmware._checksum(data[:-1]) == data[-1]
     assert received == ESC_FIRMWARE_USB_DATA_PAYLOAD_SIZE
 
@@ -173,7 +181,7 @@ def test_begin_packet_rejects_mismatched_configured_size(monkeypatch):
     )
 
     with pytest.raises(esc_firmware.EscFirmwareUpdateError, match="configured size"):
-        esc_firmware._control_packet(esc_firmware._Command.BEGIN, _valid_image())
+        esc_firmware._control_packet(esc_firmware._Command.BEGIN, 1, _valid_image())
 
 
 def test_update_preserves_status_bytes_between_upload_and_flash():
@@ -193,13 +201,13 @@ def test_update_preserves_status_bytes_between_upload_and_flash():
         reader = asyncio.StreamReader()
         reader.feed_data(
             _status_packet(esc_firmware._Status.READY, len(image))
-            + _status_packet(esc_firmware._Status.RECEIVED, len(image))
-            + _status_packet(esc_firmware._Status.COMPLETE)
+            + _status_packet(esc_firmware._Status.RECEIVED, len(image), sequence=1)
+            + _status_packet(esc_firmware._Status.COMPLETE, sequence=1)
         )
         reader.feed_eof()
         recording_writer = RecordingWriter()
         writer = cast(asyncio.StreamWriter, recording_writer)
-        await esc_firmware._run_update(reader, writer, image)
+        await esc_firmware._run_update(reader, writer, image, transaction_id=1)
         return recording_writer.packets
 
     packets = asyncio.run(run_update())
@@ -223,6 +231,7 @@ def test_precommit_updater_failure_confirms_no_esc_was_modified():
             reader,
             cast(asyncio.StreamWriter, RecordingWriter()),
             b"x",
+            transaction_id=1,
         )
 
     with pytest.raises(
@@ -253,7 +262,7 @@ def test_recovery_journal_failure_prevents_commit(rov_state, monkeypatch):
         reader = asyncio.StreamReader()
         reader.feed_data(
             _status_packet(esc_firmware._Status.READY, len(image))
-            + _status_packet(esc_firmware._Status.RECEIVED, len(image))
+            + _status_packet(esc_firmware._Status.RECEIVED, len(image), sequence=1)
         )
         reader.feed_eof()
         writer = RecordingWriter()
@@ -261,6 +270,7 @@ def test_recovery_journal_failure_prevents_commit(rov_state, monkeypatch):
             reader,
             cast(asyncio.StreamWriter, writer),
             image,
+            transaction_id=1,
             on_commit_started=lambda: esc_firmware.set_esc_firmware_recovery_required(
                 rov_state, "2.20.0"
             ),
@@ -312,6 +322,8 @@ def test_upload_retries_a_missing_chunk_acknowledgement(monkeypatch):
             (
                 esc_firmware._Status.RECEIVED,
                 ESC_FIRMWARE_USB_DATA_PAYLOAD_SIZE,
+                1,
+                1,
             ),
             uploaded_bytes=0,
         )
@@ -322,7 +334,7 @@ def test_upload_retries_a_missing_chunk_acknowledgement(monkeypatch):
     assert attempts == 2
     assert packets == [
         bytes((esc_firmware.ESC_FIRMWARE_USB_DATA_START_BYTE,)),
-        bytes((esc_firmware.ESC_FIRMWARE_USB_DATA_START_BYTE,)),
+        esc_firmware._control_packet(esc_firmware._Command.QUERY_OFFSET, 1),
     ]
 
 
@@ -386,7 +398,7 @@ def test_status_reader_resynchronizes_after_false_start_byte():
 
     result = asyncio.run(read_status())
 
-    assert result == (esc_firmware._Status.READY, 0, 0, ESC_FIRMWARE_IMAGE_SIZE)
+    assert result == (esc_firmware._Status.READY, 0, 0, ESC_FIRMWARE_IMAGE_SIZE, 0, 0)
 
 
 def test_flash_status_reports_monotonic_per_esc_progress():
@@ -396,17 +408,17 @@ def test_flash_status_reports_monotonic_per_esc_progress():
         progress.append((percent, motor))
 
     assert not esc_firmware._handle_flash_status(
-        (esc_firmware._Status.ENTERING_BOOTLOADER, 0xFF, 0, 0),
+        (esc_firmware._Status.ENTERING_BOOTLOADER, 0xFF, 0, 0, 1, 0),
         ESC_FIRMWARE_IMAGE_SIZE,
         callback,
     )
     assert not esc_firmware._handle_flash_status(
-        (esc_firmware._Status.MOTOR_BEGIN, 3, 0, ESC_FIRMWARE_IMAGE_SIZE // 2),
+        (esc_firmware._Status.MOTOR_BEGIN, 3, 0, ESC_FIRMWARE_IMAGE_SIZE // 2, 1, 0),
         ESC_FIRMWARE_IMAGE_SIZE,
         callback,
     )
     assert esc_firmware._handle_flash_status(
-        (esc_firmware._Status.COMPLETE, 0xFF, 0, 0),
+        (esc_firmware._Status.COMPLETE, 0xFF, 0, 0, 1, 0),
         ESC_FIRMWARE_IMAGE_SIZE,
         callback,
     )
@@ -423,7 +435,7 @@ def test_flash_status_reports_friendly_one_based_failure():
         match=r"ESC 4 failed because flash verification failed",
     ):
         esc_firmware._handle_flash_status(
-            (esc_firmware._Status.FAILED, 3, esc_firmware._Error.VERIFY, 0),
+            (esc_firmware._Status.FAILED, 3, esc_firmware._Error.VERIFY, 0, 1, 0),
             ESC_FIRMWARE_IMAGE_SIZE,
             None,
         )

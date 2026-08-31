@@ -13,6 +13,8 @@ class RovStatus(CamelCaseModel):
     current_draw: int
     pi_undervoltage: bool
     thruster_control_ready: bool
+    thruster_protocol_state: str
+    thruster_protocol_error: str | None
     health: SystemHealth
     device_info: DeviceInfo
     esc_firmware_update: EscFirmwareUpdate

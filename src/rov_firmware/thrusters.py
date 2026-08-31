@@ -13,6 +13,8 @@ from numpy.typing import NDArray
 from .constants import (
     MAX_ALLOWED_NULLSPACE_VECTOR_ACTIVATION,
     MCU_CONFIG_START_BYTE,
+    MCU_CONTROL_COMMAND_APPLY_CONFIG,
+    MCU_CONTROL_COMMAND_GET_INFO,
     MCU_PROTOCOL_DSHOT,
     MCU_PROTOCOL_PWM,
     MOTOR_DEADZONE,
@@ -37,6 +39,9 @@ from .toast import ToastContent, cancel_thruster_test_action, toast_content
 
 _CONFIG_RETRY_INTERVAL_SECONDS = 0.5
 _CONFIG_ACK_WARNING_SECONDS = 5.0
+_CONFIG_ACK_TIMEOUT_SECONDS = 8.0
+_MCU_INFO_RETRY_INTERVAL_SECONDS = 1.0
+_MCU_INFO_ATTEMPTS = 3
 
 
 class Thrusters:
@@ -65,6 +70,12 @@ class Thrusters:
         self._pending_config_generation: int = -1
         self._pending_config_since: float = 0.0
         self._pending_config_warning_logged = False
+        self._pending_config_request_id: int | None = None
+        self._next_control_request_id = 0
+        self._protocol_reconnect_attempts = 0
+        self._info_generation = -1
+        self._info_attempts = 0
+        self._last_info_attempt_time = 0.0
 
         self.previous_direction_vector: NDArray[np.float32] = np.zeros(
             8, dtype=np.float32
@@ -561,16 +572,25 @@ class Thrusters:
             writer.write(packet)
             await writer.drain()
 
-    async def _send_config_packet(self, writer: StreamWriter) -> None:
+    def _new_control_request_id(self) -> int:
+        self._next_control_request_id = (self._next_control_request_id % 255) + 1
+        return self._next_control_request_id
+
+    async def _send_control_packet(
+        self,
+        writer: StreamWriter,
+        command: int,
+        request_id: int,
+    ) -> None:
         protocol = (
             MCU_PROTOCOL_DSHOT
             if self.state.rov_config.thruster_protocol == "dshot"
             else MCU_PROTOCOL_PWM
         )
         dshot_speed = self.state.rov_config.dshot_speed
-        packet = bytearray([MCU_CONFIG_START_BYTE, protocol]) + bytearray(
-            struct.pack("<H", dshot_speed)
-        )
+        packet = bytearray(
+            [MCU_CONFIG_START_BYTE, command, request_id, protocol]
+        ) + bytearray(struct.pack("<H", dshot_speed))
         checksum = 0
         for b in packet:
             checksum ^= b
@@ -578,6 +598,30 @@ class Thrusters:
         async with self.serial_manager.write_lock:
             writer.write(packet)
             await writer.drain()
+
+    async def _ensure_mcu_info_requested(self, writer: StreamWriter) -> None:
+        generation = self.serial_manager.connection_generation
+        if generation != self._info_generation:
+            self._info_generation = generation
+            self._info_attempts = 0
+            self._last_info_attempt_time = 0.0
+            self.state.device_info.mcu_firmware_version_status = "querying"
+        if self.state.device_info.mcu_firmware_version:
+            self.state.device_info.mcu_firmware_version_status = "reported"
+            return
+        now = time.monotonic()
+        if self._info_attempts >= _MCU_INFO_ATTEMPTS:
+            self.state.device_info.mcu_firmware_version_status = "notReported"
+            return
+        if now - self._last_info_attempt_time < _MCU_INFO_RETRY_INTERVAL_SECONDS:
+            return
+        await self._send_control_packet(
+            writer,
+            MCU_CONTROL_COMMAND_GET_INFO,
+            self._new_control_request_id(),
+        )
+        self._info_attempts += 1
+        self._last_info_attempt_time = now
 
     async def _ensure_config_sent(self, writer: StreamWriter) -> bool:
         if self.state.esc_firmware_recovery_required:
@@ -595,6 +639,8 @@ class Thrusters:
             self._pending_config_generation = -1
             self._pending_config_since = 0.0
             self._pending_config_warning_logged = False
+            self._pending_config_request_id = None
+            self._protocol_reconnect_attempts = 0
             self.state.system_status.thruster_control_ready = True
             return True
 
@@ -615,6 +661,10 @@ class Thrusters:
             self._pending_config_generation = generation
             self._pending_config_since = now
             self._pending_config_warning_logged = False
+            self._pending_config_request_id = self._new_control_request_id()
+            self.serial_manager.begin_mcu_protocol_request(
+                self._pending_config_request_id
+            )
         elif (
             not self._pending_config_warning_logged
             and now - self._pending_config_since >= _CONFIG_ACK_WARNING_SECONDS
@@ -625,13 +675,34 @@ class Thrusters:
             )
             self._pending_config_warning_logged = True
 
+        if now - self._pending_config_since >= _CONFIG_ACK_TIMEOUT_SECONDS:
+            if self._protocol_reconnect_attempts == 0:
+                self._protocol_reconnect_attempts = 1
+                msg = "MCU did not finish applying the thruster protocol; reopening USB once"
+                raise RuntimeError(msg)
+            self.state.system_status.thruster_protocol_state = "failed"
+            self.state.system_status.thruster_protocol_error = (
+                "The MCU did not finish applying the selected thruster protocol. "
+                "Reflash the MCU firmware or reconnect its USB cable."
+            )
+            self._pending_config_since = now
+
         should_retry = (
             current != self._last_sent_protocol_config
             or generation != self._last_config_generation
             or now - self._last_config_attempt_time >= _CONFIG_RETRY_INTERVAL_SECONDS
         )
         if should_retry:
-            await self._send_config_packet(writer)
+            request_id = self._pending_config_request_id
+            if request_id is None:
+                request_id = self._new_control_request_id()
+                self._pending_config_request_id = request_id
+                self.serial_manager.begin_mcu_protocol_request(request_id)
+            await self._send_control_packet(
+                writer,
+                MCU_CONTROL_COMMAND_APPLY_CONFIG,
+                request_id,
+            )
             self._last_sent_protocol_config = current
             self._last_config_generation = generation
             self._last_config_attempt_time = now
@@ -703,6 +774,7 @@ class Thrusters:
                 continue
             writer = self.serial_manager.get_writer()
             try:
+                await self._ensure_mcu_info_requested(writer)
                 config_confirmed = await self._ensure_config_sent(writer)
             except Exception as e:
                 await self.serial_manager.handle_connection_lost(

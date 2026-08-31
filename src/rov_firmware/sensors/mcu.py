@@ -20,6 +20,7 @@ from ..constants import (
     MCU_RELEASE_VERSION_MAX_LENGTH,
     MCU_RELEASE_VERSION_PACKET_OVERHEAD,
     MCU_RELEASE_VERSION_START_BYTE,
+    MCU_RUNTIME_CONFIG_STATE_APPLIED,
     MCU_RUNTIME_CONFIG_STATUS_PACKET_SIZE,
     MCU_RUNTIME_CONFIG_STATUS_START_BYTE,
     MCU_SERIAL_READ_TIMEOUT_S,
@@ -34,6 +35,7 @@ from ..constants import (
     MCU_TELEMETRY_TYPE_ERPM,
     MCU_TELEMETRY_TYPE_ESC_VERSION_CHUNK,
     MCU_TELEMETRY_TYPE_ESC_VERSION_COMPLETE,
+    MCU_TELEMETRY_TYPE_ESC_VERSION_DISCOVERY_COMPLETE,
     MCU_TELEMETRY_TYPE_ESC_VERSION_LENGTH,
     MCU_TELEMETRY_TYPE_SIGNAL_QUALITY,
     MCU_TELEMETRY_TYPE_TEMPERATURE,
@@ -295,10 +297,10 @@ class McuSensor:
     def _try_consume_release_version(
         self, read_buffer: bytearray, start_idx: int
     ) -> int | None:
-        header_end_idx = start_idx + 2
+        header_end_idx = start_idx + 3
         if len(read_buffer) < header_end_idx:
             return None
-        version_length = read_buffer[start_idx + 1]
+        version_length = read_buffer[start_idx + 2]
         if version_length == 0 or version_length > MCU_RELEASE_VERSION_MAX_LENGTH:
             return start_idx + 1
         end_idx = start_idx + version_length + MCU_RELEASE_VERSION_PACKET_OVERHEAD
@@ -379,7 +381,8 @@ class McuSensor:
         if (
             len(packet) != MCU_RUNTIME_CONFIG_STATUS_PACKET_SIZE
             or packet[0] != MCU_RUNTIME_CONFIG_STATUS_START_BYTE
-            or packet[1] not in (MCU_PROTOCOL_PWM, MCU_PROTOCOL_DSHOT)
+            or packet[2] not in (1, 2, 3)
+            or packet[4] not in (MCU_PROTOCOL_PWM, MCU_PROTOCOL_DSHOT)
         ):
             return False
         calculated_checksum = 0
@@ -393,7 +396,7 @@ class McuSensor:
     ) -> bool:
         if len(packet) < MCU_RELEASE_VERSION_PACKET_OVERHEAD:
             return False
-        version_length = packet[1]
+        version_length = packet[2]
         if (
             packet[0] != MCU_RELEASE_VERSION_START_BYTE
             or version_length == 0
@@ -409,11 +412,11 @@ class McuSensor:
     def _handle_release_version_packet(
         self, packet: bytes | bytearray | memoryview
     ) -> None:
-        version_length = packet[1]
+        version_length = packet[2]
         try:
-            version = bytes(packet[2 : 2 + version_length]).decode("ascii")
+            version = bytes(packet[3 : 3 + version_length]).decode("ascii")
         except UnicodeDecodeError:
-            encoded = bytes(packet[2 : 2 + version_length])
+            encoded = bytes(packet[3 : 3 + version_length])
             self._warn_invalid_release_version_once(
                 f"non-ascii:{encoded.hex()}",
                 "MCU reported a non-ASCII release version",
@@ -427,6 +430,7 @@ class McuSensor:
             return
 
         self.state.device_info.mcu_firmware_version = version
+        self.state.device_info.mcu_firmware_version_status = "reported"
         self._auto_update_mcu_if_needed(version, self._get_expected_version())
 
     def _warn_invalid_release_version_once(self, key: str, message: str) -> None:
@@ -454,17 +458,19 @@ class McuSensor:
     ) -> None:
         protocol = (
             ThrusterProtocol.DSHOT
-            if packet[1] == MCU_PROTOCOL_DSHOT
+            if packet[4] == MCU_PROTOCOL_DSHOT
             else ThrusterProtocol.PWM
         )
-        dshot_speed = packet[2] | (packet[3] << 8)
+        dshot_speed = packet[5] | (packet[6] << 8)
         acknowledged_config = (protocol.value, dshot_speed)
         protocol_changed = (
             self.serial_manager.mcu_protocol_config != acknowledged_config
         )
-        self.serial_manager.record_mcu_protocol_config(*acknowledged_config)
+        self.serial_manager.record_mcu_protocol_status(
+            packet[1], packet[2], packet[3], *acknowledged_config
+        )
 
-        if protocol_changed:
+        if packet[2] == MCU_RUNTIME_CONFIG_STATE_APPLIED and protocol_changed:
             self._reset_telemetry()
 
     def _auto_update_window_open(self) -> bool:
@@ -524,6 +530,7 @@ class McuSensor:
         self._esc_version_buffers = [bytearray() for _ in range(NUM_MOTORS)]
         self._esc_version_next_chunks = [0] * NUM_MOTORS
         self.state.device_info.esc_firmware_versions = [None] * NUM_MOTORS
+        self.state.device_info.esc_firmware_version_status = "discovering"
 
     def _expire_stale_telemetry(self) -> None:
         now = time.monotonic()
@@ -566,6 +573,11 @@ class McuSensor:
     def _update_telemetry_item(
         self, global_id: int, packet_type: int, value: int
     ) -> None:
+        if packet_type == MCU_TELEMETRY_TYPE_ESC_VERSION_DISCOVERY_COMPLETE:
+            self.state.device_info.esc_firmware_version_status = (
+                "reported" if value > 0 else "notReported"
+            )
+            return
         if 0 <= global_id < NUM_MOTORS and packet_type in _ESC_VERSION_TYPES:
             self._update_esc_firmware_version(global_id, packet_type, value)
             return

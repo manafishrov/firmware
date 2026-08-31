@@ -6,6 +6,8 @@ from rov_firmware.constants import (
     MCU_PROTOCOL_DSHOT,
     MCU_RELEASE_VERSION_MAX_LENGTH,
     MCU_RELEASE_VERSION_START_BYTE,
+    MCU_RUNTIME_CONFIG_STATE_APPLIED,
+    MCU_RUNTIME_CONFIG_STATE_APPLYING,
     MCU_RUNTIME_CONFIG_STATUS_START_BYTE,
     MCU_TELEMETRY_SIGNAL_QUALITY_UNAVAILABLE,
     MCU_TELEMETRY_TYPE_CURRENT,
@@ -36,10 +38,18 @@ class _RecordingLoop:
         return _CompletedTask()
 
 
-def _runtime_config_status_packet(protocol: int, dshot_speed: int) -> bytes:
+def _runtime_config_status_packet(
+    protocol: int,
+    dshot_speed: int,
+    request_id: int = 1,
+    state: int = MCU_RUNTIME_CONFIG_STATE_APPLIED,
+) -> bytes:
     packet = bytearray(
         [
             MCU_RUNTIME_CONFIG_STATUS_START_BYTE,
+            request_id,
+            state,
+            0,
             protocol,
             dshot_speed & 0xFF,
             dshot_speed >> 8,
@@ -54,7 +64,7 @@ def _runtime_config_status_packet(protocol: int, dshot_speed: int) -> bytes:
 
 def _release_version_packet(version: str) -> bytes:
     encoded = version.encode("ascii")
-    packet = bytearray([MCU_RELEASE_VERSION_START_BYTE, len(encoded), *encoded])
+    packet = bytearray([MCU_RELEASE_VERSION_START_BYTE, 1, len(encoded), *encoded])
     checksum = 0
     for value in packet:
         checksum ^= value
@@ -92,20 +102,44 @@ def test_runtime_config_status_acknowledges_mcu_without_changing_release_identit
     rov_state.rov_config.dshot_speed = 300
     serial_manager = SerialManager(rov_state)
     sensor = McuSensor(rov_state, serial_manager)
+    serial_manager.begin_mcu_protocol_request(1)
 
     # Fixed MCU protocol vector for DShot600. Keep this independent of the
     # helper so a matching encoder/decoder defect cannot pass the contract test.
-    sensor._handle_runtime_config_status_packet(bytes((0xD5, 0x01, 0x58, 0x02, 0x8E)))
+    sensor._handle_runtime_config_status_packet(
+        _runtime_config_status_packet(MCU_PROTOCOL_DSHOT, 600)
+    )
 
     assert serial_manager.mcu_protocol_config == ("dshot", 600)
     assert rov_state.rov_config.thruster_protocol == ThrusterProtocol.PWM
     assert rov_state.rov_config.dshot_speed == 300
     assert rov_state.device_info.mcu_firmware_version == ""
+    assert rov_state.system_status.thruster_protocol_state == "failed"
+    assert "does not match" in (rov_state.system_status.thruster_protocol_error or "")
+
+
+def test_runtime_config_applying_clears_a_previous_protocol_error(rov_state):
+    serial_manager = SerialManager(rov_state)
+    sensor = McuSensor(rov_state, serial_manager)
+    serial_manager.begin_mcu_protocol_request(1)
+    rov_state.system_status.thruster_protocol_error = "previous error"
+
+    sensor._handle_runtime_config_status_packet(
+        _runtime_config_status_packet(
+            MCU_PROTOCOL_DSHOT,
+            300,
+            state=MCU_RUNTIME_CONFIG_STATE_APPLYING,
+        )
+    )
+
+    assert rov_state.system_status.thruster_protocol_state == "applying"
+    assert rov_state.system_status.thruster_protocol_error is None
 
 
 def test_runtime_config_status_rejects_unknown_protocol(rov_state):
     serial_manager = SerialManager(rov_state)
     sensor = McuSensor(rov_state, serial_manager)
+    serial_manager.begin_mcu_protocol_request(1)
 
     packet = _runtime_config_status_packet(0x7F, 600)
 
@@ -178,8 +212,9 @@ def test_pico_recovery_status_durably_blocks_thruster_control(rov_state):
 def test_release_identity_and_runtime_config_status_parse_in_wire_order(rov_state):
     serial_manager = SerialManager(rov_state)
     sensor = McuSensor(rov_state, serial_manager)
-    packets = _release_version_packet("1.2.3-rc.1") + bytes(
-        (0xD5, 0x01, 0x58, 0x02, 0x8E)
+    serial_manager.begin_mcu_protocol_request(1)
+    packets = _release_version_packet("1.2.3-rc.1") + _runtime_config_status_packet(
+        MCU_PROTOCOL_DSHOT, 600
     )
 
     sensor._consume_read_buffer(bytearray(), packets)
@@ -203,7 +238,7 @@ def test_release_version_buffer_ignores_bad_checksum_and_resynchronizes(rov_stat
 def test_release_version_buffer_rejects_oversized_length_and_resynchronizes(rov_state):
     sensor = McuSensor(rov_state, SerialManager(rov_state))
     oversized_header = bytes(
-        (MCU_RELEASE_VERSION_START_BYTE, MCU_RELEASE_VERSION_MAX_LENGTH + 1)
+        (MCU_RELEASE_VERSION_START_BYTE, 1, MCU_RELEASE_VERSION_MAX_LENGTH + 1)
     )
 
     sensor._consume_read_buffer(

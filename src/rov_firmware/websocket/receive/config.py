@@ -19,7 +19,6 @@ from ..state import websocket_state
 
 _DEVICE_REPORTED_FIELDS = ("firmwareVersion",)
 _APPLY_COMMAND_TIMEOUT_SECONDS = 10.0
-_SYSTEMCTL_TIMEOUT_SECONDS = 5.0
 _CONFIG_ACK_TIMEOUT_SECONDS = 5.0
 
 
@@ -60,115 +59,17 @@ def _run_apply_command(
         return False
 
 
-def _apply_ip_address(ip_address: str) -> bool:
-    return _run_apply_command(
-        "systemctl",
-        f"Applied IP address change to {ip_address}.",
-        f"Failed to apply IP address change to {ip_address}",
-        "start",
-        "manafish-network-apply.service",
-    )
-
-
-async def _restart_firmware() -> bool:
-    path = shutil.which("systemctl")
-    if path is None:
-        log_warn("systemctl not found in PATH.")
-        return False
-    try:
-        process = await asyncio.create_subprocess_exec(
-            path,
-            "try-restart",
-            "--no-block",
-            "manafish-firmware.service",
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
-        )
-    except OSError as error:
-        log_warn(f"Failed to start systemctl: {error}.")
-        return False
-
-    try:
-        _, stderr = await asyncio.wait_for(
-            process.communicate(),
-            timeout=_SYSTEMCTL_TIMEOUT_SECONDS,
-        )
-    except TimeoutError:
-        process.kill()
-        await process.wait()
-        log_warn("Timed out while requesting the firmware restart.")
-        return False
-
-    if process.returncode != 0:
-        details = stderr.decode(errors="replace").strip()
-        suffix = f": {details}" if details else "."
-        log_warn(f"Failed to restart firmware after the WebSocket port change{suffix}")
-        return False
-
-    log_info("Restarting firmware to apply the WebSocket port change.")
-    return True
-
-
-async def _apply_connection_change(
-    state: RovState,
-    previous_config: RovConfig,
-) -> bool:
-    """Apply connection settings, restoring the persisted config on failure."""
-    ip_changed = state.rov_config.ip_address != previous_config.ip_address
-    port_changed = state.rov_config.websocket_port != previous_config.websocket_port
-    if not ip_changed and not port_changed:
-        return True
-
-    if ip_changed:
-        toast_info(
-            identifier=None,
-            content=ToastContent(message_key="toasts_rov_ip_address_changing"),
-            action=None,
-        )
-        applied = await asyncio.to_thread(
-            _apply_ip_address,
-            state.rov_config.ip_address,
-        )
-    else:
-        applied = True
-
-    # The network helper already restarts the firmware after changing the
-    # address. That single restart also applies a simultaneous port change.
-    if applied and port_changed and not ip_changed:
-        applied = await _restart_firmware()
-
-    if applied:
-        return True
-
-    failed_ip = state.rov_config.ip_address
-    state.rov_config = previous_config
-    state.rov_config.save()
-    log_warn("Restored the previous ROV connection config after apply failure.")
-
-    if ip_changed:
-        rollback_applied = await asyncio.to_thread(
-            _apply_ip_address,
-            previous_config.ip_address,
-        )
-        if not rollback_applied:
-            log_warn(
-                f"Could not restore network address {previous_config.ip_address} "
-                f"after failed change to {failed_ip}."
-            )
-
-    toast_warn(
-        identifier=None,
-        content=ToastContent(message_key="toasts_rov_connection_restart_failed"),
-        action=None,
-    )
-    return False
-
-
 def _connection_changed(current: RovConfig, previous: RovConfig) -> bool:
     return (
         current.ip_address != previous.ip_address
         or current.websocket_port != previous.websocket_port
     )
+
+
+def _connection_restart_message_key(current: RovConfig, previous: RovConfig) -> str:
+    if current.ip_address != previous.ip_address:
+        return "toasts_rov_connection_restart_required"
+    return "toasts_rov_connection_settings_restart_required"
 
 
 def _config_message(state: RovState, mutation_id: str | None = None) -> Config:
@@ -206,6 +107,7 @@ async def _await_connection_config_ack(  # noqa: PLR0913 - rollback inputs stay 
     ack: asyncio.Future[None],
     camera_changed: bool,
     success_message_key: str,
+    restart_message_key: str,
 ) -> None:
     try:
         await asyncio.wait_for(ack, timeout=_CONFIG_ACK_TIMEOUT_SECONDS)
@@ -219,14 +121,14 @@ async def _await_connection_config_ack(  # noqa: PLR0913 - rollback inputs stay 
 
     if camera_changed:
         await asyncio.to_thread(_apply_camera)
-    if not await _apply_connection_change(state, previous_config):
-        if camera_changed:
-            await asyncio.to_thread(_apply_camera)
-        await get_message_queue().put(_config_message(state, mutation_id))
-        return
     toast_success(
         identifier=None,
         content=ToastContent(message_key=success_message_key),
+        action=None,
+    )
+    toast_info(
+        identifier=None,
+        content=ToastContent(message_key=restart_message_key),
         action=None,
     )
 
@@ -239,18 +141,21 @@ async def _start_connection_change(
     camera_changed: bool,
     success_message_key: str,
 ) -> bool:
-    """Send canonical config, then apply only after the app acknowledges it."""
+    """Persist connection settings and confirm the reboot-required contract."""
+    restart_message_key = _connection_restart_message_key(
+        state.rov_config, previous_config
+    )
     if mutation_id is None or not websocket_state.is_client_connected:
         if camera_changed:
             await asyncio.to_thread(_apply_camera)
-        if not await _apply_connection_change(state, previous_config):
-            if camera_changed:
-                await asyncio.to_thread(_apply_camera)
-            await get_message_queue().put(_config_message(state, mutation_id))
-            return False
         toast_success(
             identifier=None,
             content=ToastContent(message_key=success_message_key),
+            action=None,
+        )
+        toast_info(
+            identifier=None,
+            content=ToastContent(message_key=restart_message_key),
             action=None,
         )
         return True
@@ -274,6 +179,7 @@ async def _start_connection_change(
             ack,
             camera_changed,
             success_message_key,
+            restart_message_key,
         )
     )
     state.connection_change_task = task
@@ -287,7 +193,7 @@ async def _start_connection_change(
 
 
 def handle_confirm_config(state: RovState, mutation_id: str) -> None:
-    """Release a pending connection change after the app persisted its target."""
+    """Confirm that the app persisted the connection target for the next boot."""
     waiter = state.config_ack_waiters.get(mutation_id)
     if waiter is not None and not waiter.done():
         waiter.set_result(None)

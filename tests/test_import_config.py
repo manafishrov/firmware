@@ -142,43 +142,31 @@ def test_import_publishes_canonical_config_to_client(rov_state, monkeypatch):
     assert message.payload.config.rov_name == "Published"
 
 
-def test_import_restarts_firmware_when_websocket_port_changed(rov_state, monkeypatch):
-    restart_calls: list[None] = []
-
-    async def restart_firmware() -> bool:
-        restart_calls.append(None)
-        return True
-
-    monkeypatch.setattr(config_handlers, "_restart_firmware", restart_firmware)
+def test_import_persists_connection_change_for_next_boot(rov_state, monkeypatch):
+    info_keys: list[str] = []
+    monkeypatch.setattr(
+        config_handlers,
+        "toast_info",
+        lambda *, content, **_kwargs: info_keys.append(content.message_key),
+    )
 
     payload = _baseline_export(rov_state)
     payload["websocketPort"] = 9100
     asyncio.run(handle_import_config(rov_state, payload))
 
-    assert restart_calls == [None]
+    assert RovConfig.load().websocket_port == 9100
+    assert info_keys == ["toasts_rov_connection_settings_restart_required"]
 
 
-def test_import_uses_network_restart_when_ip_and_port_changed(rov_state, monkeypatch):
-    network_calls: list[str] = []
-    restart_calls: list[None] = []
-
-    async def restart_firmware() -> bool:
-        restart_calls.append(None)
-        return True
-
-    def apply_ip_address(ip_address: str) -> bool:
-        network_calls.append(ip_address)
-        return True
-
-    monkeypatch.setattr(config_handlers, "_apply_ip_address", apply_ip_address)
-    monkeypatch.setattr(config_handlers, "_restart_firmware", restart_firmware)
+def test_import_persists_ip_and_port_together(rov_state):
 
     payload = _baseline_export(rov_state)
     payload.update({"ipAddress": "10.10.11.10", "websocketPort": 9100})
     asyncio.run(handle_import_config(rov_state, payload))
 
-    assert network_calls == ["10.10.11.10"]
-    assert restart_calls == []
+    persisted = RovConfig.load()
+    assert persisted.ip_address == "10.10.11.10"
+    assert persisted.websocket_port == 9100
 
 
 def test_import_confirms_correlated_config_before_connection_apply(
@@ -190,13 +178,13 @@ def test_import_confirms_correlated_config_before_connection_apply(
         assert message.payload.mutation_id == "import-1"
         events.append("confirm")
 
-    async def apply_connection(_state, _previous):
-        events.append("apply")
-        return True
-
     monkeypatch.setattr(config_handlers.websocket_state, "is_client_connected", True)
     monkeypatch.setattr(config_handlers, "send_message_and_wait", send_config)
-    monkeypatch.setattr(config_handlers, "_apply_connection_change", apply_connection)
+    monkeypatch.setattr(
+        config_handlers,
+        "toast_info",
+        lambda **_kwargs: events.append("restart-required"),
+    )
 
     async def run_test():
         await handle_import_config(
@@ -211,22 +199,15 @@ def test_import_confirms_correlated_config_before_connection_apply(
 
     asyncio.run(run_test())
 
-    assert events == ["confirm", "apply"]
+    assert events == ["confirm", "restart-required"]
 
 
 def test_import_restores_config_when_confirmation_times_out(rov_state, monkeypatch):
-    apply_calls: list[None] = []
-
     async def timeout(_message):
         raise TimeoutError
 
-    async def apply_connection(_state, _previous):
-        apply_calls.append(None)
-        return True
-
     monkeypatch.setattr(config_handlers.websocket_state, "is_client_connected", True)
     monkeypatch.setattr(config_handlers, "send_message_and_wait", timeout)
-    monkeypatch.setattr(config_handlers, "_apply_connection_change", apply_connection)
 
     asyncio.run(
         handle_import_config(
@@ -236,6 +217,5 @@ def test_import_restores_config_when_confirmation_times_out(rov_state, monkeypat
         )
     )
 
-    assert apply_calls == []
     assert rov_state.rov_config.ip_address == "10.10.10.10"
     assert RovConfig.load().ip_address == "10.10.10.10"

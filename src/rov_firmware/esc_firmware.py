@@ -60,6 +60,7 @@ class _Command(IntEnum):
     COMMIT = 2
     ABORT = 3
     RECOVER_BEGIN = 4
+    QUERY_OFFSET = 5
 
 
 class _Status(IntEnum):
@@ -123,7 +124,7 @@ type _UploadTransport = tuple[
     asyncio.StreamWriter,
     bytearray,
 ]
-type _ExpectedUploadAck = tuple[_Status, int]
+type _ExpectedUploadAck = tuple[_Status, int, int, int | None]
 
 
 def resolve_esc_firmware() -> tuple[Path, str] | None:
@@ -416,25 +417,30 @@ def _checksum(data: bytes | bytearray) -> int:
     return checksum
 
 
-def _control_packet(command: _Command, image: bytes | None = None) -> bytes:
+def _control_packet(
+    command: _Command, transaction_id: int, image: bytes | None = None
+) -> bytes:
     if command in (_Command.BEGIN, _Command.RECOVER_BEGIN):
         if image is None:
             msg = "BEGIN requires an ESC firmware image"
             raise ValueError(msg)
         packet = bytearray(
             struct.pack(
-                "<BBHIB2x",
+                "<BBBHIBB",
                 ESC_FIRMWARE_USB_CONTROL_START_BYTE,
                 command,
+                transaction_id,
                 len(image),
                 zlib.crc32(image),
                 ESC_FIRMWARE_TARGET_F421_PB4_32K,
+                0,
             )
         )
     else:
         packet = bytearray(ESC_FIRMWARE_USB_CONTROL_PACKET_SIZE - 1)
         packet[0] = ESC_FIRMWARE_USB_CONTROL_START_BYTE
         packet[1] = command
+        packet[2] = transaction_id
     if len(packet) != ESC_FIRMWARE_USB_CONTROL_PACKET_SIZE - 1:
         msg = "ESC firmware control packet layout does not match its configured size"
         raise EscFirmwareUpdateError(msg)
@@ -442,10 +448,19 @@ def _control_packet(command: _Command, image: bytes | None = None) -> bytes:
     return bytes(packet)
 
 
-def _data_packet(image: bytes, offset: int) -> tuple[bytes, int]:
+def _data_packet(
+    image: bytes, transaction_id: int, sequence: int, offset: int
+) -> tuple[bytes, int]:
     chunk = image[offset : offset + ESC_FIRMWARE_USB_DATA_PAYLOAD_SIZE]
     packet = bytearray(
-        struct.pack("<BHB", ESC_FIRMWARE_USB_DATA_START_BYTE, offset, len(chunk))
+        struct.pack(
+            "<BBHHB",
+            ESC_FIRMWARE_USB_DATA_START_BYTE,
+            transaction_id,
+            sequence,
+            offset,
+            len(chunk),
+        )
     )
     packet.extend(chunk.ljust(ESC_FIRMWARE_USB_DATA_PAYLOAD_SIZE, b"\0"))
     packet.append(_checksum(packet))
@@ -462,7 +477,7 @@ async def _read_status(
     read_buffer: bytearray,
     *,
     timeout: float = _STATUS_TIMEOUT_S,
-) -> tuple[_Status, int, int, int]:
+) -> tuple[_Status, int, int, int, int, int]:
     deadline = time.monotonic() + timeout
     while True:
         start = read_buffer.find(bytes((ESC_FIRMWARE_USB_STATUS_START_BYTE,)))
@@ -481,7 +496,8 @@ async def _read_status(
                 continue
             del read_buffer[: start + ESC_FIRMWARE_USB_STATUS_PACKET_SIZE]
             value = struct.unpack_from("<I", packet, 4)[0]
-            return status, packet[2], packet[3], value
+            sequence = struct.unpack_from("<H", packet, 9)[0]
+            return status, packet[2], packet[3], value, packet[8], sequence
         if start > 0:
             del read_buffer[:start]
         elif start < 0 and len(read_buffer) > ESC_FIRMWARE_USB_STATUS_PACKET_SIZE:
@@ -507,14 +523,18 @@ async def _expect_status(  # noqa: PLR0913 - wire status policy is explicit at e
     read_buffer: bytearray,
     expected: _Status,
     expected_value: int | None = None,
+    expected_transaction: int | None = None,
+    expected_sequence: int | None = None,
     *,
     timeout: float = _STATUS_TIMEOUT_S,
     ignore_recovery_notice: bool = False,
 ) -> tuple[int, int]:
     while True:
-        status, motor, error, value = await _read_status(
+        status, motor, error, value, transaction_id, sequence = await _read_status(
             reader, read_buffer, timeout=timeout
         )
+        if expected_transaction is not None and transaction_id != expected_transaction:
+            continue
         if status == _Status.ABORTED:
             # A best-effort abort from the previous attempt can still be in
             # the serial stream when the user starts a recovery retry.
@@ -531,7 +551,11 @@ async def _expect_status(  # noqa: PLR0913 - wire status policy is explicit at e
             )
         if status == _Status.FAILED:
             raise EscFirmwareUpdateError(_format_updater_failure(motor, error))
-        if status == expected and (expected_value is None or value == expected_value):
+        if (
+            status == expected
+            and (expected_value is None or value == expected_value)
+            and (expected_sequence is None or sequence == expected_sequence)
+        ):
             return motor, value
         if (
             status == _Status.RECEIVED
@@ -556,7 +580,7 @@ async def _write_with_ack_retry(
     ignore_recovery_notice: bool = False,
 ) -> None:
     reader, writer, read_buffer = transport
-    expected, expected_value = expected_ack
+    expected, expected_value, transaction_id, expected_sequence = expected_ack
     for attempt in range(1, _UPLOAD_RETRY_ATTEMPTS + 1):
         await _write_packet(writer, packet)
         try:
@@ -565,11 +589,28 @@ async def _write_with_ack_retry(
                 read_buffer,
                 expected,
                 expected_value,
+                transaction_id,
+                expected_sequence,
                 timeout=_UPLOAD_ACK_TIMEOUT_S,
                 ignore_recovery_notice=ignore_recovery_notice,
             )
             return
         except _PicoStatusTimeoutError:
+            await _write_packet(
+                writer, _control_packet(_Command.QUERY_OFFSET, transaction_id)
+            )
+            try:
+                _, current_offset = await _expect_status(
+                    reader,
+                    read_buffer,
+                    _Status.RECEIVED,
+                    expected_transaction=transaction_id,
+                    timeout=_UPLOAD_ACK_TIMEOUT_S,
+                )
+                if current_offset == expected_value:
+                    return
+            except _PicoStatusTimeoutError:
+                pass
             if attempt < _UPLOAD_RETRY_ATTEMPTS:
                 log_warn(
                     "Pico ESC firmware upload acknowledgement timed out at "
@@ -592,6 +633,7 @@ async def _upload_image(  # noqa: PLR0913 - transport and update policy are sepa
     read_buffer: bytearray,
     progress: Callable[[int, int | None], None] | None = None,
     *,
+    transaction_id: int,
     recovery: bool = False,
 ) -> None:
     transport = (reader, writer, read_buffer)
@@ -599,19 +641,22 @@ async def _upload_image(  # noqa: PLR0913 - transport and update policy are sepa
         transport,
         _control_packet(
             _Command.RECOVER_BEGIN if recovery else _Command.BEGIN,
+            transaction_id,
             image,
         ),
-        (_Status.READY, len(image)),
+        (_Status.READY, len(image), transaction_id, 0),
         uploaded_bytes=0,
         ignore_recovery_notice=recovery,
     )
 
-    for offset in range(0, len(image), ESC_FIRMWARE_USB_DATA_PAYLOAD_SIZE):
-        packet, received = _data_packet(image, offset)
+    for sequence, offset in enumerate(
+        range(0, len(image), ESC_FIRMWARE_USB_DATA_PAYLOAD_SIZE), start=1
+    ):
+        packet, received = _data_packet(image, transaction_id, sequence, offset)
         await _write_with_ack_retry(
             transport,
             packet,
-            (_Status.RECEIVED, received),
+            (_Status.RECEIVED, received, transaction_id, sequence),
             uploaded_bytes=offset,
         )
         if progress is not None:
@@ -630,19 +675,23 @@ async def _flash_all_escs(
     read_buffer: bytearray,
     image_size: int,
     progress: Callable[[int, int | None], None] | None = None,
+    *,
+    transaction_id: int,
 ) -> None:
     while True:
         status_packet = await _read_status(reader, read_buffer)
+        if status_packet[4] != transaction_id:
+            continue
         if _handle_flash_status(status_packet, image_size, progress):
             return
 
 
 def _handle_flash_status(
-    status_packet: tuple[_Status, int, int, int],
+    status_packet: tuple[_Status, int, int, int, int, int],
     image_size: int,
     progress: Callable[[int, int | None], None] | None,
 ) -> bool:
-    status, motor, error, value = status_packet
+    status, motor, error, value, _, _ = status_packet
     if status == _Status.FAILED:
         raise _PostCommitFailureError(
             _format_updater_failure(motor, error),
@@ -676,8 +725,10 @@ async def _run_update(  # noqa: PLR0913 - transaction hooks remain explicit for 
     *,
     on_commit_started: Callable[[], None] | None = None,
     recovery: bool = False,
+    transaction_id: int | None = None,
 ) -> None:
     read_buffer = bytearray()
+    transaction_id = transaction_id or (time.monotonic_ns() & 0xFF) or 1
     try:
         await _upload_image(
             reader,
@@ -685,6 +736,7 @@ async def _run_update(  # noqa: PLR0913 - transaction hooks remain explicit for 
             image,
             read_buffer,
             progress,
+            transaction_id=transaction_id,
             recovery=recovery,
         )
     except _PostCommitFailureError:
@@ -699,8 +751,14 @@ async def _run_update(  # noqa: PLR0913 - transaction hooks remain explicit for 
             raise
         except OSError as error:
             raise _precommit_error(error) from error
-    await _write_packet(writer, _control_packet(_Command.COMMIT))
-    await _flash_all_escs(reader, read_buffer, len(image), progress)
+    await _write_packet(writer, _control_packet(_Command.COMMIT, transaction_id))
+    await _flash_all_escs(
+        reader,
+        read_buffer,
+        len(image),
+        progress,
+        transaction_id=transaction_id,
+    )
 
 
 def _resolve_validated_image() -> tuple[Path, str, bytes] | None:
@@ -905,7 +963,7 @@ async def _abort_update(serial_manager: SerialManager) -> None:
     with contextlib.suppress(OSError, RuntimeError):
         async with serial_manager.write_lock:
             await _write_packet(
-                serial_manager.get_writer(), _control_packet(_Command.ABORT)
+                serial_manager.get_writer(), _control_packet(_Command.ABORT, 0)
             )
 
 

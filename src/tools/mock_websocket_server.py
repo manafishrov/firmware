@@ -60,11 +60,11 @@ MOCK_CONFIG: dict[str, Any] = {
         "maxBatteryVoltage": 21.5,
     },
     "camera": {
-        "width": 1440,
-        "height": 1080,
+        "width": 1024,
+        "height": 768,
         "framerate": 30,
         "cropFov": False,
-        "bitrate": 20000000,
+        "bitrate": 3538944,
         "keyframeInterval": 30,
         "profile": "baseline",
         "level": "4.2",
@@ -228,6 +228,8 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     "currentDraw": current_draw,
                     "piUndervoltage": False,
                     "thrusterControlReady": True,
+                    "thrusterProtocolState": "ready",
+                    "thrusterProtocolError": None,
                     "health": {
                         "mcuHealthy": True,
                         "imuHealthy": True,
@@ -235,7 +237,9 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     },
                     "deviceInfo": {
                         "mcuFirmwareVersion": "1.0.4-rc.1",
+                        "mcuFirmwareVersionStatus": "reported",
                         "escFirmwareVersions": esc_versions,
+                        "escFirmwareVersionStatus": "reported",
                     },
                     "escFirmwareUpdate": esc_update,
                 },

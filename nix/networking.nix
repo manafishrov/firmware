@@ -62,10 +62,6 @@
     ${nmcli} connection up "$CONNECTION"
     ${systemctl} restart --no-block dnsmasq.service
 
-    # At runtime the firmware server is still bound to the previous address.
-    # Restart it so it binds the new address; at boot try-restart is a no-op
-    # and the normal service ordering starts it later.
-    ${systemctl} try-restart --no-block manafish-firmware.service
   '';
 in {
   # Keep the onboard radios powered down; the ROV communicates over Ethernet.
@@ -94,30 +90,9 @@ in {
 
   environment.systemPackages = [networkScript];
 
-  # The network helper runs as root during boot and through the privileged
-  # apply unit after a runtime config change. Give both paths one transient
-  # location for the subnet-aware dnsmasq configuration.
+  # The network helper runs as root during boot. Give it a transient location
+  # for the subnet-aware dnsmasq configuration.
   systemd.tmpfiles.rules = ["d /run/manafish 0755 root root -"];
-
-  # The firmware user may request the privileged network apply unit or restart
-  # itself after a WebSocket port change. The apply unit performs its own
-  # dnsmasq restart as root.
-  security.polkit = {
-    enable = true;
-    extraConfig = ''
-      polkit.addRule(function (action, subject) {
-        if (
-          action.id == "org.freedesktop.systemd1.manage-units" &&
-          ["manafish-firmware.service", "manafish-network-apply.service"].indexOf(
-            action.lookup("unit")
-          ) >= 0 &&
-          subject.user == "pi"
-        ) {
-          return polkit.Result.YES;
-        }
-      });
-    '';
-  };
 
   services = {
     avahi = {
@@ -166,18 +141,6 @@ in {
     serviceConfig = {
       Type = "oneshot";
       RemainAfterExit = true;
-      ExecStart = lib.getExe networkScript;
-    };
-  };
-
-  # Runtime changes are requested by the unprivileged firmware service, then
-  # applied here as root. The helper reads the already validated and persisted
-  # config instead of accepting network values through a privileged argument.
-  systemd.services.manafish-network-apply = {
-    after = ["NetworkManager.service"];
-    wants = ["NetworkManager.service"];
-    serviceConfig = {
-      Type = "oneshot";
       ExecStart = lib.getExe networkScript;
     };
   };

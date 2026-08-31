@@ -307,14 +307,14 @@ class Camera(CamelCaseModel):
     value can never prevent the camera stream from starting.
     """
 
-    width: int = 1440
-    height: int = 1080
+    width: int = 1024
+    height: int = 768
     framerate: int = 30
     # Whether resolutions smaller than the largest supported crop the field of
     # view (via the imx477's faster 1332x990 sensor mode) instead of scaling
     # down from the full-FOV mode. See _max_framerate_for.
     crop_fov: bool = False
-    bitrate: int = 20_000_000
+    bitrate: int = 3_538_944
     keyframe_interval: int = 30
     profile: H264Profile = H264Profile.BASELINE
     level: H264Level = H264Level.LEVEL_4_2
