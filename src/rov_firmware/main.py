@@ -6,6 +6,7 @@ import traceback
 
 from serial import SerialException
 
+from .diagnostics import FieldDiagnostics
 from .log import log_error
 from .models.log import LogLevel
 from .regulator import Regulator
@@ -71,6 +72,10 @@ async def main() -> None:
             asyncio.create_task(mcu.read_loop(), name="mcu.read_loop"),
             asyncio.create_task(thrusters.send_loop(), name="thrusters.send_loop"),
             asyncio.create_task(ws_server.wait_closed(), name="ws_server.wait_closed"),
+            asyncio.create_task(
+                FieldDiagnostics(state, serial_manager, mcu, thrusters).run(),
+                name="field_diagnostics",
+            ),
         ]
         _ = await asyncio.gather(*tasks)
     except asyncio.CancelledError:

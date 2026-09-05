@@ -42,6 +42,7 @@ from ..constants import (
     MCU_TELEMETRY_TYPE_VOLTAGE,
     NUM_MOTORS,
 )
+from ..diagnostics import log_diagnostic
 from ..esc_firmware import (
     check_esc_firmware_confirmation,
     is_valid_esc_firmware_version,
@@ -72,6 +73,7 @@ _RUNTIME_CONFIG_STATUS_PACKET_START_TOKEN = bytes(
 _RELEASE_VERSION_PACKET_START_TOKEN = bytes((MCU_RELEASE_VERSION_START_BYTE,))
 _ESC_FIRMWARE_STATUS_START_TOKEN = bytes((ESC_FIRMWARE_USB_STATUS_START_BYTE,))
 _TELEMETRY_FIELDS = ("erpm", "voltage", "temperature", "current", "signal_quality")
+_INVALID_PACKET_LOG_INTERVAL_S = 5.0
 _ESC_VERSION_TYPES = (
     MCU_TELEMETRY_TYPE_ESC_VERSION_LENGTH,
     MCU_TELEMETRY_TYPE_ESC_VERSION_CHUNK,
@@ -118,6 +120,17 @@ class McuSensor:
         self._last_telemetry_time: list[list[float]] = [
             [0.0] * len(_TELEMETRY_FIELDS) for _ in range(NUM_MOTORS)
         ]
+        self._diagnostic_times = [
+            [0.0] * len(_TELEMETRY_FIELDS) for _ in range(NUM_MOTORS)
+        ]
+        self._diagnostic_values: list[list[int | float | None]] = [
+            [None] * len(_TELEMETRY_FIELDS) for _ in range(NUM_MOTORS)
+        ]
+        self._diagnostic_generation = serial_manager.connection_generation
+        self._diagnostic_erpm_min: list[int | None] = [None] * NUM_MOTORS
+        self._diagnostic_erpm_max: list[int | None] = [None] * NUM_MOTORS
+        self.invalid_usb_packets = 0
+        self._last_invalid_log = float("-inf")
         self._startup_time: float = time.monotonic()
         self._flash_task: asyncio.Task[None] | None = None
         self._mcu_auto_flash_attempted = False
@@ -170,6 +183,16 @@ class McuSensor:
         return data
 
     def _consume_read_buffer(self, read_buffer: bytearray, data: bytes) -> None:
+        if self._diagnostic_generation != self.serial_manager.connection_generation:
+            self._diagnostic_generation = self.serial_manager.connection_generation
+            self._diagnostic_times = [
+                [0.0] * len(_TELEMETRY_FIELDS) for _ in range(NUM_MOTORS)
+            ]
+            self._diagnostic_values = [
+                [None] * len(_TELEMETRY_FIELDS) for _ in range(NUM_MOTORS)
+            ]
+            self._diagnostic_erpm_min = [None] * NUM_MOTORS
+            self._diagnostic_erpm_max = [None] * NUM_MOTORS
         read_buffer.extend(data)
         search_start = 0
 
@@ -248,6 +271,8 @@ class McuSensor:
         packet = memoryview(read_buffer)[start_idx:end_idx]
         if self._validate_telemetry_packet(packet):
             self._update_telemetry(packet)
+        else:
+            self._record_invalid_packet(packet)
         return end_idx
 
     def _try_consume_telemetry_batch(
@@ -267,6 +292,8 @@ class McuSensor:
         packet = memoryview(read_buffer)[start_idx:end_idx]
         if self._validate_telemetry_batch_packet(packet):
             self._update_telemetry_batch(packet)
+        else:
+            self._record_invalid_packet(packet)
         return end_idx
 
     @staticmethod
@@ -292,6 +319,8 @@ class McuSensor:
         packet = memoryview(read_buffer)[start_idx:end_idx]
         if self._validate_runtime_config_status_packet(packet):
             self._handle_runtime_config_status_packet(packet)
+        else:
+            self._record_invalid_packet(packet)
         return end_idx
 
     def _try_consume_release_version(
@@ -309,7 +338,62 @@ class McuSensor:
         packet = memoryview(read_buffer)[start_idx:end_idx]
         if self._validate_release_version_packet(packet):
             self._handle_release_version_packet(packet)
+        else:
+            self._record_invalid_packet(packet)
         return end_idx
+
+    def _record_invalid_packet(self, packet: bytes | bytearray | memoryview) -> None:
+        self.invalid_usb_packets += 1
+        now = time.monotonic()
+        if now - self._last_invalid_log >= _INVALID_PACKET_LOG_INTERVAL_S:
+            log_diagnostic(
+                "invalid_usb_packet",
+                generation=self.serial_manager.connection_generation,
+                count=self.invalid_usb_packets,
+                packet_bytes=len(packet),
+                first_32_bytes_hex=bytes(packet[:32]).hex(),
+            )
+            self._last_invalid_log = now
+
+    def diagnostic_snapshot(self, now: float) -> list[dict[str, object]]:
+        """Last-known values and ages, separate from expired live telemetry."""
+        channels: list[dict[str, object]] = []
+        for channel in range(NUM_MOTORS):
+            row: dict[str, object] = {"channel": channel + 1}
+            same_generation = (
+                self._diagnostic_generation == self.serial_manager.connection_generation
+            )
+            for field_id, field in enumerate(_TELEMETRY_FIELDS):
+                updated = (
+                    self._diagnostic_times[channel][field_id]
+                    if same_generation
+                    else 0.0
+                )
+                age = max(0.0, now - updated) if updated > 0 else None
+                last_value = (
+                    self._diagnostic_values[channel][field_id] if updated > 0 else None
+                )
+                row[field] = (
+                    last_value
+                    if age is not None and age <= MCU_TELEMETRY_STALE_TIMEOUT_S
+                    else None
+                )
+                row[f"{field}_age_s"] = None if age is None else round(age, 3)
+                if field == "erpm":
+                    row["last_erpm"] = last_value
+                    row["erpm_stale"] = (
+                        age is not None and age > MCU_TELEMETRY_STALE_TIMEOUT_S
+                    )
+            row["erpm_min_since_sample"] = (
+                self._diagnostic_erpm_min[channel] if same_generation else None
+            )
+            row["erpm_max_since_sample"] = (
+                self._diagnostic_erpm_max[channel] if same_generation else None
+            )
+            channels.append(row)
+        self._diagnostic_erpm_min = [None] * NUM_MOTORS
+        self._diagnostic_erpm_max = [None] * NUM_MOTORS
+        return channels
 
     @staticmethod
     def _find_start_byte(buf: bytearray, start: int) -> int:
@@ -603,6 +687,36 @@ class McuSensor:
                 else:
                     self.state.mcu_telemetry.signal_quality[global_id] = value / 100
                     self.state.mcu_telemetry.signal_quality_valid[global_id] = True
+
+            self._record_diagnostic_telemetry(global_id, packet_type, value)
+
+    def _record_diagnostic_telemetry(
+        self, channel: int, packet_type: int, raw_value: int
+    ) -> None:
+        self._diagnostic_times[channel][packet_type] = self._last_telemetry_time[
+            channel
+        ][packet_type]
+        field = _TELEMETRY_FIELDS[packet_type]
+        value = getattr(self.state.mcu_telemetry, field)[channel]
+        if packet_type == MCU_TELEMETRY_TYPE_CURRENT:
+            value = raw_value  # Keep signed wire readings; never change live current policy.
+        elif (
+            packet_type == MCU_TELEMETRY_TYPE_SIGNAL_QUALITY
+            and not self.state.mcu_telemetry.signal_quality_valid[channel]
+        ):
+            value = None
+        elif packet_type == MCU_TELEMETRY_TYPE_ERPM:
+            low, high = (
+                self._diagnostic_erpm_min[channel],
+                self._diagnostic_erpm_max[channel],
+            )
+            self._diagnostic_erpm_min[channel] = (
+                value if low is None else min(low, value)
+            )
+            self._diagnostic_erpm_max[channel] = (
+                value if high is None else max(high, value)
+            )
+        self._diagnostic_values[channel][packet_type] = value
 
     def _update_esc_firmware_version(
         self, global_id: int, packet_type: int, value: int

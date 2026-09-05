@@ -416,6 +416,25 @@ def test_protocol_config_logs_actionable_error_when_ack_stays_blocked(
     ]
 
 
+def test_protocol_timeout_points_to_the_flash_pico_button(rov_state):
+    serial_manager = _SerialManagerSpy()
+    thrusters = Thrusters(
+        rov_state,
+        cast(Any, serial_manager),
+        cast(Any, RegulatorController(rov_state)),
+    )
+    writer = _WriterSpy()
+    asyncio.run(thrusters._ensure_config_sent(cast(Any, writer)))
+    thrusters._protocol_reconnect_attempts = 1
+    thrusters._pending_config_since -= 9
+
+    assert not asyncio.run(thrusters._ensure_config_sent(cast(Any, writer)))
+    assert rov_state.system_status.thruster_protocol_state == "failed"
+    assert "(Firmware → Flash Pico)" in (
+        rov_state.system_status.thruster_protocol_error or ""
+    )
+
+
 def test_thruster_test_countdown_starts_after_first_command_write(
     thrusters, monkeypatch
 ):

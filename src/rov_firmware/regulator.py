@@ -637,6 +637,10 @@ class Regulator:
             dtype=np.float32,
         )
 
+    def diagnostic_output(self) -> list[float]:
+        """Return the last computed contribution without advancing the controller."""
+        return self._regulator_direction_vector.tolist()
+
     def apply_regulator_to_direction_vector(
         self, direction_vector: NDArray[np.float32]
     ) -> NDArray[np.float32]:

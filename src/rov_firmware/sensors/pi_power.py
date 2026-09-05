@@ -8,6 +8,11 @@ RPI_VOLTAGE_SENSOR_NAME = "rpi_volt"
 
 
 def is_pi_undervoltage_detected(hwmon_root: Path = HWMON_ROOT) -> bool:
+    """Keep the existing status policy: unavailable is not an undervoltage alarm."""
+    return read_pi_undervoltage(hwmon_root) is True
+
+
+def read_pi_undervoltage(hwmon_root: Path = HWMON_ROOT) -> bool | None:
     """Return whether the Raspberry Pi firmware detected input undervoltage.
 
     The ``raspberrypi-hwmon`` kernel driver polls the firmware throttling flags
@@ -19,9 +24,8 @@ def is_pi_undervoltage_detected(hwmon_root: Path = HWMON_ROOT) -> bool:
         hwmon_root: hwmon class directory, injectable for tests.
 
     Returns:
-        True while the kernel's Raspberry Pi voltage alarm is asserted. Missing
-        or unreadable hwmon data is treated as unavailable rather than as an
-        undervoltage event.
+        True while the alarm is asserted, False for a measured clear alarm,
+        or None when monitoring is unavailable.
     """
     try:
         for device in hwmon_root.glob("hwmon*"):
@@ -30,10 +34,10 @@ def is_pi_undervoltage_detected(hwmon_root: Path = HWMON_ROOT) -> bool:
                 if sensor_name != RPI_VOLTAGE_SENSOR_NAME:
                     continue
                 alarm = (device / "in0_lcrit_alarm").read_text(encoding="ascii")
-                return alarm.strip() == "1"
-            except OSError:
+                return {"0": False, "1": True}.get(alarm.strip())
+            except (OSError, UnicodeError):
                 continue
     except OSError:
-        return False
+        return None
 
-    return False
+    return None
