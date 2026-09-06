@@ -43,6 +43,7 @@ _CONFIG_ACK_WARNING_SECONDS = 5.0
 _CONFIG_ACK_TIMEOUT_SECONDS = 8.0
 _MCU_INFO_RETRY_INTERVAL_SECONDS = 1.0
 _MCU_INFO_ATTEMPTS = 3
+_CONTROL_DIAGNOSTIC_INTERVAL_SECONDS = 10.0
 
 
 class Thrusters:
@@ -85,6 +86,9 @@ class Thrusters:
         self._diagnostic_max_send_gap = 0.0
         self._diagnostic_late_sends = 0
         self._diagnostic_send_failures = 0
+        self._control_log_key: tuple[int, int, int, int, int] | None = None
+        self._control_log_time = float("-inf")
+        self._suppressed_control_logs = 0
 
         self.previous_direction_vector: NDArray[np.float32] = np.zeros(
             8, dtype=np.float32
@@ -661,13 +665,47 @@ class Thrusters:
         async with self.serial_manager.write_lock:
             writer.write(packet)
             await writer.drain()
+        self._record_control_diagnostic(
+            (
+                command,
+                request_id,
+                protocol,
+                dshot_speed,
+                self.serial_manager.connection_generation,
+            )
+        )
+
+    def _record_control_diagnostic(self, key: tuple[int, int, int, int, int]) -> None:
+        now = time.monotonic()
+        if (
+            key == self._control_log_key
+            and now - self._control_log_time < _CONTROL_DIAGNOSTIC_INTERVAL_SECONDS
+        ):
+            self._suppressed_control_logs += 1
+            return
+        if key != self._control_log_key:
+            if self._control_log_key is not None and self._suppressed_control_logs:
+                self._emit_control_diagnostic(
+                    "mcu_control_repeat_summary", self._control_log_key
+                )
+            self._suppressed_control_logs = 0
+        self._emit_control_diagnostic("mcu_control_sent", key)
+        self._control_log_key = key
+        self._control_log_time = now
+        self._suppressed_control_logs = 0
+
+    def _emit_control_diagnostic(
+        self, event: str, key: tuple[int, int, int, int, int]
+    ) -> None:
+        command, request_id, protocol, speed, generation = key
         log_diagnostic(
-            "mcu_control_sent",
+            event,
             command=command,
             request_id=request_id,
             protocol=protocol,
-            dshot_speed=dshot_speed,
-            generation=self.serial_manager.connection_generation,
+            dshot_speed=speed,
+            generation=generation,
+            suppressed_attempts=self._suppressed_control_logs,
         )
 
     async def _ensure_mcu_info_requested(self, writer: StreamWriter) -> None:

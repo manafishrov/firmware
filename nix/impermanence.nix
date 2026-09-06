@@ -31,6 +31,7 @@ in {
       device = "/persistent/boot";
       fsType = "none";
       options = ["bind"];
+      depends = ["/persistent"];
       neededForBoot = true;
     };
     "/nix" = {
