@@ -29,6 +29,7 @@ from .constants import (
     THRUSTER_TEST_TOAST_ID,
     THRUSTER_TIMEOUT_MS,
 )
+from .diagnostics import log_diagnostic
 from .log import log_error, log_warn
 from .models.toast import ToastVariant
 from .regulator import Regulator
@@ -42,6 +43,7 @@ _CONFIG_ACK_WARNING_SECONDS = 5.0
 _CONFIG_ACK_TIMEOUT_SECONDS = 8.0
 _MCU_INFO_RETRY_INTERVAL_SECONDS = 1.0
 _MCU_INFO_ATTEMPTS = 3
+_CONTROL_DIAGNOSTIC_INTERVAL_SECONDS = 10.0
 
 
 class Thrusters:
@@ -76,6 +78,17 @@ class Thrusters:
         self._info_generation = -1
         self._info_attempts = 0
         self._last_info_attempt_time = 0.0
+        self._diagnostic_last_command: list[int] | None = None
+        self._diagnostic_command_min: list[int] | None = None
+        self._diagnostic_command_max: list[int] | None = None
+        self._diagnostic_last_send = 0.0
+        self._diagnostic_generation = -1
+        self._diagnostic_max_send_gap = 0.0
+        self._diagnostic_late_sends = 0
+        self._diagnostic_send_failures = 0
+        self._control_log_key: tuple[int, int, int, int, int] | None = None
+        self._control_log_time = float("-inf")
+        self._suppressed_control_logs = 0
 
         self.previous_direction_vector: NDArray[np.float32] = np.zeros(
             8, dtype=np.float32
@@ -559,6 +572,30 @@ class Thrusters:
             action=None,
         )
 
+    def diagnostic_snapshot(self, now: float) -> dict[str, object]:
+        """Observe host USB writes, not proof of Pico/ESC command acceptance."""
+        snapshot: dict[str, object] = {
+            "last_usb_command": self._diagnostic_last_command,
+            "usb_command_min_since_sample": self._diagnostic_command_min,
+            "usb_command_max_since_sample": self._diagnostic_command_max,
+            "last_usb_write_age_s": round(max(0.0, now - self._diagnostic_last_send), 3)
+            if self._diagnostic_last_send
+            else None,
+            "write_generation": self._diagnostic_generation,
+            "send_frequency_hz": THRUSTER_SEND_FREQUENCY,
+            "max_write_gap_s": round(self._diagnostic_max_send_gap, 4),
+            "write_gaps_over_two_periods": self._diagnostic_late_sends,
+            "write_failures": self._diagnostic_send_failures,
+            "last_regulator_contribution": self.regulator.diagnostic_output(),
+            "test_channel_index": self.state.thrusters.test_thruster,
+            "auto_tuning": self.state.regulator.auto_tuning_active,
+        }
+        self._diagnostic_max_send_gap = 0.0
+        self._diagnostic_late_sends = 0
+        self._diagnostic_command_min = None
+        self._diagnostic_command_max = None
+        return snapshot
+
     async def _send_packet(
         self, writer: StreamWriter, thrust_values: list[int]
     ) -> None:
@@ -571,6 +608,36 @@ class Thrusters:
         async with self.serial_manager.write_lock:
             writer.write(packet)
             await writer.drain()
+        now = time.monotonic()
+        generation = self.serial_manager.connection_generation
+        if self._diagnostic_generation == generation and self._diagnostic_last_send:
+            gap = now - self._diagnostic_last_send
+            self._diagnostic_max_send_gap = max(self._diagnostic_max_send_gap, gap)
+            if gap > 2 / THRUSTER_SEND_FREQUENCY:
+                self._diagnostic_late_sends += 1
+        if (
+            self._diagnostic_command_min is None
+            or self._diagnostic_generation != generation
+        ):
+            self._diagnostic_command_min = thrust_values.copy()
+            self._diagnostic_command_max = thrust_values.copy()
+        else:
+            self._diagnostic_command_min = [
+                min(old, new)
+                for old, new in zip(
+                    self._diagnostic_command_min, thrust_values, strict=True
+                )
+            ]
+            if self._diagnostic_command_max is not None:
+                self._diagnostic_command_max = [
+                    max(old, new)
+                    for old, new in zip(
+                        self._diagnostic_command_max, thrust_values, strict=True
+                    )
+                ]
+        self._diagnostic_last_command = thrust_values.copy()
+        self._diagnostic_last_send = now
+        self._diagnostic_generation = generation
 
     def _new_control_request_id(self) -> int:
         self._next_control_request_id = (self._next_control_request_id % 255) + 1
@@ -598,6 +665,48 @@ class Thrusters:
         async with self.serial_manager.write_lock:
             writer.write(packet)
             await writer.drain()
+        self._record_control_diagnostic(
+            (
+                command,
+                request_id,
+                protocol,
+                dshot_speed,
+                self.serial_manager.connection_generation,
+            )
+        )
+
+    def _record_control_diagnostic(self, key: tuple[int, int, int, int, int]) -> None:
+        now = time.monotonic()
+        if (
+            key == self._control_log_key
+            and now - self._control_log_time < _CONTROL_DIAGNOSTIC_INTERVAL_SECONDS
+        ):
+            self._suppressed_control_logs += 1
+            return
+        if key != self._control_log_key:
+            if self._control_log_key is not None and self._suppressed_control_logs:
+                self._emit_control_diagnostic(
+                    "mcu_control_repeat_summary", self._control_log_key
+                )
+            self._suppressed_control_logs = 0
+        self._emit_control_diagnostic("mcu_control_sent", key)
+        self._control_log_key = key
+        self._control_log_time = now
+        self._suppressed_control_logs = 0
+
+    def _emit_control_diagnostic(
+        self, event: str, key: tuple[int, int, int, int, int]
+    ) -> None:
+        command, request_id, protocol, speed, generation = key
+        log_diagnostic(
+            event,
+            command=command,
+            request_id=request_id,
+            protocol=protocol,
+            dshot_speed=speed,
+            generation=generation,
+            suppressed_attempts=self._suppressed_control_logs,
+        )
 
     async def _ensure_mcu_info_requested(self, writer: StreamWriter) -> None:
         generation = self.serial_manager.connection_generation
@@ -683,7 +792,7 @@ class Thrusters:
             self.state.system_status.thruster_protocol_state = "failed"
             self.state.system_status.thruster_protocol_error = (
                 "The MCU did not finish applying the selected thruster protocol. "
-                "Reflash the MCU firmware or reconnect its USB cable."
+                "Reflash the Pico (Firmware → Flash Pico) or reconnect its USB cable."
             )
             self._pending_config_since = now
 
@@ -755,6 +864,7 @@ class Thrusters:
                 await self._send_packet(writer, thrust_values)
                 return True
             except Exception as e:
+                self._diagnostic_send_failures += 1
                 log_error(f"Thruster send_packet failed (attempt {attempt + 1}): {e}")
                 await asyncio.sleep(0.1)
         return False

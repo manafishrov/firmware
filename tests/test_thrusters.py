@@ -416,6 +416,62 @@ def test_protocol_config_logs_actionable_error_when_ack_stays_blocked(
     ]
 
 
+def test_control_log_suppression_never_suppresses_usb_writes(thrusters, monkeypatch):
+    events = []
+    now = [100.0]
+    monkeypatch.setattr(thrusters_module.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(
+        thrusters_module,
+        "log_diagnostic",
+        lambda event, **fields: events.append((event, fields)),
+    )
+    writer = _WriterSpy()
+
+    async def send(request_id):
+        await thrusters._send_control_packet(
+            cast(Any, writer), MCU_CONTROL_COMMAND_APPLY_CONFIG, request_id
+        )
+
+    async def run():
+        for _ in range(20):
+            await send(1)
+        assert len(events) == 1
+        now[0] = 110.0
+        await send(1)
+        assert events[-1][1]["suppressed_attempts"] == 19
+        await send(1)
+        await send(1)
+        await send(2)
+
+    asyncio.run(run())
+    assert len(writer.writes) == 24
+    assert writer.drains == 24
+    assert events[-2][0] == "mcu_control_repeat_summary"
+    assert events[-2][1]["request_id"] == 1
+    assert events[-2][1]["suppressed_attempts"] == 2
+    assert events[-1][1]["request_id"] == 2
+    assert events[-1][1]["suppressed_attempts"] == 0
+
+
+def test_protocol_timeout_points_to_the_flash_pico_button(rov_state):
+    serial_manager = _SerialManagerSpy()
+    thrusters = Thrusters(
+        rov_state,
+        cast(Any, serial_manager),
+        cast(Any, RegulatorController(rov_state)),
+    )
+    writer = _WriterSpy()
+    asyncio.run(thrusters._ensure_config_sent(cast(Any, writer)))
+    thrusters._protocol_reconnect_attempts = 1
+    thrusters._pending_config_since -= 9
+
+    assert not asyncio.run(thrusters._ensure_config_sent(cast(Any, writer)))
+    assert rov_state.system_status.thruster_protocol_state == "failed"
+    assert "(Firmware → Flash Pico)" in (
+        rov_state.system_status.thruster_protocol_error or ""
+    )
+
+
 def test_thruster_test_countdown_starts_after_first_command_write(
     thrusters, monkeypatch
 ):

@@ -12,6 +12,8 @@
   resize2fs = lib.getExe' pkgs.e2fsprogs "resize2fs";
 in {
   sdImage.expandOnBoot = false;
+  # The SD root is mounted here; / itself is tmpfs and hides this file.
+  sdImage.nixPathRegistrationFile = "/persistent/nix-path-registration";
 
   fileSystems = {
     "/" = lib.mkForce {
@@ -22,6 +24,14 @@ in {
     "/persistent" = {
       device = "/dev/disk/by-label/NIXOS_SD";
       fsType = "ext4";
+      neededForBoot = true;
+    };
+    # U-Boot reads extlinux entries from the SD partition, not the tmpfs root.
+    "/boot" = {
+      device = "/persistent/boot";
+      fsType = "none";
+      options = ["bind"];
+      depends = ["/persistent"];
       neededForBoot = true;
     };
     "/nix" = {

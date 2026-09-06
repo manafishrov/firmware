@@ -12,6 +12,7 @@ from .constants import (
     MCU_RUNTIME_CONFIG_STATE_APPLYING,
     MCU_RUNTIME_CONFIG_STATE_REJECTED,
 )
+from .diagnostics import log_diagnostic
 from .log import log_error, log_info, log_warn
 from .models.toast import ToastContent
 from .rov_state import RovState
@@ -38,6 +39,7 @@ class SerialManager:
         self._connection_generation: int = 0
         self._mcu_protocol_config: tuple[str, int] | None = None
         self._mcu_protocol_request_id: int | None = None
+        self._last_status_diagnostic: tuple[int, int, int, str, int] | None = None
 
     async def _find_mcu_port(self, *, log_missing: bool = True) -> str | None:
         mcu_ports = list(Path("/dev/serial/by-id/").glob("usb-Raspberry_Pi_Pico*"))
@@ -107,6 +109,9 @@ class SerialManager:
                 self.state.system_status.thruster_protocol_error = None
                 self.state.system_health.mcu_healthy = True
                 log_info("MCU initialized successfully.")
+                log_diagnostic(
+                    "usb_open", port=serial_port, generation=self._connection_generation
+                )
                 return True
             except Exception as e:
                 await self._clear_connection_unlocked()
@@ -152,6 +157,12 @@ class SerialManager:
                 return
             if not self.state.mcu_flashing:
                 log_error(reason)
+            log_diagnostic(
+                "usb_lost",
+                generation=self._connection_generation,
+                pico_flashing=self.state.mcu_flashing,
+                reason=reason,
+            )
             await self._clear_connection_unlocked()
 
     def get_reader(self) -> asyncio.StreamReader:
@@ -207,6 +218,7 @@ class SerialManager:
     def begin_mcu_protocol_request(self, request_id: int) -> None:
         """Track the current correlated runtime-config request."""
         self._mcu_protocol_request_id = request_id
+        self._last_status_diagnostic = None
         self.state.system_status.thruster_control_ready = False
         self.state.system_status.thruster_protocol_state = "applying"
         self.state.system_status.thruster_protocol_error = None
@@ -220,6 +232,19 @@ class SerialManager:
         dshot_speed: int,
     ) -> None:
         """Apply a correlated runtime-config state reported by the MCU."""
+        diagnostic = (request_id, status, error, protocol, dshot_speed)
+        if diagnostic != self._last_status_diagnostic:
+            log_diagnostic(
+                "mcu_protocol_ack",
+                request_id=request_id,
+                expected_request_id=self._mcu_protocol_request_id,
+                status=status,
+                error=error,
+                protocol=protocol,
+                dshot_speed=dshot_speed,
+                generation=self._connection_generation,
+            )
+            self._last_status_diagnostic = diagnostic
         if request_id != self._mcu_protocol_request_id:
             return
         if status == MCU_RUNTIME_CONFIG_STATE_APPLYING:

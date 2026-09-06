@@ -24,6 +24,7 @@ from .constants import (
     ESC_FIRMWARE_USB_STATUS_START_BYTE,
     NUM_MOTORS,
 )
+from .diagnostics import log_diagnostic
 from .esc_recovery import clear_recovery_required, mark_recovery_required
 from .log import log_error, log_info, log_warn
 from .models.config import ThrusterProtocol
@@ -468,8 +469,21 @@ def _data_packet(
 
 
 async def _write_packet(writer: asyncio.StreamWriter, packet: bytes) -> None:
+    control = packet[0] == ESC_FIRMWARE_USB_CONTROL_START_BYTE
+    if control:
+        log_diagnostic(
+            "esc_control_attempt",
+            command=_Command(packet[1]).name,
+            transaction=packet[2],
+        )
     writer.write(packet)
     await writer.drain()
+    if control:
+        log_diagnostic(
+            "esc_control_written",
+            command=_Command(packet[1]).name,
+            transaction=packet[2],
+        )
 
 
 async def _read_status(
@@ -479,6 +493,8 @@ async def _read_status(
     timeout: float = _STATUS_TIMEOUT_S,
 ) -> tuple[_Status, int, int, int, int, int]:
     deadline = time.monotonic() + timeout
+    invalid_packets = 0
+    last_invalid_hex: str | None = None
     while True:
         start = read_buffer.find(bytes((ESC_FIRMWARE_USB_STATUS_START_BYTE,)))
         if (
@@ -487,11 +503,15 @@ async def _read_status(
         ):
             packet = read_buffer[start : start + ESC_FIRMWARE_USB_STATUS_PACKET_SIZE]
             if _checksum(packet[:-1]) != packet[-1]:
+                invalid_packets += 1
+                last_invalid_hex = packet[:32].hex()
                 del read_buffer[: start + 1]
                 continue
             try:
                 status = _Status(packet[1])
             except ValueError:
+                invalid_packets += 1
+                last_invalid_hex = packet[:32].hex()
                 del read_buffer[: start + 1]
                 continue
             del read_buffer[: start + ESC_FIRMWARE_USB_STATUS_PACKET_SIZE]
@@ -505,11 +525,25 @@ async def _read_status(
 
         remaining = deadline - time.monotonic()
         if remaining <= 0:
+            log_diagnostic(
+                "esc_status_timeout",
+                invalid_packets=invalid_packets,
+                last_invalid_hex=last_invalid_hex,
+                buffered_bytes=len(read_buffer),
+                buffer_tail_hex=read_buffer[-32:].hex(),
+            )
             msg = "Timed out waiting for the Pico ESC firmware updater"
             raise _PicoStatusTimeoutError(msg)
         try:
             data = await asyncio.wait_for(reader.read(128), timeout=remaining)
         except TimeoutError as error:
+            log_diagnostic(
+                "esc_status_timeout",
+                invalid_packets=invalid_packets,
+                last_invalid_hex=last_invalid_hex,
+                buffered_bytes=len(read_buffer),
+                buffer_tail_hex=read_buffer[-32:].hex(),
+            )
             msg = "Timed out waiting for the Pico ESC firmware updater"
             raise _PicoStatusTimeoutError(msg) from error
         if not data:
@@ -596,6 +630,14 @@ async def _write_with_ack_retry(
             )
             return
         except _PicoStatusTimeoutError:
+            log_diagnostic(
+                "esc_upload_retry",
+                transaction=transaction_id,
+                sequence=expected_sequence,
+                last_acknowledged_bytes=uploaded_bytes,
+                expected_bytes=expected_value,
+                attempt=attempt,
+            )
             await _write_packet(
                 writer, _control_packet(_Command.QUERY_OFFSET, transaction_id)
             )
@@ -606,6 +648,12 @@ async def _write_with_ack_retry(
                     _Status.RECEIVED,
                     expected_transaction=transaction_id,
                     timeout=_UPLOAD_ACK_TIMEOUT_S,
+                )
+                log_diagnostic(
+                    "esc_query_offset",
+                    transaction=transaction_id,
+                    received_bytes=current_offset,
+                    expected_bytes=expected_value,
                 )
                 if current_offset == expected_value:
                     return
@@ -637,6 +685,14 @@ async def _upload_image(  # noqa: PLR0913 - transport and update policy are sepa
     recovery: bool = False,
 ) -> None:
     transport = (reader, writer, read_buffer)
+    log_diagnostic(
+        "esc_upload_begin",
+        transaction=transaction_id,
+        image_bytes=len(image),
+        image_crc32=f"{zlib.crc32(image):08x}",
+        recovery=recovery,
+        commit_sent=False,
+    )
     await _write_with_ack_retry(
         transport,
         _control_packet(
@@ -659,6 +715,14 @@ async def _upload_image(  # noqa: PLR0913 - transport and update policy are sepa
             (_Status.RECEIVED, received, transaction_id, sequence),
             uploaded_bytes=offset,
         )
+        if sequence in (1, 10) or sequence % 64 == 0 or received == len(image):
+            log_diagnostic(
+                "esc_upload_ack",
+                transaction=transaction_id,
+                sequence=sequence,
+                acknowledged_bytes=received,
+                commit_sent=False,
+            )
         if progress is not None:
             progress(max(1, received * 10 // len(image)), None)
 
@@ -686,12 +750,28 @@ async def _flash_all_escs(
             return
 
 
+def _log_flash_status(status_packet: tuple[_Status, int, int, int, int, int]) -> None:
+    status, motor, error, value, transaction, sequence = status_packet
+    if status != _Status.MOTOR_BEGIN or value % 4096 == 0:
+        log_diagnostic(
+            "esc_programming_status",
+            transaction=transaction,
+            sequence=sequence,
+            status=status.name,
+            esc=motor + 1 if motor < NUM_MOTORS else None,
+            error=error,
+            value=value,
+            commit_sent=True,
+        )
+
+
 def _handle_flash_status(
     status_packet: tuple[_Status, int, int, int, int, int],
     image_size: int,
     progress: Callable[[int, int | None], None] | None,
 ) -> bool:
     status, motor, error, value, _, _ = status_packet
+    _log_flash_status(status_packet)
     if status == _Status.FAILED:
         raise _PostCommitFailureError(
             _format_updater_failure(motor, error),

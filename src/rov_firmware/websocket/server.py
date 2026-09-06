@@ -11,7 +11,14 @@ from websockets import Server, ServerConnection
 from websockets.exceptions import ConnectionClosed
 
 from ..constants import CRASH_LOG_SEND_TIMEOUT_S
-from ..log import flush_pending_logs, log_error, log_info, log_warn
+from ..log import (
+    flush_pending_logs,
+    get_local_logger,
+    log_error,
+    log_info,
+    log_warn,
+    stamp_log_message,
+)
 from ..models.log import LogEntry, LogLevel, LogOrigin
 from ..rov_state import RovState
 from ..serial import SerialManager
@@ -24,7 +31,7 @@ from .send.telemetry import build_telemetry
 from .state import websocket_state
 
 
-_logger = logging.getLogger(__name__)
+_logger = get_local_logger()
 
 websocket_message_adapter = TypeAdapter(WebsocketMessage)
 
@@ -53,6 +60,7 @@ class WebsocketServer:
         """
         self.client = websocket
         websocket_state.is_client_connected = True
+        websocket_state.connection_generation += 1
         log_info(
             f"Client connected: {cast(tuple[str, int] | None, websocket.remote_address)}."
         )
@@ -145,6 +153,15 @@ class WebsocketServer:
             level: The log level for the frame.
             message: The log message body.
         """
+        message = stamp_log_message(message)
+        _logger.log(
+            {
+                LogLevel.INFO: logging.INFO,
+                LogLevel.WARN: logging.WARNING,
+                LogLevel.ERROR: logging.ERROR,
+            }[level],
+            message,
+        )
         payload = LogEntry(origin=LogOrigin.FIRMWARE, level=level, message=message)
         try:
             await self.send_frame(
