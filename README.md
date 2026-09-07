@@ -24,8 +24,9 @@ The app must accept nullable/fractional `currentDraw` before installing this Pi
 version. Install the AM32 raw-current restoration and product input policy on
 all eight ESCs using the old Pico first, then deploy the new Pico through an
 updated Pi bundle. Pi auto-flashing cannot enforce that ESC-first sequence.
-Without new MCU reports, current remains unavailable. Release pins are unchanged
-by these source changes and must be updated as a separate staged release.
+Without new MCU reports, current remains unavailable. This release bundles
+AM32 v2.21.0-rc.3 and Pico/Pico 2 v1.0.3-rc.7. Do not install this bundle before
+updating all eight ESCs with the old Pico; use a separate ESC-first staging step.
 
 ## Building the SD Image
 
