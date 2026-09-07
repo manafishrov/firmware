@@ -63,6 +63,7 @@ class SerialManager:
         self.state.device_info.mcu_firmware_version = ""
         self.state.device_info.mcu_firmware_version_status = "querying"
         self.state.system_health.mcu_healthy = False
+        self.state.mcu_telemetry.clear_board_current()
         if writer is not None:
             writer.close()
             with contextlib.suppress(Exception):

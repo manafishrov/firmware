@@ -1,41 +1,39 @@
 """WebSocket status send handlers for the ROV firmware."""
 
-from ...constants import MOTORS_PER_BUS
-from ...models.config import CurrentSensingMode
+import time
+
+from ...constants import MCU_TELEMETRY_STALE_TIMEOUT_S
+from ...models.config import ThrusterProtocol
 from ...models.rov_status import RovStatus
 from ...rov_state import RovState
 from ...sensors.pi_power import is_pi_undervoltage_detected
 from ..message import StatusUpdate
 
 
-def _current_draw(state: RovState) -> int:
-    """Return total live ESC current in amperes without double-counting buses."""
-    currents = state.mcu_telemetry.current
-    valid = state.mcu_telemetry.current_valid
-
-    if state.rov_config.current_sensing_mode == CurrentSensingMode.PER_MOTOR:
-        return sum(
-            value for value, is_valid in zip(currents, valid, strict=False) if is_valid
-        )
-
-    total = 0.0
-    for start in range(0, len(currents), MOTORS_PER_BUS):
-        bus_currents = [
-            value
-            for value, is_valid in zip(
-                currents[start : start + MOTORS_PER_BUS],
-                valid[start : start + MOTORS_PER_BUS],
-                strict=False,
-            )
-            if is_valid
-        ]
-        if bus_currents:
-            # Every controller on a 4-in-1 ESC reports the same board-level
-            # shunt. Average only fresh copies, then count that bus once.
-            total += sum(bus_currents) / len(bus_currents)
-    # EDT itself has 1 A resolution, so keep the established integer WebSocket
-    # contract and round only after all shared-bus copies have been averaged.
-    return int(total + 0.5)
+def _current_draw(state: RovState) -> float | None:
+    """Sum two fresh MCU-calibrated board reports, never raw ESC readings."""
+    if (
+        not state.system_health.mcu_healthy
+        or state.rov_config.thruster_protocol != ThrusterProtocol.DSHOT
+        or state.mcu_flashing
+        or state.esc_firmware_update.active
+        or state.esc_firmware_recovery_required
+    ):
+        return None
+    telemetry = state.mcu_telemetry
+    now = time.monotonic()
+    total_ma = 0
+    for value, updated in zip(
+        telemetry.board_current_ma, telemetry.board_current_updated_at, strict=True
+    ):
+        if (
+            value is None
+            or updated <= 0
+            or now - updated > MCU_TELEMETRY_STALE_TIMEOUT_S
+        ):
+            return None
+        total_ma += value
+    return total_ma / 1000
 
 
 def build_status_update(state: RovState) -> StatusUpdate:

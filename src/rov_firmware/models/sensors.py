@@ -13,6 +13,10 @@ class McuData(BaseModel):
     erpm: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
     current: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
     current_valid: list[bool] = [False, False, False, False, False, False, False, False]
+    board_current_ma: list[int | None] = [None, None]
+    board_baseline_ma: list[int | None] = [None, None]
+    board_current_updated_at: list[float] = [0.0, 0.0]
+    board_baseline_updated_at: list[float] = [0.0, 0.0]
     voltage: list[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     temperature: list[int] = [0, 0, 0, 0, 0, 0, 0, 0]
     signal_quality: list[float] = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
@@ -26,6 +30,13 @@ class McuData(BaseModel):
         False,
         False,
     ]
+
+    def clear_board_current(self) -> None:
+        """Invalidate auto-zero reports across USB sessions and MCU resets."""
+        self.board_current_ma = [None, None]
+        self.board_baseline_ma = [None, None]
+        self.board_current_updated_at = [0.0, 0.0]
+        self.board_baseline_updated_at = [0.0, 0.0]
 
 
 class ImuData(BaseModel):
