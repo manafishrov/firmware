@@ -34,7 +34,6 @@ _CONFIG_FIELDS = {
     "mcu_board",
     "thruster_protocol",
     "dshot_speed",
-    "current_sensing_mode",
     "thruster_pin_setup",
     "thruster_allocation",
     "nullspace_vectors",

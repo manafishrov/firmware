@@ -15,6 +15,8 @@ from ..constants import (
     LOG_PACKET_HEADER_SIZE,
     LOG_PACKET_START_BYTE,
     MCU_AUTO_UPDATE_WINDOW_S,
+    MCU_CURRENT_BOARD_IDS,
+    MCU_CURRENT_MAX_MILLIAMPS,
     MCU_PROTOCOL_DSHOT,
     MCU_PROTOCOL_PWM,
     MCU_RELEASE_VERSION_MAX_LENGTH,
@@ -31,7 +33,9 @@ from ..constants import (
     MCU_TELEMETRY_SIGNAL_QUALITY_UNAVAILABLE,
     MCU_TELEMETRY_STALE_TIMEOUT_S,
     MCU_TELEMETRY_START_BYTE,
+    MCU_TELEMETRY_TYPE_CALIBRATED_BOARD_CURRENT,
     MCU_TELEMETRY_TYPE_CURRENT,
+    MCU_TELEMETRY_TYPE_CURRENT_BASELINE,
     MCU_TELEMETRY_TYPE_ERPM,
     MCU_TELEMETRY_TYPE_ESC_VERSION_CHUNK,
     MCU_TELEMETRY_TYPE_ESC_VERSION_COMPLETE,
@@ -184,6 +188,8 @@ class McuSensor:
 
     def _consume_read_buffer(self, read_buffer: bytearray, data: bytes) -> None:
         if self._diagnostic_generation != self.serial_manager.connection_generation:
+            read_buffer.clear()
+            self.state.mcu_telemetry.clear_board_current()
             self._diagnostic_generation = self.serial_manager.connection_generation
             self._diagnostic_times = [
                 [0.0] * len(_TELEMETRY_FIELDS) for _ in range(NUM_MOTORS)
@@ -390,6 +396,29 @@ class McuSensor:
             row["erpm_max_since_sample"] = (
                 self._diagnostic_erpm_max[channel] if same_generation else None
             )
+            if channel in MCU_CURRENT_BOARD_IDS:
+                board = MCU_CURRENT_BOARD_IDS.index(channel)
+                telemetry = self.state.mcu_telemetry
+                for key, values, times in (
+                    (
+                        "board_current_ma",
+                        telemetry.board_current_ma,
+                        telemetry.board_current_updated_at,
+                    ),
+                    (
+                        "board_baseline_ma",
+                        telemetry.board_baseline_ma,
+                        telemetry.board_baseline_updated_at,
+                    ),
+                ):
+                    updated = times[board] if same_generation else 0.0
+                    age = now - updated if updated > 0 else None
+                    row[key] = (
+                        values[board]
+                        if age is not None and age <= MCU_TELEMETRY_STALE_TIMEOUT_S
+                        else None
+                    )
+                    row[f"{key}_age_s"] = round(age, 3) if age is not None else None
             channels.append(row)
         self._diagnostic_erpm_min = [None] * NUM_MOTORS
         self._diagnostic_erpm_max = [None] * NUM_MOTORS
@@ -607,6 +636,7 @@ class McuSensor:
             log_error("Auto-flash of MCU firmware failed.")
 
     def _reset_telemetry(self) -> None:
+        self.state.mcu_telemetry.clear_board_current()
         for i in range(NUM_MOTORS):
             for packet_type in range(len(_TELEMETRY_FIELDS)):
                 self._clear_telemetry_item(i, packet_type)
@@ -654,9 +684,43 @@ class McuSensor:
             self._update_telemetry_item(global_id, packet_type, value)
             offset += MCU_TELEMETRY_BATCH_ENTRY_SIZE
 
+    def _update_board_current(
+        self, global_id: int, packet_type: int, value: int
+    ) -> None:
+        if (
+            global_id not in MCU_CURRENT_BOARD_IDS
+            or not -1 <= value <= MCU_CURRENT_MAX_MILLIAMPS
+        ):
+            return
+        board = MCU_CURRENT_BOARD_IDS.index(global_id)
+        telemetry = self.state.mcu_telemetry
+        if packet_type == MCU_TELEMETRY_TYPE_CALIBRATED_BOARD_CURRENT:
+            telemetry.board_current_ma[board] = value if value >= 0 else None
+            telemetry.board_current_updated_at[board] = time.monotonic()
+        else:
+            telemetry.board_baseline_ma[board] = value if value >= 0 else None
+            telemetry.board_baseline_updated_at[board] = time.monotonic()
+            if value < 0:
+                telemetry.board_current_ma[board] = None
+                telemetry.board_current_updated_at[board] = 0.0
+
+    def _update_signal_quality(self, global_id: int, value: int) -> None:
+        if value == MCU_TELEMETRY_SIGNAL_QUALITY_UNAVAILABLE:
+            self.state.mcu_telemetry.signal_quality[global_id] = 0.0
+            self.state.mcu_telemetry.signal_quality_valid[global_id] = False
+        else:
+            self.state.mcu_telemetry.signal_quality[global_id] = value / 100
+            self.state.mcu_telemetry.signal_quality_valid[global_id] = True
+
     def _update_telemetry_item(
         self, global_id: int, packet_type: int, value: int
     ) -> None:
+        if packet_type in (
+            MCU_TELEMETRY_TYPE_CALIBRATED_BOARD_CURRENT,
+            MCU_TELEMETRY_TYPE_CURRENT_BASELINE,
+        ):
+            self._update_board_current(global_id, packet_type, value)
+            return
         if packet_type == MCU_TELEMETRY_TYPE_ESC_VERSION_DISCOVERY_COMPLETE:
             self.state.device_info.esc_firmware_version_status = (
                 "reported" if value > 0 else "notReported"
@@ -674,19 +738,12 @@ class McuSensor:
             elif packet_type == MCU_TELEMETRY_TYPE_TEMPERATURE:
                 self.state.mcu_telemetry.temperature[global_id] = value
             elif packet_type == MCU_TELEMETRY_TYPE_CURRENT:
-                # EDT current is already in whole amperes. Preserve the raw reading
-                # here so changing the configured sensor topology cannot leave a mix
-                # of divided and undivided samples in state. Shared-bus de-duplication
-                # belongs at aggregation time.
+                # Keep original EDT readings for diagnostics. Display current comes
+                # exclusively from MCU auto-zero board reports (type 9).
                 self.state.mcu_telemetry.current[global_id] = max(0, value)
                 self.state.mcu_telemetry.current_valid[global_id] = True
             elif packet_type == MCU_TELEMETRY_TYPE_SIGNAL_QUALITY:
-                if value == MCU_TELEMETRY_SIGNAL_QUALITY_UNAVAILABLE:
-                    self.state.mcu_telemetry.signal_quality[global_id] = 0.0
-                    self.state.mcu_telemetry.signal_quality_valid[global_id] = False
-                else:
-                    self.state.mcu_telemetry.signal_quality[global_id] = value / 100
-                    self.state.mcu_telemetry.signal_quality_valid[global_id] = True
+                self._update_signal_quality(global_id, value)
 
             self._record_diagnostic_telemetry(global_id, packet_type, value)
 
