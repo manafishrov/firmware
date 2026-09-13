@@ -20,12 +20,12 @@ boards, not individual per-motor sensors. Auto-zero estimates incremental curren
 above idle; it does not validate the sensor gain or provide electrical protection.
 Raw current, corrected current, baseline, and freshness remain in diagnostics.
 
-The app must accept nullable/fractional `currentDraw` before installing this Pi
-version. Install the AM32 raw-current restoration and product input policy on
-all eight ESCs using the old Pico first, then deploy the new Pico through an
-updated Pi bundle. Pi auto-flashing cannot enforce that ESC-first sequence.
+Install app RC16 before this Pi release (v1.1.6-rc.11). The app must accept
+nullable/fractional `currentDraw`. Install the AM32 raw-current restoration and
+product input policy on all eight ESCs using the old Pico first, then deploy
+the new Pico through an updated Pi bundle. Pi auto-flashing cannot enforce that ESC-first sequence.
 Without new MCU reports, current remains unavailable. This release bundles
-AM32 v2.21.0-rc.3 and Pico/Pico 2 v1.0.3-rc.7. Do not install this bundle before
+AM32 v2.21.0-rc.3 and Pico/Pico 2 v1.0.3-rc.8. Do not install this bundle before
 updating all eight ESCs with the old Pico; use a separate ESC-first staging step.
 
 ## Building the SD Image
