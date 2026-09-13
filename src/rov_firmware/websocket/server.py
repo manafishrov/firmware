@@ -207,6 +207,11 @@ class WebsocketServer:
         deadline = time.monotonic()
         try:
             while True:
+                now = time.monotonic()
+                if now >= deadline + period:
+                    # A late wakeup gets one fresh frame, not a catch-up pair.
+                    # Keep the original phase for sub-period wakeup jitter.
+                    deadline = now
                 await self.send_frame(build_telemetry(self.state))
                 deadline += period
                 now = time.monotonic()

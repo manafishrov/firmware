@@ -1,4 +1,5 @@
 import asyncio
+from itertools import pairwise
 import json
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -118,13 +119,30 @@ def test_telemetry_overruns_rebase_and_sleep_without_catch_up(
     assert [frame["payload"]["pitch"] for frame in frames] == [0, 2, 4, 6]
 
 
-def test_telemetry_late_wakeup_drops_missed_slots(rov_state, monkeypatch):
-    starts, _, delays = run_cadence(monkeypatch, rov_state, [0.0] * 4, oversleep=0.100)
+@pytest.mark.parametrize("oversleep", [PERIOD, 0.100, 10.0])
+@pytest.mark.parametrize("send_cost", [0.0, 0.005])
+def test_telemetry_late_wakeup_drops_missed_slots(
+    rov_state, monkeypatch, oversleep, send_cost
+):
+    starts, frames, delays = run_cadence(
+        monkeypatch, rov_state, [send_cost] * 11, oversleep=oversleep
+    )
 
     assert starts == pytest.approx(
-        [100.0, 100.1 + PERIOD, 100.1 + PERIOD, 100.1 + 2 * PERIOD]
+        [100.0] + [100.0 + oversleep + i * PERIOD for i in range(1, 11)]
     )
-    assert delays == pytest.approx([PERIOD, 0.0, PERIOD, PERIOD])
+    assert delays == pytest.approx([PERIOD - send_cost] * 11)
+    assert all(later > earlier for earlier, later in pairwise(starts))
+    assert [frame["payload"]["pitch"] for frame in frames] == list(range(0, 22, 2))
+
+
+def test_telemetry_small_wakeup_jitter_preserves_deadline_phase(rov_state, monkeypatch):
+    starts, _, delays = run_cadence(monkeypatch, rov_state, [0.0] * 4, oversleep=0.005)
+
+    assert starts == pytest.approx(
+        [100.0, 100.0 + PERIOD + 0.005, 100.0 + 2 * PERIOD, 100.0 + 3 * PERIOD]
+    )
+    assert delays == pytest.approx([PERIOD, PERIOD - 0.005, PERIOD, PERIOD])
 
 
 def test_sustained_20ms_sends_run_at_50hz(rov_state, monkeypatch):
