@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import time
 from typing import cast
 
 from pydantic import TypeAdapter
@@ -202,10 +203,18 @@ class WebsocketServer:
             pass
 
     async def _send_telemetry_periodically(self) -> None:
+        period = 1 / 60
+        deadline = time.monotonic()
         try:
             while True:
                 await self.send_frame(build_telemetry(self.state))
-                await asyncio.sleep(1 / 60)
+                deadline += period
+                now = time.monotonic()
+                if deadline <= now:
+                    # Drop missed slots instead of sending catch-up frames. A
+                    # full period after an overrun also guarantees a yield.
+                    deadline = now + period
+                await asyncio.sleep(deadline - now)
         except asyncio.CancelledError:
             pass
 
