@@ -210,11 +210,10 @@ class WebsocketServer:
                 await self.send_frame(build_telemetry(self.state))
                 deadline += period
                 now = time.monotonic()
-                if deadline <= now:
-                    # Drop missed slots instead of sending catch-up frames. A
-                    # full period after an overrun also guarantees a yield.
-                    deadline = now + period
-                await asyncio.sleep(deadline - now)
+                # Drop missed slots without delaying the next fresh sample.
+                # sleep(0) still yields cooperatively after an overrun.
+                deadline = max(now, deadline)
+                await asyncio.sleep(max(0.0, deadline - now))
         except asyncio.CancelledError:
             pass
 

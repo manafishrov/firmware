@@ -23,8 +23,9 @@ class FakeClock:
         return self.now
 
     async def sleep(self, delay):
-        assert delay > 0, "Every iteration must yield without catching up"
+        assert delay >= 0
         self.delays.append(delay)
+        await asyncio.sleep(0)  # Model the cooperative yield even for zero delay.
         self.now += delay + self.oversleep
         self.oversleep = 0.0
         # Multiple updates between frames: only the newest is sampled.
@@ -108,12 +109,12 @@ def test_telemetry_overruns_rebase_and_sleep_without_catch_up(
     assert starts == pytest.approx(
         [
             100.0,
-            100.0 + overrun + PERIOD,
-            100.0 + 2 * (overrun + PERIOD),
-            100.0 + 2 * overrun + 3 * PERIOD,
+            100.0 + overrun,
+            100.0 + 2 * overrun,
+            100.0 + 2 * overrun + PERIOD,
         ]
     )
-    assert delays == pytest.approx([PERIOD] * 4)
+    assert delays == pytest.approx([0.0, 0.0, PERIOD, PERIOD])
     assert [frame["payload"]["pitch"] for frame in frames] == [0, 2, 4, 6]
 
 
@@ -121,9 +122,52 @@ def test_telemetry_late_wakeup_drops_missed_slots(rov_state, monkeypatch):
     starts, _, delays = run_cadence(monkeypatch, rov_state, [0.0] * 4, oversleep=0.100)
 
     assert starts == pytest.approx(
-        [100.0, 100.1 + PERIOD, 100.1 + 2 * PERIOD, 100.1 + 3 * PERIOD]
+        [100.0, 100.1 + PERIOD, 100.1 + PERIOD, 100.1 + 2 * PERIOD]
     )
-    assert delays == pytest.approx([PERIOD] * 4)
+    assert delays == pytest.approx([PERIOD, 0.0, PERIOD, PERIOD])
+
+
+def test_sustained_20ms_sends_run_at_50hz(rov_state, monkeypatch):
+    starts, frames, delays = run_cadence(monkeypatch, rov_state, [0.020] * 51)
+
+    assert starts == pytest.approx([100.0 + i * 0.020 for i in range(51)])
+    assert delays == [0.0] * 51
+    assert [frame["payload"]["pitch"] for frame in frames] == list(range(0, 102, 2))
+
+
+@pytest.mark.parametrize("send_cost", [0.0, 0.005])
+def test_long_send_stall_resumes_60hz_without_catch_up_burst(
+    rov_state, monkeypatch, send_cost
+):
+    starts, _, delays = run_cadence(monkeypatch, rov_state, [1.0] + [send_cost] * 10)
+
+    assert starts == pytest.approx([100.0] + [101.0 + i * PERIOD for i in range(10)])
+    assert delays == pytest.approx([0.0] + [PERIOD - send_cost] * 10)
+
+
+def test_overrun_zero_sleep_yields_and_allows_cancellation(rov_state, monkeypatch):
+    instance = server.WebsocketServer(rov_state, Mock())
+    now = [100.0]
+    frames = []
+
+    async def send(frame):
+        frames.append(frame)
+        assert len(frames) == 1, "Producer must yield before sending again"
+        now[0] += 0.020
+
+    monkeypatch.setattr(instance, "client", SimpleNamespace(send=send))
+    monkeypatch.setattr(server, "time", SimpleNamespace(monotonic=lambda: now[0]))
+
+    async def run():
+        task = asyncio.create_task(instance._send_telemetry_periodically())
+        await asyncio.sleep(0)
+        assert len(frames) == 1
+        task.cancel()
+        await asyncio.wait_for(task, timeout=1)
+        assert not task.cancelled()
+        assert not instance._send_lock.locked()
+
+    asyncio.run(run())
 
 
 @pytest.mark.parametrize("blocked_at", ["sleep", "send", "lock"])
