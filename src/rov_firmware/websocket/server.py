@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import time
 from typing import cast
 
 from pydantic import TypeAdapter
@@ -202,10 +203,22 @@ class WebsocketServer:
             pass
 
     async def _send_telemetry_periodically(self) -> None:
+        period = 1 / 60
+        deadline = time.monotonic()
         try:
             while True:
+                now = time.monotonic()
+                if now >= deadline + period:
+                    # A late wakeup gets one fresh frame, not a catch-up pair.
+                    # Keep the original phase for sub-period wakeup jitter.
+                    deadline = now
                 await self.send_frame(build_telemetry(self.state))
-                await asyncio.sleep(1 / 60)
+                deadline += period
+                now = time.monotonic()
+                # Drop missed slots without delaying the next fresh sample.
+                # sleep(0) still yields cooperatively after an overrun.
+                deadline = max(now, deadline)
+                await asyncio.sleep(max(0.0, deadline - now))
         except asyncio.CancelledError:
             pass
 
