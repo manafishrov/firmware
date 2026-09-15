@@ -12,9 +12,16 @@ neutral maintenance after the failure and again after the SPI comparison.
 The user confirms the specified wiring. Bytewise, SDK and software-driven SPI,
 slower rates and mode 3 all returned zero. RX followed weak bias reversibly:
 `00 → ff → 00`. This supports an undriven/weak receive node, not a confirmed
-wiring fault. A genuine IMU power cycle is the next useful check; reflashing the
-Pico does not cycle sensor power. If unchanged, measure signals at the sensor
-rather than repeating software changes or asking to reconfirm the same wiring.
+wiring fault. The user subsequently power-cycled the system; the repeated
+20-second smoke still returned ID00 and zero IMU/AHRS/PID samples. The next
+useful check is measuring supply and SPI signals at the sensor, rather than
+repeating software changes or asking to reconfirm the same wiring.
+
+The Pi also rebooted and its old service automatically flashed Pico1.0.3-rc.6.
+The coordinator stopped that service, reinstalled and verified the exact
+b817d1d image, repeated the smoke, then received neutral maintenance APPLIED.
+The service is stopped, not persistently disabled: another Pi reboot can
+repeat this automatic downgrade.
 No sensor reset/register-write experiment has been performed by the probe.
 On the standard
 full-size breakout, primary MISO is **ADR/POCI, not OSDO**; GP10 goes to SCL/SCK,

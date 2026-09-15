@@ -3,6 +3,33 @@
 The user confirms the previously specified Pico/IMU wiring. Do not repeat the
 wiring-confirmation request or treat a wiring fault as established.
 
+## Subsequent power-cycle result
+
+The user reported power cycling. The Pi had also rebooted: its original service
+was active and its boot journal recorded automatic flashing of Pico1.0.3-rc.6.
+The coordinator stopped the service, verified the retained backup/image hashes,
+and reinstalled the exact b817d1d UF2 with picotool verification. The live
+extended identity matched `pico-control-dev:b817d1d3da14` before testing.
+
+A fresh 20-second zero-output smoke still failed: chip00, Bosch-3, zero samples,
+zero AHRS/PID updates. Thus the reported power cycle did not resolve the fault.
+The weak-pull comparison below was not repeated after this power cycle.
+
+Final cleanup succeeded with fresh HELLO, zero-power/zero-allocation settings
+COMMIT, unacknowledged RAW neutral, and actual ENTER_MAINTENANCE APPLIED.
+The original service is stopped and the test controller is latched neutral.
+The service has not been persistently disabled or masked: rebooting the Pi can
+restart it and replace the development Pico again.
+
+Next useful evidence: supply voltage and CS/clock/data signals at the sensor.
+A wiring fault remains unconfirmed. Retained interface state is less compelling
+after the reported power cycle, but actual sensor-side signals remain unmeasured.
+
+Private evidence: `power-cycle-service.log`, `power-cycle-reinstall.log`, and
+`power-cycle-neutral-smoke.log`. The last includes both verified identity checks,
+the failed smoke and final neutral acknowledgment; SHA256:
+`38571dfe5a59d09eb7ff8296efb997ba1a64b59e0e1b2c8b6220167cfdf9e8d2`.
+
 ## Observed result
 
 The coordinator installed the isolated motor-disabled probe, captured all
@@ -35,8 +62,8 @@ code runs in this probe.
 Remaining uncertainties include sensor-side interface state, power and signals
 at the actual sensor. Four-wire assumptions were shared by the experiments;
 three-wire mode (`IF_CONF` bit0) was not checked or changed. Reflashing the Pico
-does not power-cycle the IMU. A genuine sensor power cycle is a useful next
-check before further software changes. Keep the Pi powered/service stopped;
+does not power-cycle the IMU. A genuine sensor power cycle was the next
+check requested at this point; its later failed result is recorded above. Keep the Pi powered/service stopped;
 remove Pico/IMU power, including any independent sensor supply, then reconnect.
 After reconnection, the coordinator must recheck service state and image
 identity before repeating the neutral smoke. No sensor reset/register-write
