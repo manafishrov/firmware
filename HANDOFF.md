@@ -1,13 +1,39 @@
 # Pico SPI attitude migration handoff
 
 Task: `pico-spi-attitude-500hz`. This is the cross-repository coordination record.
-Python implementation and portable checks are complete. Hardware acceptance is
-coordinator-owned and must not be inferred from portable test results.
+Software implementation and portable checks are complete. **Hardware acceptance
+is blocked at physical IMU identification.** The verified migration image is
+installed on the original RP2040, but BMI270 chip ID reads `0x00`, not `0x24`.
+The first neutral smoke failed; actual AHRS/PID counts were zero. No functioning
+500 Hz loop, headroom estimate, or complete migration acceptance is claimed.
+
+The original Pi service is stopped and the Pico was explicitly left in sticky
+neutral maintenance after the failure. The next step is to confirm the exact
+SparkFun board/photo and wiring, not to deploy or publish. On the standard
+full-size breakout, primary MISO is **ADR/POCI, not OSDO**; GP10 goes to SCL/SCK,
+GP11 to SDA/MOSI, GP12 to ADR/MISO, and GP13 to CS, with 3V3 and common ground.
+SparkFun requires an open address jumper for SPI, but its 100k bias does not by
+itself prove the cause. Verify the board before modifying it; disconnect power
+before physical changes.
 
 Coordinator-owned evidence (do not overwrite from the Python workstream):
 
 - [Hardware backup, current deployment state and rollback](docs/pico-control-validation/BACKUP.md)
 - [Independent app gate results](docs/pico-control-validation/APP.md)
+- [Pi firmware gates and focused re-review](docs/pico-control-validation/FIRMWARE.md)
+- [C/Python oracle and sensor-conversion provenance](docs/pico-control-validation/MATH.md)
+- [Actual hardware results, blocker and safe state](docs/pico-control-validation/HARDWARE.md)
+
+Implementation commits on `feat/pico-spi-attitude-500hz`:
+
+- app: `6a16ff5b3a824714b243e82cd778136f52bdacf5`
+- firmware: `0e8903f` (subsequent documentation commits record hardware results)
+- mcu-firmware: `b817d1d3da143bbb1d56ce4a86ff0a15e5ae1f3c`
+
+Installed MCU identity: `pico-control-dev:b817d1d3da14`. Installed UF2 SHA256:
+`21f22a2eeb34bba47699468aadd3d0d50d284711db1f7438f36ef2749f683339`.
+Do not use the earlier uncorrected MCU commit `7f152f8` or identify an image
+merely by that prefix.
 
 ## Repositories, compatibility and release gate
 
@@ -363,14 +389,23 @@ The coordinator reported app commit `6a16ff5` with all app gates passing
 BMI270 source/scales listed above. Those checks were not rerun on hardware by the
 Python agent. No hardware has been accessed by this agent.
 
-Latest coordinator handoff before acceptance: backups complete, original Pi
-service stopped, original Pico image `1.0.3-rc.6` still installed. Remote verified
-backups are at `/home/pi/pico-spi-attitude-500hz/backup`; the coordinator's
-[backup ledger](docs/pico-control-validation/BACKUP.md) contains hashes, retained
-private-copy location and exact rollback commands. Treat this as reported
-point-in-time evidence, not permission to overwrite primary paths. Install
-experimental code into a separate remote directory with a reversible service
-override after all repository gates and the MCU build pass.
+Coordinator hardware state: verified MCU image `b817d1d` is installed; its
+identity was read back twice. The initial neutral smoke passed capability,
+settings/invalid-settings/QUERY/empty-ABORT and setter-ACK steps, then failed
+IMU health with Bosch `-3` (`DEV_NOT_FOUND`) and zero controller updates. This
+occurs before reset/blob upload; zero configuration diagnostics are unread
+defaults. A subsequent actual ENTER_MAINTENANCE APPLIED acknowledgment left the
+Pico latched neutral. The original Pi service remains stopped; no experimental
+service override has been installed.
+
+The checked Python code is staged at
+`/home/pi/pico-spi-attitude-500hz/stage/firmware`, with copies of the original
+configuration and custom actions. Its real-runtime `--help` succeeded; the
+full-stack runner and production service have not been run. Remote verified
+original backups remain at `/home/pi/pico-spi-attitude-500hz/backup`. The
+[backup ledger](docs/pico-control-validation/BACKUP.md) contains hashes and exact
+rollback commands; [hardware evidence](docs/pico-control-validation/HARDWARE.md)
+records the failed smoke. Primary source/configuration was not overwritten.
 
 Before completion, append sanitized commands/results, repository commits/status,
 image checksums/build identity, exact install/rollback paths and:
@@ -389,13 +424,57 @@ ESCs are disconnected on the authorized bench. Powered motor behavior, actual
 per-ESC reception/telemetry and ESC programming remain release gates. Temporary
 absolute evidence paths are not a portable final handoff.
 
+## Transfer and resume on another PC
+
+A private portable export is prepared as
+`/home/pi/pico-spi-attitude-500hz/pico-spi-attitude-500hz-handoff.tar.gz`.
+It contains this document and evidence summaries, incremental Git bundles for
+all three task branches, the selected Pico image and Bosch license, and an
+artifact checksum manifest. It excludes passwords, the private Pi source
+backup and the original configuration contents.
+
+```sh
+scp pi@10.10.10.10:/home/pi/pico-spi-attitude-500hz/pico-spi-attitude-500hz-handoff.tar.gz .
+tar -xzf pico-spi-attitude-500hz-handoff.tar.gz
+cd pico-spi-attitude-500hz-handoff
+sha256sum -c SHA256SUMS
+```
+
+Bundles require the ordinary repositories and the baseline commits listed
+above. Verify each bundle in its corresponding repository, then fetch its task
+branch without switching or resetting the primary checkout:
+
+```sh
+git -C /path/to/app bundle verify /path/to/export/app.bundle
+git -C /path/to/app fetch /path/to/export/app.bundle \
+  refs/heads/feat/pico-spi-attitude-500hz:refs/heads/feat/pico-spi-attitude-500hz
+```
+
+Repeat with `firmware.bundle` and `mcu-firmware.bundle` in their own repositories.
+Create Paseo-managed worktrees from those existing branches and read each
+repository's `AGENTS.md`. Do not push, publish or deploy merely because source
+checks passed. First resolve the physical IMU identification blocker, repeat the
+zero-output smoke, and follow the remaining hardware gates above. Keep the
+original Pi service stopped until deliberately restoring the old pairing or
+starting an isolated, verified new pairing.
+
 ### Final freeze record
 
 Production and helper are frozen after the post-review gates above. The final
 regressions cover invalid-current-config repair, failed depth-setter feedback,
 safety-NACK session replacement, and negative-age pilot/calibration clock faults.
-The branch is `feat/pico-spi-attitude-500hz`; changes remain uncommitted as
-requested. No push, PR, release, deployment or hardware access was performed by
-the Python agent. Hardware execution, new image acceptance and rollback evidence
-remain coordinator-owned. The existing bundled-image incompatibility is still a
-release gate, not waived by these passing portable tests.
+The implementation is committed on `feat/pico-spi-attitude-500hz`; coordinator
+documentation commits retain the later hardware evidence. No push, PR, tag,
+release or version bump was performed. Hardware execution was coordinator-only.
+
+MCU gates passed on the corrected source: format, lint, Pico/Pico2 builds,
+141 Unity tests, five original startup/reporting regressions, Bosch/USB
+emulators, 28 real-runtime regressions (also ASan/UBSan), and six offline smoke
+helper tests. These include permanent CONTROL/RAW/pressure/IMU expiration across
+clock wrap, neutral-output ingress stalls, queued-command and COMMIT-ACK races.
+
+Physical IMU identification is the current blocker. Complete sensor, timing,
+backpressure, actual-pressure, full-stack and production-service acceptance only
+after resolving it. Existing PWM remains **50 Hz**; neither a controller counter
+nor missing-ESC DShot transmission counts prove 500 Hz accepted motor updates.
+The bundled-image incompatibility remains a release gate.

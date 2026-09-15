@@ -3,16 +3,20 @@
 Task: `pico-spi-attitude-500hz`. Hardware access is coordinator-owned.
 No passwords or private backup contents belong in this repository.
 
-## Current state — before the first migration flash
+## Current state — migration image installed, IMU identification blocked
 
 - Pi reachable at `pi@10.10.10.10`; original RP2040 Pico serial
   `E66430A64B818B35`, USB CDC `/dev/ttyACM0`.
 - `manafish-firmware.service` is **stopped** to prevent competing USB access
   and automatic firmware reconciliation.
 - Original `/home/pi/firmware` is unchanged. No service override is installed.
-- Original Pico image remains installed. It was rebooted for a verified backup,
-  not replaced. A checksum-valid D6 reply to GET_INFO confirmed `1.0.3-rc.6`.
-- No migrated firmware timing or sensor results have been measured yet.
+- Migration image from MCU commit `b817d1d3da143bbb1d56ce4a86ff0a15e5ae1f3c`
+  is now installed: verified `picotool load` and application restart succeeded.
+  Image SHA256 is
+  `21f22a2eeb34bba47699468aadd3d0d50d284711db1f7438f36ef2749f683339`.
+- The zero-output smoke failed at IMU identification; see `HARDWARE.md`.
+  The Pico was subsequently left in acknowledged sticky neutral maintenance.
+  Before replacement, a checksum-valid D6 reply confirmed original `1.0.3-rc.6`.
 - ESCs are disconnected. Motor behavior and actual ESC programming cannot be
   certified on this bench.
 
@@ -55,7 +59,8 @@ The checked Python source and acceptance runner were unpacked into
 and installed custom-action files were copied there, without changing the
 original tree. Staged and original configuration hashes matched the backup.
 The runner's `--help` path succeeded using the Pi's installed Python environment;
-no hardware runner has been executed yet.
+the full-stack runner has not been executed. The separate MCU smoke failed
+as recorded in `HARDWARE.md`.
 
 Source archive SHA256:
 `ea0e9f7a74adda2dfe3e0de453ff2dcdf002339eb246ec1fd7fa059d02603515`.
@@ -76,20 +81,14 @@ Installed picotool:
 /nix/store/57mdzhk6idgrfqm8n8dlc721jzn360y5-picotool-2.2.0-a4/bin/picotool
 ```
 
-At the current pre-flash state, restoring the original service only requires:
-
-```sh
-sudo systemctl start manafish-firmware.service
-```
-
-After a later experimental flash, stop any experimental process and restore
-both sides, not just the Pi service:
+The migration image is installed. To roll back, stop any experimental process
+and restore both sides, not just the Pi service:
 
 ```sh
 sudo systemctl stop manafish-firmware.service
 sudo /nix/store/57mdzhk6idgrfqm8n8dlc721jzn360y5-picotool-2.2.0-a4/bin/picotool \
-  load -f -v -x /home/pi/pico-spi-attitude-500hz/backup/pico-original-full.uf2 \
-  --ser E66430A64B818B35
+  load -v -x /home/pi/pico-spi-attitude-500hz/backup/pico-original-full.uf2 \
+  -f --ser E66430A64B818B35
 sudo systemctl start manafish-firmware.service
 ```
 
@@ -101,12 +100,12 @@ alone does not undo the physical SPI migration.
 
 ## Before continuing
 
-1. Resolve the reported stale CONTROL/RAW/pressure/IMU clock-wrap revivals and
-   neutral-output ingress-stall bypass; run their real-runtime regressions.
-2. Finish all repository quality gates against the final bytes, including the
-   integrated runtime harness. Earlier green results predate later edits.
-3. Verify another private copy of the original UF2 before flashing.
-4. Record the exact tested commit, image hash, deployment commands and results.
+1. Retain corrected MCU commit `b817d1d` and its passing safety regressions;
+   the earlier `7f152f8` alone is unsafe.
+2. All corrected-source quality gates passed. Rerun them after any code change.
+3. Keep and verify the private original UF2 copy before further flashing.
+4. Resolve physical IMU identification, rerun the neutral smoke, and record the
+   exact tested commit, image hash, commands and results.
 5. Use a separate Pi source directory. The development reconciliation exception
    requires both `MANAFISH_PICO_CONTROL_DEVELOPMENT=1` and a verified compatible
    `pico-control-dev:` identity. Existing bundled legacy images are not compatible.
