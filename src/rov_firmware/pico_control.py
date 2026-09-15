@@ -133,6 +133,8 @@ class PicoControl:
         self._last_imu_sequence = 0
         self._last_raw_imu = 0.0
         self._last_pressure = None
+        self._previous_direction.fill(0)
+        self._last_source = 0.0
         self.state.system_health.imu_healthy = False
         self.state.system_status.thruster_control_ready = False
         for future in (self._waiter, self._capability):
@@ -618,7 +620,6 @@ class PicoControl:
                 direction = self._previous_direction + np.clip(
                     direction - self._previous_direction, -step, step
                 )
-            self._previous_direction[:] = direction
         flags = (
             int(state.system_status.auto_stabilization)
             | (int(state.system_status.depth_hold) << 1)
@@ -629,10 +630,17 @@ class PicoControl:
                 wire.CONTROL, struct.pack("<9fI", *direction.tolist(), source_dt, flags)
             ).encode()
         )
+        self._previous_direction[:] = direction
 
     async def cancel_thruster_test(self) -> None:
         """Issue an explicit neutral barrier before ordinary pilot control resumes."""
+        thrusters = self.state.thrusters
+        request = thrusters.test_request_id
         async with self._gate:
+            # A later start request supersedes a cancellation waiting for this gate.
+            if request == thrusters.test_request_id:
+                thrusters.test_thruster = None
+                thrusters.test_start_time = None
             await self.neutral()
 
     def _end_test(self, variant: ToastVariant, key: str) -> None:

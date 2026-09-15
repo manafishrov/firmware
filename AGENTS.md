@@ -9,7 +9,7 @@ ROV's MCU (`mcu-firmware`) and to the desktop `app` over WebSocket.
 ## Stack
 
 - Python 3.13 (uv-managed), `numpy`, `scipy`, `pydantic`, `websockets`
-- NixOS image build (`nix build .#pi3-imx477`)
+- NixOS image build (`nix build .#sdImage`)
 - Ruff (lint + format), `ty` for type-checking, `pytest`
 - pre-commit + uv
 
@@ -53,7 +53,7 @@ Auto-fix: `uv run ruff format .` and `uv run ruff check --fix .`.
 ### Image build & flash
 
 ```sh
-nix build .#pi3-imx477
+nix build .#sdImage
 ls -lh result/sd-image
 # Flash per README.md (zstd | dd, or Rufus on Windows)
 ```

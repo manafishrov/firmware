@@ -64,11 +64,18 @@ success because they do not understand `payload.error`. Pair the new Pi and Pico
 afterward. The new Pi holds an incompatible Pico neutral; it has no Pi-side
 attitude fallback.
 
-**Release gate:** current bundled MCU v1.0.3 artifacts lack the new protocol.
-Normal bundled-version reconciliation can also replace a development Pico with
-that incompatible image. Before publishing, a separately authorized compatible
-MCU release, both Pico/Pico 2 flake artifact pins, and the Pi image must be paired.
-No release, version bump, pin bump, push or PR is authorized by this task.
+**Current RC state:** app `v1.0.18-rc.1` and MCU `v1.0.4-rc.1` are public.
+Pi `1.1.7-rc.1` version metadata and both Pico/Pico 2 flake URLs and generated
+NAR hashes are committed in `49f60d6`; both bundled UF2s match the public MCU
+release bytes. Release CAPS and legacy identity are exactly `1.0.4-rc.1`.
+This replaces the incompatible v1.0.3 pairing; it does not validate hardware.
+
+The user authorized the coordinator's push, PR and merge, including an admin
+bypass for missing approval only, not failed CI or actionable unresolved threads.
+Pi PR [#103](https://github.com/manafishrov/firmware/pull/103) is open. The Pi tag
+and release workflow remain **held** pending a decision on their cloud-pruning
+step: deletion of old artifacts is not authorized. No hardware deployment is
+authorized. Retain the hardware-unvalidated warning in RC release notes.
 
 The bench-only exception is `MANAFISH_PICO_CONTROL_DEVELOPMENT=1`, and only after
 verified compatible capabilities with an identity prefixed `pico-control-dev:`.
@@ -468,20 +475,29 @@ git -C /path/to/app fetch /path/to/export/app.bundle \
 
 Repeat with `firmware.bundle` and `mcu-firmware.bundle` in their own repositories.
 Create Paseo-managed worktrees from those existing branches and read each
-repository's `AGENTS.md`. Do not push, publish or deploy merely because source
-checks passed. First resolve the physical IMU identification blocker, repeat the
-zero-output smoke, and follow the remaining hardware gates above. Keep the
-original Pi service stopped until deliberately restoring the old pairing or
-starting an isolated, verified new pairing.
+repository's `AGENTS.md`. Follow the current RC authorization and publication
+holds above; source checks do not establish hardware acceptance or authorize
+deployment. Resolve the physical IMU identification blocker, repeat the
+zero-output smoke, and complete the remaining hardware gates before claiming
+operational readiness. Keep the original Pi service stopped until deliberately
+restoring the old pairing or starting an isolated, verified new pairing.
 
-### Final freeze record
+### Original freeze and subsequent review corrections
 
-Production and helper are frozen after the post-review gates above. The final
-regressions cover invalid-current-config repair, failed depth-setter feedback,
+Production and helper were frozen at the portable gate run above. Its final
+regressions covered invalid-current-config repair, failed depth-setter feedback,
 safety-NACK session replacement, and negative-age pilot/calibration clock faults.
+Subsequent PR #103 corrections preserve Pico authority on rejected ESC preflight,
+restart smoothing from neutral after input gaps/reconnects, keep cancellation's
+neutral barrier under the control gate, and verify oracle bytes before execution.
+The hardware helper, frozen Python snapshots and actual MCU controller remain
+unchanged.
 The implementation is committed on `feat/pico-spi-attitude-500hz`; coordinator
-documentation commits retain the later hardware evidence. No push, PR, tag,
-release or version bump was performed. Hardware execution was coordinator-only.
+documentation commits retain the later hardware evidence. Since this original
+freeze, Pi RC version/pins were committed in `49f60d6`, and the coordinator
+pushed the branch and opened PR #103. App and MCU RCs are public. The Pi tag
+remains held on the cloud-pruning decision; no deployment is authorized.
+Hardware execution was coordinator-only.
 
 MCU gates passed on the corrected source: format, lint, Pico/Pico2 builds,
 141 Unity tests, five original startup/reporting regressions, Bosch/USB
@@ -493,4 +509,5 @@ Physical IMU identification is the current blocker. Complete sensor, timing,
 backpressure, actual-pressure, full-stack and production-service acceptance only
 after resolving it. Existing PWM remains **50 Hz**; neither a controller counter
 nor missing-ESC DShot transmission counts prove 500 Hz accepted motor updates.
-The bundled-image incompatibility remains a release gate.
+Both bundled MCU inputs now use the compatible public `v1.0.4-rc.1` release;
+physical hardware acceptance and the Pi publication hold remain outstanding.

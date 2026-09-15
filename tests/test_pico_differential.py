@@ -64,8 +64,25 @@ def load_original(name):
     module = ModuleType(f"rov_firmware._reference_{name}")
     module.__package__ = "rov_firmware"
     source = REFERENCE / f"{name}_b62cbee.txt"
-    exec(compile(source.read_text(), str(source), "exec"), module.__dict__)  # noqa: S102 - trusted hash-verified baseline source
+    contents = source.read_bytes()
+    if hashlib.sha256(contents).hexdigest() != HASHES[name]:
+        msg = f"Modified reference snapshot: {name}"
+        raise AssertionError(msg)
+    exec(compile(contents, str(source), "exec"), module.__dict__)  # noqa: S102 - trusted hash-verified baseline source
     return module
+
+
+@pytest.mark.parametrize("name", HASHES)
+def test_tampered_reference_is_rejected_before_execution(name, tmp_path, monkeypatch):
+    marker = tmp_path / "executed"
+    (tmp_path / f"{name}_b62cbee.txt").write_text(
+        f"from pathlib import Path\nPath({str(marker)!r}).touch()\n"
+        "raise RuntimeError('tampered reference executed')\n"
+    )
+    monkeypatch.setattr(sys.modules[__name__], "REFERENCE", tmp_path)
+    with pytest.raises(AssertionError, match="Modified reference snapshot"):
+        load_original(name)
+    assert not marker.exists()
 
 
 @pytest.fixture
