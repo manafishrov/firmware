@@ -8,8 +8,15 @@ The first neutral smoke failed; actual AHRS/PID counts were zero. No functioning
 500 Hz loop, headroom estimate, or complete migration acceptance is claimed.
 
 The original Pi service is stopped and the Pico was explicitly left in sticky
-neutral maintenance after the failure. The next step is to confirm the exact
-SparkFun board/photo and wiring, not to deploy or publish. On the standard
+neutral maintenance after the failure and again after the SPI comparison.
+The user confirms the specified wiring. Bytewise, SDK and software-driven SPI,
+slower rates and mode 3 all returned zero. RX followed weak bias reversibly:
+`00 → ff → 00`. This supports an undriven/weak receive node, not a confirmed
+wiring fault. A genuine IMU power cycle is the next useful check; reflashing the
+Pico does not cycle sensor power. If unchanged, measure signals at the sensor
+rather than repeating software changes or asking to reconfirm the same wiring.
+No sensor reset/register-write experiment has been performed by the probe.
+On the standard
 full-size breakout, primary MISO is **ADR/POCI, not OSDO**; GP10 goes to SCL/SCK,
 GP11 to SDA/MOSI, GP12 to ADR/MISO, and GP13 to CS, with 3V3 and common ground.
 SparkFun requires an open address jumper for SPI, but its 100k bias does not by
@@ -23,12 +30,14 @@ Coordinator-owned evidence (do not overwrite from the Python workstream):
 - [Pi firmware gates and focused re-review](docs/pico-control-validation/FIRMWARE.md)
 - [C/Python oracle and sensor-conversion provenance](docs/pico-control-validation/MATH.md)
 - [Actual hardware results, blocker and safe state](docs/pico-control-validation/HARDWARE.md)
+- [Completed SPI comparison and verified restoration](docs/pico-control-validation/SPI.md)
 
 Implementation commits on `feat/pico-spi-attitude-500hz`:
 
 - app: `6a16ff5b3a824714b243e82cd778136f52bdacf5`
 - firmware: `0e8903f` (subsequent documentation commits record hardware results)
-- mcu-firmware: `b817d1d3da143bbb1d56ce4a86ff0a15e5ae1f3c`
+- mcu-firmware production: `b817d1d3da143bbb1d56ce4a86ff0a15e5ae1f3c`
+- mcu-firmware isolated diagnostic: `1e765e7` (no production-source changes)
 
 Installed MCU identity: `pico-control-dev:b817d1d3da14`. Installed UF2 SHA256:
 `21f22a2eeb34bba47699468aadd3d0d50d284711db1f7438f36ef2749f683339`.

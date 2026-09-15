@@ -89,10 +89,13 @@ fresh HELLO, sent framed RAW neutral, and received APPLIED for
 no Pi service or control stream is running. The next valid session must still
 perform HELLO, full settings application and fresh CONTROL.
 
-## Current blocker and next checks
+## Initial checks, superseded by completed SPI comparison
 
-Confirm the exact SparkFun board and physical wiring before changing software
-or jumpers. For the documented full-size SparkFun BMI270 primary SPI interface:
+The user subsequently confirmed the wiring. [SPI.md](SPI.md) records the actual
+bytewise/SDK/software-SPI comparison, reversible weak-pull result, and successful
+controller restoration. Use that record for next steps; do not repeat the
+wiring-confirmation request. The following board information is retained as
+reference, not a finding that the connections are wrong. For the documented full-size SparkFun BMI270 primary SPI interface:
 
 | Pico | SparkFun primary interface |
 | --- | --- |
@@ -124,7 +127,8 @@ remaining hypotheses are wrong/unconnected primary MISO or power/CS wiring,
 board/interface selection, then signal integrity or bus-speed sensitivity.
 Do not substitute synthetic input for missing real-sensor acceptance.
 
-After the physical check, rerun the neutral smoke first. Only after IMU
+After resolving the sensor response (see the latest checks in SPI.md), rerun
+the neutral smoke first. Only after IMU
 identification/freshness succeeds should stress, USB-backpressure, full Python
 stack and production-service acceptance proceed. Existing PWM remains 50 Hz;
 500 Hz computation is not 500 Hz PWM or proof of reception by disconnected ESCs.
