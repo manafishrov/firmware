@@ -12,6 +12,7 @@ from ...toast import (
     cancel_regulator_auto_tuning_action,
     toast_content,
     toast_error,
+    toast_warn,
 )
 
 
@@ -136,6 +137,22 @@ async def handle_set_desired_depth(
         return
 
     desired_depth = max(0.0, depth)
+    if state.pico is not None:
+        try:
+            await state.set_desired_depth(desired_depth)
+        except Exception as error:
+            log_error(f"Desired depth was not confirmed by Pico: {error}")
+            toast_warn(
+                identifier=None,
+                content=ToastContent(
+                    message_key="toasts_invoke_failed",
+                    message_args={"command": "setDesiredDepth"},
+                    description_key="toasts_disruptive_config_blocked_description",
+                    description_args={"reason": str(error)},
+                ),
+                action=None,
+            )
+            return
     state.regulator.pending_desired_depth = desired_depth
     if state.system_status.depth_hold:
         state.regulator.desired_depth = desired_depth

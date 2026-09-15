@@ -1,6 +1,7 @@
 import asyncio
 from pathlib import Path
 import subprocess
+from unittest.mock import AsyncMock, Mock
 
 import numpy as np
 import pytest
@@ -12,7 +13,9 @@ from rov_firmware.websocket.receive.config import handle_set_config
 
 
 @pytest.fixture(autouse=True)
-def isolated_config_path(monkeypatch, tmp_path: Path):
+def isolated_config_path(monkeypatch, tmp_path: Path, rov_state):
+    # These tests cover merge semantics; real wire/APPLIED barriers have separate tests.
+    rov_state.pico = Mock(apply_config=AsyncMock())
     config_path = tmp_path / "config.json"
     monkeypatch.setattr(RovConfig, "_config_path", config_path)
     return config_path

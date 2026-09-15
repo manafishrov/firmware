@@ -15,7 +15,13 @@ ROV's MCU (`mcu-firmware`) and to the desktop `app` over WebSocket.
 
 ## Structure
 
-- `src/rov_firmware/` — service entrypoint and modules
+- `src/rov_firmware/` — service entrypoint and modules. `main.py` runs
+  `pico_control.py` (60 Hz command/telemetry orchestration); AHRS, PID and
+  allocation execute on Pico, not in the legacy Python regulator/thrusters.
+- For control migration, hardware pairing, settings ACKs or maintenance changes,
+  read `HANDOFF.md` and the MCU repository's `docs/PICO_CONTROL_PROTOCOL.md`.
+  Run the cross-repository differential command in `tests/reference/README.md`
+  against the actual MCU C source before claiming mathematical equivalence.
 - `src/tools/` — operator CLI (`uv run tools …`)
 - `tests/` — pytest suite
 - `nix/` — NixOS modules (`firmware.nix`, `camera.nix`, `sensors.nix`,
