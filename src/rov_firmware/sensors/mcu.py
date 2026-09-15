@@ -4,6 +4,7 @@ import asyncio
 import struct
 import time
 
+from .. import pico_protocol as wire
 from ..constants import (
     ESC_FIRMWARE_UPDATE_STATUS_RECOVERY_REQUIRED,
     ESC_FIRMWARE_USB_STATUS_PACKET_SIZE,
@@ -65,7 +66,7 @@ from ..websocket.receive.mcu import (
 )
 
 
-_MAX_READ_BUFFER_SIZE = 512
+_MAX_READ_BUFFER_SIZE = 2 * (wire.MAX_PAYLOAD + wire.OVERHEAD)
 _READ_CHUNK_SIZE = 128
 _TELEMETRY_BATCH_MIN_PACKET_SIZE = 3
 _TELEMETRY_START_TOKEN = bytes((MCU_TELEMETRY_START_BYTE,))
@@ -145,6 +146,8 @@ class McuSensor:
         self._esc_version_next_chunks: list[int] = [0] * NUM_MOTORS
         self._invalid_release_warning_generation = -1
         self._warned_invalid_release_versions: set[str] = set()
+        self._extended_since: float | None = None
+        self._deferred_release: tuple[str, str | None] | None = None
 
     async def read_loop(self) -> None:
         """Read telemetry data from the MCU in a loop."""
@@ -152,6 +155,12 @@ class McuSensor:
         while True:
             data = await self._read_chunk()
             self._expire_stale_telemetry()
+            if self._deferred_release is not None:
+                pico = self.state.pico
+                if pico is None or pico.capability_checked:
+                    release = self._deferred_release
+                    self._deferred_release = None
+                    self._auto_update_mcu_if_needed(*release)
             check_esc_firmware_confirmation(self.state)
             if data is None:
                 await asyncio.sleep(1)
@@ -189,6 +198,7 @@ class McuSensor:
     def _consume_read_buffer(self, read_buffer: bytearray, data: bytes) -> None:
         if self._diagnostic_generation != self.serial_manager.connection_generation:
             read_buffer.clear()
+            self._extended_since = None
             self.state.mcu_telemetry.clear_board_current()
             self._diagnostic_generation = self.serial_manager.connection_generation
             self._diagnostic_times = [
@@ -199,6 +209,13 @@ class McuSensor:
             ]
             self._diagnostic_erpm_min = [None] * NUM_MOTORS
             self._diagnostic_erpm_max = [None] * NUM_MOTORS
+        if (
+            self._extended_since is not None
+            and time.monotonic() - self._extended_since >= wire.FRAME_TIMEOUT
+        ):
+            # Never interpret legacy start bytes embedded in an abandoned frame.
+            read_buffer.clear()
+            self._extended_since = None
         read_buffer.extend(data)
         search_start = 0
 
@@ -226,6 +243,8 @@ class McuSensor:
         self, read_buffer: bytearray, start_idx: int
     ) -> int | None:
         packet_type = read_buffer[start_idx]
+        if packet_type == wire.START:
+            return self._try_consume_extended(read_buffer, start_idx)
         if packet_type == MCU_TELEMETRY_BATCH_START_BYTE:
             return self._try_consume_telemetry_batch(read_buffer, start_idx)
         if packet_type == MCU_TELEMETRY_START_BYTE:
@@ -239,6 +258,31 @@ class McuSensor:
         if packet_type == ESC_FIRMWARE_USB_STATUS_START_BYTE:
             return self._try_consume_esc_firmware_status(read_buffer, start_idx)
         return start_idx + 1
+
+    def _try_consume_extended(
+        self, read_buffer: bytearray, start_idx: int
+    ) -> int | None:
+        if self._extended_since is None:
+            self._extended_since = time.monotonic()
+        if len(read_buffer) < start_idx + wire.HEADER.size:
+            return None
+        length = read_buffer[start_idx + 4] | (read_buffer[start_idx + 5] << 8)
+        if length > wire.MAX_PAYLOAD:
+            self._extended_since = None
+            return len(read_buffer)
+        end = start_idx + wire.OVERHEAD + length
+        if len(read_buffer) < end:
+            return None
+        self._extended_since = None
+        packet = bytes(read_buffer[start_idx:end])
+        try:
+            frame = wire.decode(packet)
+        except ValueError:
+            self._record_invalid_packet(packet)
+        else:
+            if self.state.pico is not None:
+                self.state.pico.receive(frame)
+        return end
 
     def _try_consume_esc_firmware_status(
         self, read_buffer: bytearray, start_idx: int
@@ -427,6 +471,7 @@ class McuSensor:
     @staticmethod
     def _find_start_byte(buf: bytearray, start: int) -> int:
         candidates = (
+            buf.find(bytes([wire.START]), start),
             buf.find(_TELEMETRY_START_TOKEN, start),
             buf.find(_TELEMETRY_BATCH_START_TOKEN, start),
             buf.find(_LOG_PACKET_START_TOKEN, start),
@@ -595,9 +640,19 @@ class McuSensor:
             return None
         return resolved[1]
 
-    def _auto_update_mcu_if_needed(
+    def _auto_update_mcu_if_needed(  # noqa: PLR0911 - explicit capability and flash safety gates
         self, current_version: str, expected_version: str | None
     ) -> None:
+        pico = self.state.pico
+        if pico is not None:
+            if not pico.capability_checked:
+                self._deferred_release = (current_version, expected_version)
+                return
+            if pico.suppress_bundled_reconciliation:
+                log_info(
+                    f"Retaining explicitly enabled development Pico: {pico.development_identity}"
+                )
+                return
         if expected_version is None:
             return
 

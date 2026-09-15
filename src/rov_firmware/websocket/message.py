@@ -70,6 +70,7 @@ class ConfigPayload(CamelCaseModel):
 
     mutation_id: str | None = None
     config: RovConfig
+    error: str | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class Config(CamelCaseModel):

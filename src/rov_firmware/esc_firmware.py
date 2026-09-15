@@ -909,6 +909,8 @@ async def _perform_update(
 ) -> None:
     path, version, image = release
     recovery = state.esc_firmware_recovery_required
+    if state.pico is not None:
+        await state.pico.enter_maintenance()
     state.mcu_flashing = True
     state.system_status.thruster_control_ready = False
     state.thrusters.direction_vector = None
@@ -1047,6 +1049,13 @@ async def _abort_update(serial_manager: SerialManager) -> None:
             )
 
 
+def _release_maintenance(state: RovState, *, pico_maintenance_started: bool) -> None:
+    state.mcu_flashing = False
+    if pico_maintenance_started and state.pico is not None:
+        state.pico.leave_maintenance()
+    state.esc_firmware_update.active = False
+
+
 async def flash_esc_firmware(
     state: RovState,
     serial_manager: SerialManager,
@@ -1070,6 +1079,7 @@ async def flash_esc_firmware(
     async with state.mcu_flash_lock:
         update = state.esc_firmware_update
         _start_update(state)
+        release = None
         try:
             release = await _preflight_update(state, serial_manager)
             _, version, _ = release
@@ -1105,8 +1115,9 @@ async def flash_esc_firmware(
             await _abort_update(serial_manager)
             return False
         finally:
-            state.mcu_flashing = False
-            update.active = False
+            # After preflight, _perform_update latches maintenance before its first
+            # suspension. Even a failed entry ACK must release that host latch.
+            _release_maintenance(state, pico_maintenance_started=release is not None)
             if update.stage in (
                 EscFirmwareUpdateStage.PREFLIGHT,
                 EscFirmwareUpdateStage.UPLOADING,

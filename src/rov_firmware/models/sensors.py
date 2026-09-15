@@ -58,3 +58,6 @@ class PressureData(BaseModel):
     temperature: float = 0.0
     depth: float = 0.0
     depth_change: float = 0.0
+    sample_time: float = (
+        0.0  # Host monotonic acquisition time; not sent in WebSocket telemetry.
+    )

@@ -20,6 +20,7 @@ from .websocket.state import websocket_state
 
 
 if TYPE_CHECKING:
+    from .pico_control import PicoControl
     from .rov_state import RovState
     from .sensors.mcu import McuSensor
     from .serial import SerialManager
@@ -78,7 +79,7 @@ class FieldDiagnostics:
         state: "RovState",
         serial: "SerialManager",
         mcu: "McuSensor",
-        thrusters: "Thrusters",
+        thrusters: "Thrusters | PicoControl",
     ) -> None:
         """Observe the existing state owners without adding control dependencies."""
         self.state = state

@@ -1,5 +1,6 @@
 import asyncio
 from pathlib import Path
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
@@ -9,7 +10,9 @@ from rov_firmware.websocket.receive.config import handle_import_config
 
 
 @pytest.fixture(autouse=True)
-def isolated_config_path(monkeypatch, tmp_path: Path):
+def isolated_config_path(monkeypatch, tmp_path: Path, rov_state):
+    # Import schema tests use an applied Pico; transport rejection is tested separately.
+    rov_state.pico = Mock(apply_config=AsyncMock())
     config_path = tmp_path / "config.json"
     monkeypatch.setattr(RovConfig, "_config_path", config_path)
     return config_path

@@ -26,6 +26,7 @@ from ..serial import SerialManager
 from .handler import handle_message
 from .message import LogMessage, WebsocketMessage
 from .queue import ConfirmedMessage, get_message_queue
+from .receive.config import reject_invalid_config_message
 from .send.config import build_config
 from .send.status import build_status_update
 from .send.telemetry import build_telemetry
@@ -79,6 +80,7 @@ class WebsocketServer:
             telemetry_task = asyncio.create_task(self._send_telemetry_periodically())
 
             async for message in websocket:
+                data: object = None
                 try:
                     data = json.loads(message)
                     deserialized_msg = websocket_message_adapter.validate_python(data)
@@ -91,6 +93,7 @@ class WebsocketServer:
                     )
                 except Exception as e:
                     log_warn(f"Error processing message: {e}")
+                    await reject_invalid_config_message(self.state, data, str(e))
         except ConnectionClosed:
             log_info(
                 f"Client connection closed: {cast(tuple[str, int] | None, websocket.remote_address)}"

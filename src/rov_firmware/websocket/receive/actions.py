@@ -71,8 +71,11 @@ async def handle_cancel_thruster_test(
     """
     log_info(f"Cancelling thruster test: {payload}")
     state.thrusters.test_request_id += 1
-    state.thrusters.test_thruster = None
-    state.thrusters.test_start_time = None
+    if state.pico is not None:
+        await state.pico.cancel_thruster_test()
+    else:
+        state.thrusters.test_thruster = None
+        state.thrusters.test_start_time = None
     toast_content(
         identifier=THRUSTER_TEST_TOAST_ID,
         variant=ToastVariant.INFO,

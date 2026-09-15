@@ -41,5 +41,8 @@ def rov_state(monkeypatch, tmp_path):
     state.esc_firmware_confirmation_toasts = False
     state.config_ack_waiters = {}
     state.connection_change_task = None
+    state.config_confirmation_tasks = set()
     state.mcu_flash_lock = asyncio.Lock()
+    state.config_mutation_lock = asyncio.Lock()
+    state.pico = None
     return state
