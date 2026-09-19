@@ -19,6 +19,7 @@ jobs:
     outputs:
       nix: ${{ steps.filter.outputs.nix }}
       python: ${{ steps.filter.outputs.python }}
+      workflows: ${{ steps.filter.outputs.workflows }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
@@ -29,10 +30,22 @@ jobs:
               - '**/*.nix'
               - 'flake.nix'
               - 'flake.lock'
+              - '.github/workflows/**'
+              - '.github/actions/**'
             python:
               - 'pyproject.toml'
+              - 'uv.lock'
+              - 'flake.nix'
+              - 'flake.lock'
+              - 'nix/firmware.nix'
+              - 'sync-python-deps.sh'
+              - '.github/workflows/**'
+              - '.github/actions/**'
               - 'src/**'
               - 'tests/**'
+            workflows:
+              - '.github/workflows/**'
+              - '.github/actions/**'
 
   code-quality-nix:
     needs: filter
@@ -78,6 +91,36 @@ jobs:
       - name: Evaluate configuration (dry-run)
         run: nix build --accept-flake-config --dry-run
 
+  workflow-smoke:
+    needs: filter
+    if: needs.filter.outputs.workflows == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          persist-credentials: false
+      # Exercise the pins used by sync and release without calling their
+      # write-capable jobs or the signing/upload composite action.
+      - uses: DeterminateSystems/nix-installer-action@3138316df39ed29be04236d7ffc686fa525866aa # main
+        with:
+          diagnostic-endpoint: ""
+      - uses: DeterminateSystems/magic-nix-cache-action@84c0677f58dcedf3b91f8223ce36a9ea5b3c84b7 # main
+        with:
+          diagnostic-endpoint: ""
+      - name: Validate workflows
+        run: nix run --inputs-from . nixpkgs#actionlint -- -color
+      - name: Build a small derivation with the installed Nix and cache
+        run: nix build --no-link --inputs-from . nixpkgs#hello --max-jobs 4 --cores 4
+      - name: Verify dependency sync without pushing
+        run: |
+          ./sync-python-deps.sh
+          nix develop --command uv lock
+          git diff --exit-code -- pyproject.toml uv.lock
+
   ci:
     name: ci
     if: always()
@@ -86,6 +129,7 @@ jobs:
       - code-quality-nix
       - code-quality-python
       - validate-nix-eval
+      - workflow-smoke
     runs-on: ubuntu-latest
     steps:
       - name: Require all applicable checks
@@ -94,8 +138,9 @@ jobs:
           NIX_RESULT: ${{ needs.code-quality-nix.result }}
           PYTHON_RESULT: ${{ needs.code-quality-python.result }}
           NIX_EVAL_RESULT: ${{ needs.validate-nix-eval.result }}
+          WORKFLOW_RESULT: ${{ needs.workflow-smoke.result }}
         run: |
           test "$FILTER_RESULT" = success
-          for result in "$NIX_RESULT" "$PYTHON_RESULT" "$NIX_EVAL_RESULT"; do
+          for result in "$NIX_RESULT" "$PYTHON_RESULT" "$NIX_EVAL_RESULT" "$WORKFLOW_RESULT"; do
             test "$result" = success || test "$result" = skipped
           done
