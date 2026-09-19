@@ -81,7 +81,11 @@ install`.
 - Custom Python packages (`numpydantic`, `bmi270`, `ms5837`) live as flake
   inputs and as `buildPythonPackage` definitions in `nix/firmware.nix`. Keep
   both in sync — Renovate updates the nix copy via custom managers; the sync
-  script then propagates them to `pyproject.toml`.
+  script then propagates them to `pyproject.toml`. For `numpydantic`, it also
+  generates uv's exact git source and `PDM_BUILD_SCM_VERSION` to match Nix's
+  pdm-backend metadata. The version label alone does not identify a source
+  between upstream releases; keep the generated source block and both locks
+  synchronized. Do not replace the git source with the same-named PyPI wheel.
 - Python version is pinned in `pyproject.toml` and `nix/firmware.nix`. The
   sync script handles this too — bump it in `nix/firmware.nix`.
 - Don't write plaintext secrets. Image keys in `keys/` are gitignored.
