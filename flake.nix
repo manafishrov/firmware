@@ -17,7 +17,7 @@
     # nix manager bumps this string, gated by minimumReleaseAge in
     # .github/renovate.json so nixos-raspberrypi.cachix.org has time to
     # populate aarch64 substitutes before we move.
-    nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi/84356fb05fa04cc06df45d479e1e3c6a75540f20";
+    nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi/8e7f1a4a0e80de946f359993087416f581d9c87e";
     nixpkgs.follows = "nixos-raspberrypi/nixpkgs";
     impermanence = {
       url = "github:nix-community/impermanence";
@@ -126,6 +126,25 @@
     packages = forAllSystems (_: {
       inherit (self.nixosConfigurations.pi3-imx477.config.system.build) sdImage;
       default = self.nixosConfigurations.pi3-imx477.config.system.build.sdImage;
+    });
+
+    checks = forAllSystems (system: let
+      pkgs = nixpkgs.legacyPackages.${system};
+      cameraPkgs = self.nixosConfigurations.pi3-imx477.pkgs;
+      headlessFlags = map (backend: "-Denable_${backend}=disabled") [
+        "libav"
+        "drm"
+        "egl"
+        "wayland"
+        "qt"
+        "opencv"
+      ];
+      isHeadless = package: builtins.all (flag: builtins.elem flag package.mesonFlags) headlessFlags;
+    in {
+      camera-headless = assert nixpkgs.lib.assertMsg
+      (builtins.all isHeadless [cameraPkgs.rpicam-apps cameraPkgs.rpi.rpicam-apps])
+      "Both rpicam-apps variants must keep every headless backend disabled";
+        pkgs.runCommand "camera-headless" {} "touch $out";
     });
 
     formatter = forAllSystems (system:
