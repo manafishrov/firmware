@@ -50,6 +50,11 @@ uv run pytest
 
 Auto-fix: `uv run ruff format .` and `uv run ruff check --fix .`.
 
+For workflow/action changes, require the non-publishing `workflow-smoke` CI
+matrix as well as the quality jobs. It validates workflow syntax, exercises
+release/sync Nix pins and verifies dependency sync without pushing. Never use
+Release Build or Re-upload Firmware as action smoke tests.
+
 ### Image build & flash
 
 ```sh
