@@ -37,11 +37,11 @@
       "locked": {
         "narHash": "sha256-QPYFthba6yuGosWaCTvvV2WSHLMXSW1zKFhdmKRz11Q=",
         "type": "file",
-        "url": "https://github.com/manafishrov/AM32/releases/download/v2.21.0/AM32_SKYSTARS_AM60_V2_F421_2.21.0.bin"
+        "url": "https://github.com/manafishrov/esc-firmware/releases/download/v2.21.0/AM32_SKYSTARS_AM60_V2_F421_2.21.0.bin"
       },
       "original": {
         "type": "file",
-        "url": "https://github.com/manafishrov/AM32/releases/download/v2.21.0/AM32_SKYSTARS_AM60_V2_F421_2.21.0.bin"
+        "url": "https://github.com/manafishrov/esc-firmware/releases/download/v2.21.0/AM32_SKYSTARS_AM60_V2_F421_2.21.0.bin"
       }
     },
     "flake-compat": {
