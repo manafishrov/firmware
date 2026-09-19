@@ -32,6 +32,7 @@ jobs:
               - 'flake.lock'
               - '.github/workflows/**'
               - '.github/actions/**'
+              - '.github/actionlint.yaml'
             python:
               - 'pyproject.toml'
               - 'uv.lock'
@@ -41,11 +42,13 @@ jobs:
               - 'sync-python-deps.sh'
               - '.github/workflows/**'
               - '.github/actions/**'
+              - '.github/actionlint.yaml'
               - 'src/**'
               - 'tests/**'
             workflows:
               - '.github/workflows/**'
               - '.github/actions/**'
+              - '.github/actionlint.yaml'
 
   code-quality-nix:
     needs: filter
@@ -97,7 +100,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-latest, ubuntu-24.04-arm]
+        runner: [ubuntu-latest, ubuntu-26.04-arm]
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -115,6 +118,9 @@ jobs:
         run: nix run --inputs-from . nixpkgs#actionlint -- -color
       - name: Build a small derivation with the installed Nix and cache
         run: nix build --no-link --inputs-from . nixpkgs#hello --max-jobs 4 --cores 4
+      - name: Build the SD image on the release runner without publishing
+        if: runner.arch == 'ARM64'
+        run: nix build .#sdImage --accept-flake-config --no-link --max-jobs 4 --cores 4
       - name: Verify dependency sync without pushing
         run: |
           ./sync-python-deps.sh

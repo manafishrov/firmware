@@ -25,6 +25,7 @@ def filter_patterns(name: str) -> list[str]:
         ".github/workflows/build.yaml",
         ".github/workflows/re-upload.yaml",
         ".github/actions/build-and-upload/action.yml",
+        ".github/actionlint.yaml",
     ],
 )
 @pytest.mark.parametrize("job_filter", ["nix", "python", "workflows"])
@@ -56,6 +57,20 @@ def test_smoke_checks_the_actual_release_and_sync_nix_pins() -> None:
         ]:
             pins = re.findall(pattern, (ROOT / path).read_text())
             assert pins and set(pins) == set(smoke_pins)
+
+
+def test_smoke_builds_image_on_each_release_runner() -> None:
+    smoke = CI.split("  workflow-smoke:\n", 1)[1].split("  ci:\n", 1)[0]
+    matrix = re.search(r"runner: \[([^\]]+)\]", smoke)
+    assert matrix is not None
+    runners = {runner.strip() for runner in matrix[1].split(",")}
+    for workflow in ["build.yaml", "re-upload.yaml"]:
+        release = (ROOT / ".github/workflows" / workflow).read_text()
+        release_runners = re.findall(r"runs-on: (\S+)", release)
+        assert release_runners
+        assert set(release_runners) <= runners
+    assert "if: runner.arch == 'ARM64'" in smoke
+    assert "nix build .#sdImage --accept-flake-config --no-link" in smoke
 
 
 def test_smoke_cannot_publish_and_is_required_by_aggregator() -> None:
