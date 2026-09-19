@@ -1,0 +1,7 @@
+# GitHub-hosted label newer than actionlint 1.7.12's built-in list:
+# https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2604-Arm64-Readme.md
+# This adds one known label; it does not select self-hosted execution.
+# Remove when actionlint recognizes the label natively.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04-arm
