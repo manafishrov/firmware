@@ -55,6 +55,10 @@ matrix as well as the quality jobs. It validates workflow syntax, exercises
 release/sync Nix pins and verifies dependency sync without pushing. Never use
 Release Build or Re-upload Firmware as action smoke tests.
 
+For camera/Nix runtime dependency changes, run `nix flake check` (including
+`camera-headless`) and build `.#sdImage`. Evaluation alone does not prove the
+image builds; a successful build does not prove physical Pi/IMX477 acceptance.
+
 ### Image build & flash
 
 ```sh

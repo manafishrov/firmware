@@ -12,6 +12,7 @@
       withDrmPreview = false;
       withQtPreview = false;
       withEglPreview = false;
+      withWaylandPreview = false;
       withOpenCVPostProc = false;
     };
 
