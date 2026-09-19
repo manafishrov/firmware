@@ -1,18 +1,22 @@
 import asyncio
-from pathlib import Path
 
 from rov_firmware.constants import (
-    MCU_AUTO_UPDATE_WINDOW_S,
+    ESC_FIRMWARE_UPDATE_STATUS_RECOVERY_REQUIRED,
+    ESC_FIRMWARE_USB_STATUS_START_BYTE,
     MCU_PROTOCOL_DSHOT,
     MCU_RELEASE_VERSION_MAX_LENGTH,
     MCU_RELEASE_VERSION_START_BYTE,
+    MCU_RUNTIME_CONFIG_STATE_APPLIED,
+    MCU_RUNTIME_CONFIG_STATE_APPLYING,
+    MCU_RUNTIME_CONFIG_STATUS_START_BYTE,
+    MCU_TELEMETRY_SIGNAL_QUALITY_UNAVAILABLE,
     MCU_TELEMETRY_TYPE_CURRENT,
     MCU_TELEMETRY_TYPE_ESC_VERSION_CHUNK,
     MCU_TELEMETRY_TYPE_ESC_VERSION_COMPLETE,
     MCU_TELEMETRY_TYPE_ESC_VERSION_LENGTH,
     MCU_TELEMETRY_TYPE_SIGNAL_QUALITY,
-    MCU_VERSION_START_BYTE,
 )
+from rov_firmware.esc_recovery import recovery_journal_exists
 from rov_firmware.models.config import ThrusterProtocol
 from rov_firmware.sensors import mcu as mcu_module
 from rov_firmware.sensors.mcu import McuSensor
@@ -34,13 +38,18 @@ class _RecordingLoop:
         return _CompletedTask()
 
 
-def _version_packet(protocol: int, dshot_speed: int) -> bytes:
+def _runtime_config_status_packet(
+    protocol: int,
+    dshot_speed: int,
+    request_id: int = 1,
+    state: int = MCU_RUNTIME_CONFIG_STATE_APPLIED,
+) -> bytes:
     packet = bytearray(
         [
-            MCU_VERSION_START_BYTE,
-            1,
-            2,
-            3,
+            MCU_RUNTIME_CONFIG_STATUS_START_BYTE,
+            request_id,
+            state,
+            0,
             protocol,
             dshot_speed & 0xFF,
             dshot_speed >> 8,
@@ -55,7 +64,7 @@ def _version_packet(protocol: int, dshot_speed: int) -> bytes:
 
 def _release_version_packet(version: str) -> bytes:
     encoded = version.encode("ascii")
-    packet = bytearray([MCU_RELEASE_VERSION_START_BYTE, len(encoded), *encoded])
+    packet = bytearray([MCU_RELEASE_VERSION_START_BYTE, 1, len(encoded), *encoded])
     checksum = 0
     for value in packet:
         checksum ^= value
@@ -63,24 +72,82 @@ def _release_version_packet(version: str) -> bytes:
     return bytes(packet)
 
 
-def test_version_packet_acknowledges_mcu_without_reverting_requested_config(
-    rov_state, monkeypatch
+def _esc_recovery_status_packet() -> bytes:
+    packet = bytearray(
+        [
+            ESC_FIRMWARE_USB_STATUS_START_BYTE,
+            ESC_FIRMWARE_UPDATE_STATUS_RECOVERY_REQUIRED,
+            0xFF,
+            0,
+            1,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+        ]
+    )
+    checksum = 0
+    for value in packet:
+        checksum ^= value
+    packet.append(checksum)
+    return bytes(packet)
+
+
+def test_runtime_config_status_acknowledges_mcu_without_changing_release_identity(
+    rov_state,
 ):
     rov_state.rov_config.thruster_protocol = ThrusterProtocol.PWM
     rov_state.rov_config.dshot_speed = 300
     serial_manager = SerialManager(rov_state)
     sensor = McuSensor(rov_state, serial_manager)
-    monkeypatch.setattr(sensor, "_get_expected_version", lambda: "1.2.3")
+    serial_manager.begin_mcu_protocol_request(1)
 
-    sensor._handle_version_packet(_version_packet(MCU_PROTOCOL_DSHOT, 600))
+    # Fixed MCU protocol vector for DShot600. Keep this independent of the
+    # helper so a matching encoder/decoder defect cannot pass the contract test.
+    sensor._handle_runtime_config_status_packet(
+        _runtime_config_status_packet(MCU_PROTOCOL_DSHOT, 600)
+    )
 
     assert serial_manager.mcu_protocol_config == ("dshot", 600)
     assert rov_state.rov_config.thruster_protocol == ThrusterProtocol.PWM
     assert rov_state.rov_config.dshot_speed == 300
-    assert rov_state.device_info.mcu_firmware_version == "1.2.3"
+    assert rov_state.device_info.mcu_firmware_version == ""
+    assert rov_state.system_status.thruster_protocol_state == "failed"
+    assert "does not match" in (rov_state.system_status.thruster_protocol_error or "")
 
 
-def test_version_packet_does_not_reflash_matching_prerelease_bundle(
+def test_runtime_config_applying_clears_a_previous_protocol_error(rov_state):
+    serial_manager = SerialManager(rov_state)
+    sensor = McuSensor(rov_state, serial_manager)
+    serial_manager.begin_mcu_protocol_request(1)
+    rov_state.system_status.thruster_protocol_error = "previous error"
+
+    sensor._handle_runtime_config_status_packet(
+        _runtime_config_status_packet(
+            MCU_PROTOCOL_DSHOT,
+            300,
+            state=MCU_RUNTIME_CONFIG_STATE_APPLYING,
+        )
+    )
+
+    assert rov_state.system_status.thruster_protocol_state == "applying"
+    assert rov_state.system_status.thruster_protocol_error is None
+
+
+def test_runtime_config_status_rejects_unknown_protocol(rov_state):
+    serial_manager = SerialManager(rov_state)
+    sensor = McuSensor(rov_state, serial_manager)
+    serial_manager.begin_mcu_protocol_request(1)
+
+    packet = _runtime_config_status_packet(0x7F, 600)
+
+    assert not sensor._validate_runtime_config_status_packet(packet)
+    assert serial_manager.mcu_protocol_config is None
+
+
+def test_runtime_config_status_does_not_reflash_matching_prerelease_bundle(
     rov_state, monkeypatch
 ):
     serial_manager = SerialManager(rov_state)
@@ -95,7 +162,9 @@ def test_version_packet_does_not_reflash_matching_prerelease_bundle(
     monkeypatch.setattr(sensor, "_flash_mcu", unexpected_flash)
 
     sensor._handle_release_version_packet(_release_version_packet("1.2.3-rc.1"))
-    sensor._handle_version_packet(_version_packet(MCU_PROTOCOL_DSHOT, 600))
+    sensor._handle_runtime_config_status_packet(
+        _runtime_config_status_packet(MCU_PROTOCOL_DSHOT, 600)
+    )
 
     assert rov_state.device_info.mcu_firmware_version == "1.2.3-rc.1"
 
@@ -128,6 +197,32 @@ def test_release_version_packet_parses_through_split_read_buffer(rov_state):
     assert rov_state.device_info.mcu_firmware_version == "1.2.3-rc.1"
 
 
+def test_pico_recovery_status_durably_blocks_thruster_control(rov_state):
+    rov_state.system_status.thruster_control_ready = True
+    sensor = McuSensor(rov_state, SerialManager(rov_state))
+
+    sensor._consume_read_buffer(bytearray(), _esc_recovery_status_packet())
+
+    assert rov_state.esc_firmware_recovery_required
+    assert rov_state.esc_firmware_update.recovery_required
+    assert not rov_state.system_status.thruster_control_ready
+    assert recovery_journal_exists()
+
+
+def test_release_identity_and_runtime_config_status_parse_in_wire_order(rov_state):
+    serial_manager = SerialManager(rov_state)
+    sensor = McuSensor(rov_state, serial_manager)
+    serial_manager.begin_mcu_protocol_request(1)
+    packets = _release_version_packet("1.2.3-rc.1") + _runtime_config_status_packet(
+        MCU_PROTOCOL_DSHOT, 600
+    )
+
+    sensor._consume_read_buffer(bytearray(), packets)
+
+    assert rov_state.device_info.mcu_firmware_version == "1.2.3-rc.1"
+    assert serial_manager.mcu_protocol_config == ("dshot", 600)
+
+
 def test_release_version_buffer_ignores_bad_checksum_and_resynchronizes(rov_state):
     sensor = McuSensor(rov_state, SerialManager(rov_state))
     damaged = bytearray(_release_version_packet("1.2.2"))
@@ -143,7 +238,7 @@ def test_release_version_buffer_ignores_bad_checksum_and_resynchronizes(rov_stat
 def test_release_version_buffer_rejects_oversized_length_and_resynchronizes(rov_state):
     sensor = McuSensor(rov_state, SerialManager(rov_state))
     oversized_header = bytes(
-        (MCU_RELEASE_VERSION_START_BYTE, MCU_RELEASE_VERSION_MAX_LENGTH + 1)
+        (MCU_RELEASE_VERSION_START_BYTE, 1, MCU_RELEASE_VERSION_MAX_LENGTH + 1)
     )
 
     sensor._consume_read_buffer(
@@ -173,10 +268,30 @@ def test_invalid_release_warning_is_once_per_connection_generation(
 def test_clearing_serial_connection_clears_live_mcu_identity(rov_state):
     serial_manager = SerialManager(rov_state)
     rov_state.device_info.mcu_firmware_version = "1.2.3-rc.1"
+    rov_state.system_status.thruster_control_ready = True
 
     asyncio.run(serial_manager._clear_connection_unlocked())
 
     assert rov_state.device_info.mcu_firmware_version == ""
+    assert rov_state.system_status.thruster_control_ready is False
+
+
+def test_matching_runtime_config_ack_marks_thruster_control_ready(rov_state):
+    serial_manager = SerialManager(rov_state)
+
+    serial_manager.record_mcu_protocol_config("dshot", 300)
+
+    assert rov_state.system_status.thruster_control_ready is True
+
+
+def test_runtime_config_ack_stays_blocked_during_esc_recovery(rov_state):
+    serial_manager = SerialManager(rov_state)
+    rov_state.esc_firmware_recovery_required = True
+
+    serial_manager.record_mcu_protocol_config("dshot", 300)
+
+    assert serial_manager.mcu_protocol_config == ("dshot", 300)
+    assert rov_state.system_status.thruster_control_ready is False
 
 
 def test_version_mismatch_auto_flashes_only_once_per_service_start(
@@ -194,28 +309,6 @@ def test_version_mismatch_auto_flashes_only_once_per_service_start(
     assert sensor._mcu_auto_flash_attempted is True
 
 
-def test_esc_mismatch_auto_flashes_only_once_per_service_start(rov_state, monkeypatch):
-    loop = _RecordingLoop()
-    sensor = McuSensor(rov_state, SerialManager(rov_state))
-    monkeypatch.setattr(mcu_module.asyncio, "get_running_loop", lambda: loop)
-    monkeypatch.setattr(
-        mcu_module,
-        "resolve_esc_firmware",
-        lambda: (Path("esc-v2.21.0.bin"), "2.21.0"),
-    )
-    monkeypatch.setattr(
-        mcu_module,
-        "esc_firmware_update_required",
-        lambda *_args: True,
-    )
-
-    sensor._auto_update_esc_firmware_if_needed()
-    sensor._auto_update_esc_firmware_if_needed()
-
-    assert loop.created == 1
-    assert sensor._esc_auto_flash_attempted is True
-
-
 def test_signal_quality_updates_do_not_keep_stale_current_alive(rov_state, monkeypatch):
     now = 10.0
     monkeypatch.setattr(mcu_module.time, "monotonic", lambda: now)
@@ -229,6 +322,36 @@ def test_signal_quality_updates_do_not_keep_stale_current_alive(rov_state, monke
     assert rov_state.mcu_telemetry.current[0] == 0
     assert rov_state.mcu_telemetry.current_valid[0] is False
     assert rov_state.mcu_telemetry.signal_quality[0] == 100
+    assert rov_state.mcu_telemetry.signal_quality_valid[0] is True
+
+
+def test_stale_signal_quality_becomes_unavailable(rov_state, monkeypatch):
+    now = 10.0
+    monkeypatch.setattr(mcu_module.time, "monotonic", lambda: now)
+    sensor = McuSensor(rov_state, SerialManager(rov_state))
+    sensor._update_telemetry_item(0, MCU_TELEMETRY_TYPE_SIGNAL_QUALITY, 0)
+
+    assert rov_state.mcu_telemetry.signal_quality[0] == 0
+    assert rov_state.mcu_telemetry.signal_quality_valid[0] is True
+
+    now = 14.0
+    sensor._expire_stale_telemetry()
+
+    assert rov_state.mcu_telemetry.signal_quality[0] == 0
+    assert rov_state.mcu_telemetry.signal_quality_valid[0] is False
+
+
+def test_signal_quality_sentinel_is_reported_as_unavailable(rov_state):
+    sensor = McuSensor(rov_state, SerialManager(rov_state))
+
+    sensor._update_telemetry_item(
+        0,
+        MCU_TELEMETRY_TYPE_SIGNAL_QUALITY,
+        MCU_TELEMETRY_SIGNAL_QUALITY_UNAVAILABLE,
+    )
+
+    assert rov_state.mcu_telemetry.signal_quality[0] == 0.0
+    assert rov_state.mcu_telemetry.signal_quality_valid[0] is False
 
 
 def test_current_telemetry_preserves_raw_edt_amperes(rov_state):
@@ -249,17 +372,12 @@ def test_current_telemetry_rejects_negative_usb_values(rov_state):
     assert rov_state.mcu_telemetry.current_valid[2] is True
 
 
-def test_esc_firmware_version_is_assembled_from_live_telemetry(rov_state, monkeypatch):
+def test_esc_firmware_version_is_assembled_from_live_telemetry(rov_state):
     sensor = McuSensor(rov_state, SerialManager(rov_state))
     version = b"2.20.1-rc.3"
     reported_versions: list[str | None] = [version.decode()] * 8
     rov_state.device_info.esc_firmware_versions = reported_versions
     rov_state.device_info.esc_firmware_versions[3] = None
-    monkeypatch.setattr(
-        mcu_module,
-        "resolve_esc_firmware",
-        lambda: (Path("esc-v2.20.2.bin"), "2.20.2"),
-    )
 
     def report_version(motor: int, checksum: int) -> None:
         sensor._update_telemetry_item(
@@ -283,23 +401,3 @@ def test_esc_firmware_version_is_assembled_from_live_telemetry(rov_state, monkey
 
     assert rov_state.device_info.esc_firmware_versions[3] == "2.20.1-rc.3"
     assert rov_state.device_info.esc_firmware_versions[4] is None
-
-
-def test_version_packet_stops_scheduling_esc_reconciliation_after_startup_window(
-    rov_state, monkeypatch
-):
-    sensor = McuSensor(rov_state, SerialManager(rov_state))
-    sensor._startup_time = 0.0
-    scheduled = []
-    monkeypatch.setattr(
-        mcu_module.time, "monotonic", lambda: MCU_AUTO_UPDATE_WINDOW_S + 1
-    )
-    monkeypatch.setattr(sensor, "_get_expected_version", lambda: "1.2.3")
-    monkeypatch.setattr(mcu_module, "mcu_update_required", lambda *_args: False)
-    monkeypatch.setattr(
-        sensor, "_schedule_esc_firmware_reconciliation", lambda: scheduled.append(True)
-    )
-
-    sensor._handle_version_packet(_version_packet(MCU_PROTOCOL_DSHOT, 600))
-
-    assert scheduled == []

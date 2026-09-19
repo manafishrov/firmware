@@ -8,6 +8,7 @@ import pytest
 from rov_firmware import thrusters as thrusters_module
 from rov_firmware.constants import (
     MCU_CONFIG_START_BYTE,
+    MCU_CONTROL_COMMAND_APPLY_CONFIG,
     MCU_PROTOCOL_DSHOT,
     MCU_PROTOCOL_PWM,
     NUM_MOTORS,
@@ -20,6 +21,7 @@ from rov_firmware.constants import (
 from rov_firmware.models.config import ThrusterPinSetup
 from rov_firmware.regulator import Regulator as RegulatorController
 from rov_firmware.thrusters import Thrusters
+from rov_firmware.websocket.receive.actions import handle_start_thruster_test
 
 
 class _WriterSpy:
@@ -35,15 +37,21 @@ class _WriterSpy:
 
 
 class _SerialManagerSpy:
-    connection_generation = 1
-    mcu_protocol_config: tuple[str, int] | None = None
+    def __init__(self):
+        self.connection_generation = 1
+        self.mcu_protocol_config: tuple[str, int] | None = None
+        self.write_lock = asyncio.Lock()
+        self.request_id: int | None = None
+
+    def begin_mcu_protocol_request(self, request_id: int) -> None:
+        self.request_id = request_id
 
 
 @pytest.fixture
 def thrusters(rov_state):
     return Thrusters(
         rov_state,
-        cast(Any, object()),
+        cast(Any, _SerialManagerSpy()),
         cast(Any, RegulatorController(rov_state)),
     )
 
@@ -121,6 +129,17 @@ def test_create_thrust_vector_runs_full_default_pipeline(thrusters):
         np.array([1.0, -1.0, 0.5, -0.5, 0.25, -0.25, 0.75, -0.75], dtype=np.float32),
     )
     assert thrusters.state.thrusters.work_indicator_percentage == 59
+
+
+def test_stale_input_still_stops_thrusters_with_stabilization_enabled(thrusters):
+    thrusters.state.system_status.auto_stabilization = True
+    thrusters.state.thrusters.direction_vector = np.ones(8, dtype=np.float32)
+    thrusters.state.thrusters.last_direction_time = 0.0
+
+    thrust_vector, _, _ = thrusters._determine_thrust_vector(100.0, 99.0)
+
+    assert thrust_vector is not None
+    assert np.array_equal(thrust_vector, np.zeros(8, dtype=np.float32))
 
 
 def test_correct_thrust_vector_spin_directions_applies_signs(thrusters):
@@ -258,6 +277,22 @@ def test_send_packet_writes_expected_binary_packet(thrusters):
     assert writer.drains == 1
 
 
+def test_send_packet_waits_for_exclusive_serial_writer(thrusters):
+    writer = _WriterSpy()
+
+    async def run_test() -> None:
+        await thrusters.serial_manager.write_lock.acquire()
+        send = asyncio.create_task(thrusters._send_packet(writer, [1500] * NUM_MOTORS))
+        await asyncio.sleep(0)
+        assert writer.writes == []
+        thrusters.serial_manager.write_lock.release()
+        await send
+
+    asyncio.run(run_test())
+
+    assert len(writer.writes) == 1
+
+
 @pytest.mark.parametrize(
     ("protocol", "dshot_speed", "expected_protocol"),
     [("dshot", 300, MCU_PROTOCOL_DSHOT), ("pwm", 600, MCU_PROTOCOL_PWM)],
@@ -269,11 +304,18 @@ def test_send_config_packet_writes_expected_binary_packet(
     thrusters.state.rov_config.thruster_protocol = protocol
     thrusters.state.rov_config.dshot_speed = dshot_speed
 
-    asyncio.run(thrusters._send_config_packet(writer))
-
-    expected = bytearray([MCU_CONFIG_START_BYTE, expected_protocol]) + bytearray(
-        struct.pack("<H", dshot_speed)
+    asyncio.run(
+        thrusters._send_control_packet(writer, MCU_CONTROL_COMMAND_APPLY_CONFIG, 42)
     )
+
+    expected = bytearray(
+        [
+            MCU_CONFIG_START_BYTE,
+            MCU_CONTROL_COMMAND_APPLY_CONFIG,
+            42,
+            expected_protocol,
+        ]
+    ) + bytearray(struct.pack("<H", dshot_speed))
     checksum = 0
     for value in expected:
         checksum ^= value
@@ -331,6 +373,25 @@ def test_protocol_config_retries_after_unacknowledged_attempt(rov_state):
     assert writer.writes[1][0] == MCU_CONFIG_START_BYTE
 
 
+def test_esc_recovery_blocks_runtime_config_and_thruster_readiness(rov_state):
+    serial_manager = _SerialManagerSpy()
+    serial_manager.mcu_protocol_config = ("dshot", 300)
+    thrusters = Thrusters(
+        rov_state,
+        cast(Any, serial_manager),
+        cast(Any, RegulatorController(rov_state)),
+    )
+    writer = _WriterSpy()
+    rov_state.esc_firmware_recovery_required = True
+    rov_state.system_status.thruster_control_ready = True
+
+    confirmed = asyncio.run(thrusters._ensure_config_sent(cast(Any, writer)))
+
+    assert confirmed is False
+    assert not rov_state.system_status.thruster_control_ready
+    assert writer.writes == []
+
+
 def test_protocol_config_logs_actionable_error_when_ack_stays_blocked(
     rov_state, monkeypatch
 ):
@@ -351,5 +412,147 @@ def test_protocol_config_logs_actionable_error_when_ack_stays_blocked(
 
     assert messages == [
         "Thruster protocol change is still blocked because the MCU has not "
-        "confirmed it. Check power and telemetry for every ESC."
+        "confirmed it. Check the MCU connection and firmware."
     ]
+
+
+def test_control_log_suppression_never_suppresses_usb_writes(thrusters, monkeypatch):
+    events = []
+    now = [100.0]
+    monkeypatch.setattr(thrusters_module.time, "monotonic", lambda: now[0])
+    monkeypatch.setattr(
+        thrusters_module,
+        "log_diagnostic",
+        lambda event, **fields: events.append((event, fields)),
+    )
+    writer = _WriterSpy()
+
+    async def send(request_id):
+        await thrusters._send_control_packet(
+            cast(Any, writer), MCU_CONTROL_COMMAND_APPLY_CONFIG, request_id
+        )
+
+    async def run():
+        for _ in range(20):
+            await send(1)
+        assert len(events) == 1
+        now[0] = 110.0
+        await send(1)
+        assert events[-1][1]["suppressed_attempts"] == 19
+        await send(1)
+        await send(1)
+        await send(2)
+
+    asyncio.run(run())
+    assert len(writer.writes) == 24
+    assert writer.drains == 24
+    assert events[-2][0] == "mcu_control_repeat_summary"
+    assert events[-2][1]["request_id"] == 1
+    assert events[-2][1]["suppressed_attempts"] == 2
+    assert events[-1][1]["request_id"] == 2
+    assert events[-1][1]["suppressed_attempts"] == 0
+
+
+def test_protocol_timeout_points_to_the_flash_pico_button(rov_state):
+    serial_manager = _SerialManagerSpy()
+    thrusters = Thrusters(
+        rov_state,
+        cast(Any, serial_manager),
+        cast(Any, RegulatorController(rov_state)),
+    )
+    writer = _WriterSpy()
+    asyncio.run(thrusters._ensure_config_sent(cast(Any, writer)))
+    thrusters._protocol_reconnect_attempts = 1
+    thrusters._pending_config_since -= 9
+
+    assert not asyncio.run(thrusters._ensure_config_sent(cast(Any, writer)))
+    assert rov_state.system_status.thruster_protocol_state == "failed"
+    assert "(Firmware → Flash Pico)" in (
+        rov_state.system_status.thruster_protocol_error or ""
+    )
+
+
+def test_thruster_test_countdown_starts_after_first_command_write(
+    thrusters, monkeypatch
+):
+    toasts = []
+    monkeypatch.setattr(
+        thrusters_module, "toast_content", lambda **kwargs: toasts.append(kwargs)
+    )
+    thrusters.state.thrusters.test_thruster = 3
+
+    vector = thrusters._handle_thruster_test(100.0, 3)
+
+    assert vector is not None
+    assert vector[3] == pytest.approx(0.1)
+    assert thrusters.state.thrusters.test_start_time is None
+    assert toasts == []
+
+    thrusters._mark_thruster_test_started(
+        100.0, thrusters.state.thrusters.test_request_id
+    )
+
+    assert thrusters.state.thrusters.test_start_time == 100.0
+    assert thrusters.state.thrusters.last_remaining == 10
+    assert toasts[0]["variant"].value == "loading"
+    assert toasts[0]["content"].description_args == {"seconds": 10}
+
+
+def test_unrelated_write_cannot_start_test_queued_while_drain_yields(
+    thrusters, monkeypatch
+):
+    toasts = []
+    monkeypatch.setattr(
+        thrusters_module, "toast_content", lambda **kwargs: toasts.append(kwargs)
+    )
+    thrusters.state.system_status.thruster_control_ready = True
+
+    async def run_interleaving() -> None:
+        vector, _, selected_request_id = thrusters._determine_thrust_vector(100.0, 0.0)
+        assert vector is not None
+        thrust_values = thrusters._compute_thrust_values(vector)
+
+        class _InterleavingWriter(_WriterSpy):
+            async def drain(self):
+                await asyncio.sleep(0)
+                await handle_start_thruster_test(thrusters.state, 3)
+                await super().drain()
+
+        sent = await thrusters._send_with_retries(
+            cast(Any, _InterleavingWriter()), thrust_values
+        )
+        assert sent is True
+        thrusters._mark_thruster_test_started(100.0, selected_request_id)
+
+        assert thrusters.state.thrusters.test_thruster == 3
+        assert thrusters.state.thrusters.test_start_time is None
+        assert toasts == []
+
+        test_vector, _, test_request_id = thrusters._determine_thrust_vector(101.0, 0.0)
+        assert test_vector is not None
+        sent = await thrusters._send_with_retries(
+            cast(Any, _WriterSpy()), thrusters._compute_thrust_values(test_vector)
+        )
+        assert sent is True
+        thrusters._mark_thruster_test_started(101.0, test_request_id)
+
+    asyncio.run(run_interleaving())
+
+    assert thrusters.state.thrusters.test_start_time == 101.0
+    assert toasts[0]["content"].description_args == {"seconds": 10}
+
+
+def test_lost_readiness_ends_thruster_test_with_terminal_error(thrusters, monkeypatch):
+    toasts = []
+    monkeypatch.setattr(
+        thrusters_module, "toast_content", lambda **kwargs: toasts.append(kwargs)
+    )
+    thrusters.state.thrusters.test_thruster = 2
+    thrusters.state.thrusters.test_start_time = 50.0
+
+    thrusters._fail_thruster_test_unavailable()
+
+    assert thrusters.state.thrusters.test_thruster is None
+    assert thrusters.state.thrusters.test_start_time is None
+    assert toasts[0]["variant"].value == "error"
+    assert toasts[0]["content"].message_key == "toasts_thruster_test_unavailable"

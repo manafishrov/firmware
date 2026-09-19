@@ -12,6 +12,7 @@ class AsyncWebSocketState(BaseModel):
     model_config: ClassVar[ConfigDict] = ConfigDict(arbitrary_types_allowed=True)
 
     is_client_connected: bool = False
+    connection_generation: int = 0
     main_event_loop: asyncio.AbstractEventLoop | None = None
 
 

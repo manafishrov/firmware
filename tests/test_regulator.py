@@ -195,6 +195,22 @@ def test_handle_stabilization_relaxes_integral_when_user_is_commanding(rov_state
     )
 
 
+def test_stabilization_enable_initializes_target_before_applying_user_input(rov_state):
+    regulator = RegulatorController(rov_state)
+    regulator.ahrs.current_attitude = Rotation.from_euler(
+        "ZYX", [30.0, 10.0, -5.0], degrees=True
+    )
+    rov_state.system_status.auto_stabilization = True
+    direction_vector = np.zeros(8, dtype=np.float32)
+    direction_vector[4] = 1.0
+
+    regulator.apply_regulator_to_direction_vector(direction_vector)
+
+    assert rov_state.regulator.desired_pitch == pytest.approx(0.0)
+    assert rov_state.regulator.desired_roll == pytest.approx(0.0)
+    assert rov_state.regulator.desired_yaw == pytest.approx(32.0)
+
+
 def test_transform_movement_vector_world_to_body_is_identity_for_level_attitude(
     rov_state,
 ):

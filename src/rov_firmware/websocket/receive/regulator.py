@@ -6,11 +6,13 @@ import time
 from ...constants import AUTO_TUNING_TOAST_ID, MAX_AUTO_TUNING_ROLL_PITCH_DEGREES
 from ...log import log_error, log_info
 from ...models.toast import ToastContent, ToastVariant
+from ...motor_safety import motor_firmware_operation_blocker
 from ...rov_state import RovState
 from ...toast import (
     cancel_regulator_auto_tuning_action,
     toast_content,
     toast_error,
+    toast_warn,
 )
 
 
@@ -23,6 +25,19 @@ async def handle_start_regulator_auto_tuning(
         state: The ROV state.
     """
     log_info("Starting regulator auto tuning")
+
+    firmware_blocker = motor_firmware_operation_blocker(state)
+    if firmware_blocker is not None:
+        log_error(f"Cannot start auto tuning because {firmware_blocker}")
+        toast_error(
+            identifier=AUTO_TUNING_TOAST_ID,
+            content=ToastContent(
+                message_key="toasts_auto_tuning_failed",
+                description_key="toasts_auto_tuning_failed_firmware_operation",
+            ),
+            action=None,
+        )
+        return
 
     if not state.system_health.imu_healthy:
         log_error("IMU not healthy, cannot start auto tuning")
@@ -122,6 +137,22 @@ async def handle_set_desired_depth(
         return
 
     desired_depth = max(0.0, depth)
+    if state.pico is not None:
+        try:
+            await state.set_desired_depth(desired_depth)
+        except Exception as error:
+            log_error(f"Desired depth was not confirmed by Pico: {error}")
+            toast_warn(
+                identifier=None,
+                content=ToastContent(
+                    message_key="toasts_invoke_failed",
+                    message_args={"command": "setDesiredDepth"},
+                    description_key="toasts_disruptive_config_blocked_description",
+                    description_args={"reason": str(error)},
+                ),
+                action=None,
+            )
+            return
     state.regulator.pending_desired_depth = desired_depth
     if state.system_status.depth_hold:
         state.regulator.desired_depth = desired_depth

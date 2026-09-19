@@ -47,7 +47,14 @@ def build_telemetry(state: RovState) -> Telemetry:
         water_temperature=state.pressure.temperature,
         electronics_temperature=electronics_temperature,
         thruster_rpms=thruster_rpms,
-        thruster_signal_qualities=list(state.mcu_telemetry.signal_quality),
+        thruster_signal_qualities=[
+            quality if valid else None
+            for quality, valid in zip(
+                state.mcu_telemetry.signal_quality,
+                state.mcu_telemetry.signal_quality_valid,
+                strict=True,
+            )
+        ],
         work_indicator_percentage=state.thrusters.work_indicator_percentage,
     )
     return Telemetry(payload=payload)

@@ -128,6 +128,7 @@ class PressureSensor:
                     previous_depth = data.depth
                     previous_read_time = now
                     data.depth_change = filtered_depth_change
+                    data.sample_time = now
                     self.state.pressure = data
                     failure_count = 0
                 else:

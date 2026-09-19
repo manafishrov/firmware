@@ -4,6 +4,30 @@ The Manafish firmware is designed to run on a Raspberry Pi 3b with an IMX477
 camera module. It provides the firmware for controlling and using the Manafish
 ROV.
 
+## Current reporting compatibility
+
+Current above idle comes from MCU telemetry type 9: signed int32 milliamps for
+two shared-sensor boards, using channel IDs 0 and 4. Type 10 carries each idle
+baseline for diagnostics; type 3 remains the unchanged raw whole-amp reading.
+A value of -1 means unavailable. The Pi sums both fresh corrected board values
+and returns `currentDraw: null` when either is missing or stale, or when MCU
+health, protocol, or flashing state makes the measurement unavailable. There
+is no fallback to raw current and no second offset correction.
+
+The old current-sensor topology setting is ignored on configuration import and
+no longer saved or sent. The supported estimator layout is two four-in-one
+boards, not individual per-motor sensors. Auto-zero estimates incremental current
+above idle; it does not validate the sensor gain or provide electrical protection.
+Raw current, corrected current, baseline, and freshness remain in diagnostics.
+
+Install app v1.0.17 before this Pi release (v1.1.6). The app must accept
+nullable/fractional `currentDraw`. Install the AM32 raw-current restoration and
+product input policy on all eight ESCs using the old Pico first, then deploy
+the new Pico through an updated Pi bundle. Pi auto-flashing cannot enforce that ESC-first sequence.
+Without new MCU reports, current remains unavailable. This release bundles
+AM32 v2.21.0 and Pico/Pico 2 v1.0.3. Do not install this bundle before
+updating all eight ESCs with the old Pico; use a separate ESC-first staging step.
+
 ## Building the SD Image
 
 To build the SD image you need to have `nix` installed on an aarch64-linux

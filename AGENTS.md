@@ -9,13 +9,19 @@ ROV's MCU (`mcu-firmware`) and to the desktop `app` over WebSocket.
 ## Stack
 
 - Python 3.13 (uv-managed), `numpy`, `scipy`, `pydantic`, `websockets`
-- NixOS image build (`nix build .#pi3-imx477`)
+- NixOS image build (`nix build .#sdImage`)
 - Ruff (lint + format), `ty` for type-checking, `pytest`
 - pre-commit + uv
 
 ## Structure
 
-- `src/rov_firmware/` — service entrypoint and modules
+- `src/rov_firmware/` — service entrypoint and modules. `main.py` runs
+  `pico_control.py` (60 Hz command/telemetry orchestration); AHRS, PID and
+  allocation execute on Pico, not in the legacy Python regulator/thrusters.
+- For control migration, hardware pairing, settings ACKs or maintenance changes,
+  read `HANDOFF.md` and the MCU repository's `docs/PICO_CONTROL_PROTOCOL.md`.
+  Run the cross-repository differential command in `tests/reference/README.md`
+  against the actual MCU C source before claiming mathematical equivalence.
 - `src/tools/` — operator CLI (`uv run tools …`)
 - `tests/` — pytest suite
 - `nix/` — NixOS modules (`firmware.nix`, `camera.nix`, `sensors.nix`,
@@ -44,10 +50,15 @@ uv run pytest
 
 Auto-fix: `uv run ruff format .` and `uv run ruff check --fix .`.
 
+For workflow/action changes, require the non-publishing `workflow-smoke` CI
+matrix as well as the quality jobs. It validates workflow syntax, exercises
+release/sync Nix pins and verifies dependency sync without pushing. Never use
+Release Build or Re-upload Firmware as action smoke tests.
+
 ### Image build & flash
 
 ```sh
-nix build .#pi3-imx477
+nix build .#sdImage
 ls -lh result/sd-image
 # Flash per README.md (zstd | dd, or Rufus on Windows)
 ```
@@ -70,7 +81,11 @@ install`.
 - Custom Python packages (`numpydantic`, `bmi270`, `ms5837`) live as flake
   inputs and as `buildPythonPackage` definitions in `nix/firmware.nix`. Keep
   both in sync — Renovate updates the nix copy via custom managers; the sync
-  script then propagates them to `pyproject.toml`.
+  script then propagates them to `pyproject.toml`. For `numpydantic`, it also
+  generates uv's exact git source and `PDM_BUILD_SCM_VERSION` to match Nix's
+  pdm-backend metadata. The version label alone does not identify a source
+  between upstream releases; keep the generated source block and both locks
+  synchronized. Do not replace the git source with the same-named PyPI wheel.
 - Python version is pinned in `pyproject.toml` and `nix/firmware.nix`. The
   sync script handles this too — bump it in `nix/firmware.nix`.
 - Don't write plaintext secrets. Image keys in `keys/` are gitignored.

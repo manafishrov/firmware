@@ -3,6 +3,7 @@
 import asyncio
 import json
 import logging
+import time
 from typing import cast
 
 from pydantic import TypeAdapter
@@ -11,20 +12,28 @@ from websockets import Server, ServerConnection
 from websockets.exceptions import ConnectionClosed
 
 from ..constants import CRASH_LOG_SEND_TIMEOUT_S
-from ..log import flush_pending_logs, log_error, log_info, log_warn
+from ..log import (
+    flush_pending_logs,
+    get_local_logger,
+    log_error,
+    log_info,
+    log_warn,
+    stamp_log_message,
+)
 from ..models.log import LogEntry, LogLevel, LogOrigin
 from ..rov_state import RovState
 from ..serial import SerialManager
 from .handler import handle_message
 from .message import LogMessage, WebsocketMessage
 from .queue import ConfirmedMessage, get_message_queue
+from .receive.config import reject_invalid_config_message
 from .send.config import build_config
 from .send.status import build_status_update
 from .send.telemetry import build_telemetry
 from .state import websocket_state
 
 
-_logger = logging.getLogger(__name__)
+_logger = get_local_logger()
 
 websocket_message_adapter = TypeAdapter(WebsocketMessage)
 
@@ -53,6 +62,7 @@ class WebsocketServer:
         """
         self.client = websocket
         websocket_state.is_client_connected = True
+        websocket_state.connection_generation += 1
         log_info(
             f"Client connected: {cast(tuple[str, int] | None, websocket.remote_address)}."
         )
@@ -70,6 +80,7 @@ class WebsocketServer:
             telemetry_task = asyncio.create_task(self._send_telemetry_periodically())
 
             async for message in websocket:
+                data: object = None
                 try:
                     data = json.loads(message)
                     deserialized_msg = websocket_message_adapter.validate_python(data)
@@ -82,6 +93,7 @@ class WebsocketServer:
                     )
                 except Exception as e:
                     log_warn(f"Error processing message: {e}")
+                    await reject_invalid_config_message(self.state, data, str(e))
         except ConnectionClosed:
             log_info(
                 f"Client connection closed: {cast(tuple[str, int] | None, websocket.remote_address)}"
@@ -145,6 +157,15 @@ class WebsocketServer:
             level: The log level for the frame.
             message: The log message body.
         """
+        message = stamp_log_message(message)
+        _logger.log(
+            {
+                LogLevel.INFO: logging.INFO,
+                LogLevel.WARN: logging.WARNING,
+                LogLevel.ERROR: logging.ERROR,
+            }[level],
+            message,
+        )
         payload = LogEntry(origin=LogOrigin.FIRMWARE, level=level, message=message)
         try:
             await self.send_frame(
@@ -185,10 +206,22 @@ class WebsocketServer:
             pass
 
     async def _send_telemetry_periodically(self) -> None:
+        period = 1 / 60
+        deadline = time.monotonic()
         try:
             while True:
+                now = time.monotonic()
+                if now >= deadline + period:
+                    # A late wakeup gets one fresh frame, not a catch-up pair.
+                    # Keep the original phase for sub-period wakeup jitter.
+                    deadline = now
                 await self.send_frame(build_telemetry(self.state))
-                await asyncio.sleep(1 / 60)
+                deadline += period
+                now = time.monotonic()
+                # Drop missed slots without delaying the next fresh sample.
+                # sleep(0) still yields cooperatively after an overrun.
+                deadline = max(now, deadline)
+                await asyncio.sleep(max(0.0, deadline - now))
         except asyncio.CancelledError:
             pass
 

@@ -1,3 +1,4 @@
+import asyncio
 from pathlib import Path
 
 from rov_firmware.models.config import McuBoard
@@ -46,18 +47,6 @@ def test_stable_same_core_replaces_reported_prerelease():
 
 def test_legacy_rc_spelling_never_matches():
     assert not mcu.mcu_versions_match("1.0.3-rc1", "1.0.3-rc1")
-
-
-def test_successful_flash_migration_removes_legacy_marker(tmp_path, monkeypatch):
-    monkeypatch.setattr(Path, "home", lambda: tmp_path)
-    firmware_dir = tmp_path / "mcu-firmware"
-    firmware_dir.mkdir()
-    marker = firmware_dir / ".pico-flashed-version"
-    marker.write_text("1.0.3-rc.1\n", encoding="utf-8")
-
-    mcu._remove_legacy_flashed_version_marker(McuBoard.PICO)
-
-    assert not marker.exists()
 
 
 def test_verified_picotool_write_survives_execute_failure():
@@ -123,3 +112,17 @@ def test_load_progress_emits_a_toast_when_visible(monkeypatch):
     assert percent == 50
     assert len(toast_calls) == 1
     assert toast_calls[0]["identifier"] == "firmware-flash"
+
+
+def test_mcu_flash_is_blocked_during_regulator_auto_tuning(rov_state, monkeypatch):
+    rov_state.regulator.auto_tuning_active = True
+
+    def unexpected_resolve(_board):
+        msg = "firmware resolution must not run while auto-tuning"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(mcu, "resolve_mcu_firmware", unexpected_resolve)
+
+    assert not asyncio.run(
+        mcu.flash_mcu_firmware(rov_state, McuBoard.PICO, show_toasts=False)
+    )

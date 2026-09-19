@@ -70,6 +70,7 @@ class ConfigPayload(CamelCaseModel):
 
     mutation_id: str | None = None
     config: RovConfig
+    error: str | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class Config(CamelCaseModel):
@@ -77,6 +78,13 @@ class Config(CamelCaseModel):
 
     type: Literal[MessageType.CONFIG] = MessageType.CONFIG
     payload: ConfigPayload
+
+
+class ConfirmConfig(CamelCaseModel):
+    """Application acknowledgement of an applied canonical config."""
+
+    type: Literal[MessageType.CONFIRM_CONFIG] = MessageType.CONFIRM_CONFIG
+    payload: str
 
 
 class StartThrusterTest(CamelCaseModel):
@@ -192,6 +200,7 @@ WebsocketMessage = Annotated[
     | SetConfig
     | ImportConfig
     | Config
+    | ConfirmConfig
     | StartThrusterTest
     | CancelThrusterTest
     | StartRegulatorAutoTuning

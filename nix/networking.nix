@@ -62,10 +62,6 @@
     ${nmcli} connection up "$CONNECTION"
     ${systemctl} restart --no-block dnsmasq.service
 
-    # At runtime the firmware server is still bound to the previous address.
-    # Restart it so it binds the new address; at boot try-restart is a no-op
-    # and the normal service ordering starts it later.
-    ${systemctl} try-restart --no-block manafish-firmware.service
   '';
 in {
   # Keep the onboard radios powered down; the ROV communicates over Ethernet.
@@ -94,29 +90,9 @@ in {
 
   environment.systemPackages = [networkScript];
 
-  # The network helper is run by root during boot and by `pi` after a runtime
-  # config change. Give both paths one transient location for the subnet-aware
-  # dnsmasq configuration.
-  systemd.tmpfiles.rules = ["d /run/manafish 0755 pi users -"];
-
-  # Applying a new ROV address must reload the matching DHCP pool and rebind
-  # the firmware server. Limit the firmware user to those two units.
-  security.polkit = {
-    enable = true;
-    extraConfig = ''
-      polkit.addRule(function (action, subject) {
-        if (
-          action.id == "org.freedesktop.systemd1.manage-units" &&
-          ["dnsmasq.service", "manafish-firmware.service"].indexOf(
-            action.lookup("unit")
-          ) >= 0 &&
-          subject.user == "pi"
-        ) {
-          return polkit.Result.YES;
-        }
-      });
-    '';
-  };
+  # The network helper runs as root during boot. Give it a transient location
+  # for the subnet-aware dnsmasq configuration.
+  systemd.tmpfiles.rules = ["d /run/manafish 0755 root root -"];
 
   services = {
     avahi = {
@@ -168,9 +144,6 @@ in {
       ExecStart = lib.getExe networkScript;
     };
   };
-
-  # The WebSocket config handler runs inside this restricted service.
-  systemd.services.manafish-firmware.path = [networkScript];
 
   systemd.services.dnsmasq = {
     after = ["manafish-network.service"];

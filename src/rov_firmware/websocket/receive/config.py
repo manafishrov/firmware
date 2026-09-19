@@ -3,12 +3,14 @@
 import asyncio
 import shutil
 import subprocess
-from typing import Any
+from typing import Any, cast
 
 from pydantic import ValidationError
 
+from ... import pico_protocol
 from ...log import log_info, log_warn
 from ...models.config import PartialRovConfig, RovConfig, apply_migrations
+from ...motor_safety import disruptive_motor_operation_blocker
 from ...rov_state import RovState
 from ...toast import ToastContent, toast_info, toast_success, toast_warn
 from ..message import Config, ConfigPayload
@@ -18,7 +20,17 @@ from ..state import websocket_state
 
 _DEVICE_REPORTED_FIELDS = ("firmwareVersion",)
 _APPLY_COMMAND_TIMEOUT_SECONDS = 10.0
-_SYSTEMCTL_TIMEOUT_SECONDS = 5.0
+_CONFIG_ACK_TIMEOUT_SECONDS = 5.0
+_PICO_CONFIG_FIELDS = {
+    "regulator",
+    "power",
+    "direction_coefficients",
+    "thruster_allocation",
+    "thruster_pin_setup",
+    "nullspace_vectors",
+    "thruster_protocol",
+    "dshot_speed",
+}
 
 
 async def handle_get_config(
@@ -33,7 +45,12 @@ async def handle_get_config(
     log_info("Sent config to client.")
 
 
-def _run_apply_command(binary: str, success_message: str, failure_message: str) -> bool:
+def _run_apply_command(
+    binary: str,
+    success_message: str,
+    failure_message: str,
+    *arguments: str,
+) -> bool:
     """Run a bounded system configuration helper and report its result."""
     path = shutil.which(binary)
     if path is None:
@@ -41,7 +58,7 @@ def _run_apply_command(binary: str, success_message: str, failure_message: str) 
         return False
     try:
         subprocess.run(  # noqa: S603
-            [path],
+            [path, *arguments],
             check=True,
             capture_output=True,
             timeout=_APPLY_COMMAND_TIMEOUT_SECONDS,
@@ -53,108 +70,6 @@ def _run_apply_command(binary: str, success_message: str, failure_message: str) 
         return False
 
 
-def _apply_ip_address(ip_address: str) -> bool:
-    return _run_apply_command(
-        "manafish-network",
-        f"Applied IP address change to {ip_address}.",
-        f"Failed to apply IP address change to {ip_address}",
-    )
-
-
-async def _restart_firmware() -> bool:
-    path = shutil.which("systemctl")
-    if path is None:
-        log_warn("systemctl not found in PATH.")
-        return False
-    try:
-        process = await asyncio.create_subprocess_exec(
-            path,
-            "try-restart",
-            "--no-block",
-            "manafish-firmware.service",
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
-        )
-    except OSError as error:
-        log_warn(f"Failed to start systemctl: {error}.")
-        return False
-
-    try:
-        _, stderr = await asyncio.wait_for(
-            process.communicate(),
-            timeout=_SYSTEMCTL_TIMEOUT_SECONDS,
-        )
-    except TimeoutError:
-        process.kill()
-        await process.wait()
-        log_warn("Timed out while requesting the firmware restart.")
-        return False
-
-    if process.returncode != 0:
-        details = stderr.decode(errors="replace").strip()
-        suffix = f": {details}" if details else "."
-        log_warn(f"Failed to restart firmware after the WebSocket port change{suffix}")
-        return False
-
-    log_info("Restarting firmware to apply the WebSocket port change.")
-    return True
-
-
-async def _apply_connection_change(
-    state: RovState,
-    previous_config: RovConfig,
-) -> bool:
-    """Apply connection settings, restoring the persisted config on failure."""
-    ip_changed = state.rov_config.ip_address != previous_config.ip_address
-    port_changed = state.rov_config.websocket_port != previous_config.websocket_port
-    if not ip_changed and not port_changed:
-        return True
-
-    if ip_changed:
-        toast_info(
-            identifier=None,
-            content=ToastContent(message_key="toasts_rov_ip_address_changing"),
-            action=None,
-        )
-        applied = await asyncio.to_thread(
-            _apply_ip_address,
-            state.rov_config.ip_address,
-        )
-    else:
-        applied = True
-
-    # The network helper already restarts the firmware after changing the
-    # address. That single restart also applies a simultaneous port change.
-    if applied and port_changed and not ip_changed:
-        applied = await _restart_firmware()
-
-    if applied:
-        return True
-
-    failed_ip = state.rov_config.ip_address
-    state.rov_config = previous_config
-    state.rov_config.save()
-    log_warn("Restored the previous ROV connection config after apply failure.")
-
-    if ip_changed:
-        rollback_applied = await asyncio.to_thread(
-            _apply_ip_address,
-            previous_config.ip_address,
-        )
-        if not rollback_applied:
-            log_warn(
-                f"Could not restore network address {previous_config.ip_address} "
-                f"after failed change to {failed_ip}."
-            )
-
-    toast_warn(
-        identifier=None,
-        content=ToastContent(message_key="toasts_rov_connection_restart_failed"),
-        action=None,
-    )
-    return False
-
-
 def _connection_changed(current: RovConfig, previous: RovConfig) -> bool:
     return (
         current.ip_address != previous.ip_address
@@ -162,23 +77,22 @@ def _connection_changed(current: RovConfig, previous: RovConfig) -> bool:
     )
 
 
-def _config_message(state: RovState, mutation_id: str | None = None) -> Config:
+def _connection_restart_message_key(current: RovConfig, previous: RovConfig) -> str:
+    if current.ip_address != previous.ip_address:
+        return "toasts_rov_connection_restart_required"
+    return "toasts_rov_connection_settings_restart_required"
+
+
+def _config_message(
+    state: RovState, mutation_id: str | None = None, error: str | None = None
+) -> Config:
     return Config(
         payload=ConfigPayload(
             mutation_id=mutation_id,
             config=state.rov_config,
+            error=error,
         )
     )
-
-
-async def _send_config_before_connection_change(
-    state: RovState, mutation_id: str | None
-) -> None:
-    message = _config_message(state, mutation_id)
-    if websocket_state.is_client_connected:
-        await send_message_and_wait(message)
-    else:
-        await get_message_queue().put(message)
 
 
 async def _restore_after_config_send_failure(
@@ -187,12 +101,12 @@ async def _restore_after_config_send_failure(
     error: Exception,
     mutation_id: str | None,
 ) -> None:
-    state.rov_config = previous_config
-    state.rov_config.save()
+    if not await _persist_candidate(state, previous_config, mutation_id):
+        return
     log_warn(
         f"Did not apply connection settings because config acknowledgement failed: {error}"
     )
-    await get_message_queue().put(_config_message(state, mutation_id))
+    await get_message_queue().put(_config_message(state, mutation_id, str(error)))
     toast_warn(
         identifier=None,
         content=ToastContent(message_key="toasts_rov_connection_restart_failed"),
@@ -200,21 +114,144 @@ async def _restore_after_config_send_failure(
     )
 
 
-async def _confirm_connection_config(
+async def _await_connection_config_ack(  # noqa: PLR0913 - rollback inputs stay explicit
     state: RovState,
     previous_config: RovConfig,
-    mutation_id: str | None,
-) -> bool:
-    if not _connection_changed(state.rov_config, previous_config):
-        return True
+    mutation_id: str,
+    ack: asyncio.Future[None],
+    camera_changed: bool,
+    success_message_key: str,
+    restart_message_key: str,
+) -> None:
     try:
-        await _send_config_before_connection_change(state, mutation_id)
+        await asyncio.wait_for(ack, timeout=_CONFIG_ACK_TIMEOUT_SECONDS)
     except Exception as error:
         await _restore_after_config_send_failure(
             state, previous_config, error, mutation_id
         )
+        return
+    finally:
+        state.config_ack_waiters.pop(mutation_id, None)
+
+    if camera_changed:
+        await asyncio.to_thread(_apply_camera)
+    toast_success(
+        identifier=None,
+        content=ToastContent(message_key=success_message_key),
+        action=None,
+    )
+    toast_info(
+        identifier=None,
+        content=ToastContent(message_key=restart_message_key),
+        action=None,
+    )
+
+
+async def _start_connection_change(
+    state: RovState,
+    previous_config: RovConfig,
+    mutation_id: str | None,
+    *,
+    camera_changed: bool,
+    success_message_key: str,
+) -> bool:
+    """Persist connection settings and confirm the reboot-required contract."""
+    restart_message_key = _connection_restart_message_key(
+        state.rov_config, previous_config
+    )
+    if mutation_id is None or not websocket_state.is_client_connected:
+        if camera_changed:
+            await asyncio.to_thread(_apply_camera)
+        toast_success(
+            identifier=None,
+            content=ToastContent(message_key=success_message_key),
+            action=None,
+        )
+        toast_info(
+            identifier=None,
+            content=ToastContent(message_key=restart_message_key),
+            action=None,
+        )
+        return True
+
+    ack = asyncio.get_running_loop().create_future()
+    state.config_ack_waiters[mutation_id] = ack
+    try:
+        await send_message_and_wait(_config_message(state, mutation_id))
+    except Exception as error:
+        state.config_ack_waiters.pop(mutation_id, None)
+        await _restore_after_config_send_failure(
+            state, previous_config, error, mutation_id
+        )
         return False
+
+    task = asyncio.create_task(
+        _await_connection_config_ack(
+            state,
+            previous_config,
+            mutation_id,
+            ack,
+            camera_changed,
+            success_message_key,
+            restart_message_key,
+        )
+    )
+    state.connection_change_task = task
+
+    def clear_task(completed: asyncio.Task[None]) -> None:
+        if state.connection_change_task is completed:
+            state.connection_change_task = None
+
+    task.add_done_callback(clear_task)
     return True
+
+
+def handle_confirm_config(state: RovState, mutation_id: str) -> None:
+    """Confirm that the app persisted the connection target for the next boot."""
+    waiter = state.config_ack_waiters.get(mutation_id)
+    if waiter is not None and not waiter.done():
+        waiter.set_result(None)
+
+
+def _disruptive_config_blocker(
+    state: RovState, previous: RovConfig, candidate: RovConfig
+) -> str | None:
+    changed = (
+        previous.mcu_board != candidate.mcu_board
+        or previous.thruster_protocol != candidate.thruster_protocol
+        or previous.dshot_speed != candidate.dshot_speed
+    )
+    return disruptive_motor_operation_blocker(state) if changed else None
+
+
+async def reject_invalid_config_message(
+    state: RovState, data: object, reason: str
+) -> None:
+    """Preserve mutation correlation even when payload validation fails before dispatch."""
+    if not isinstance(data, dict):
+        return
+    message = cast(dict[str, Any], data)
+    if message.get("type") not in ("setConfig", "importConfig"):
+        return
+    payload = message.get("payload")
+    if isinstance(payload, dict) and isinstance(payload.get("mutationId"), str):
+        await _reject_config_mutation(state, payload["mutationId"], reason)
+
+
+async def _reject_config_mutation(
+    state: RovState, mutation_id: str | None, reason: str
+) -> None:
+    log_warn(f"Rejected disruptive config mutation because {reason}.")
+    await get_message_queue().put(_config_message(state, mutation_id, reason))
+    toast_warn(
+        identifier=None,
+        content=ToastContent(
+            message_key="toasts_disruptive_config_blocked",
+            description_key="toasts_disruptive_config_blocked_description",
+            description_args={"reason": reason},
+        ),
+        action=None,
+    )
 
 
 def _apply_camera() -> None:
@@ -225,7 +262,118 @@ def _apply_camera() -> None:
     )
 
 
+async def _finish_config(
+    state: RovState,
+    mutation_id: str | None,
+    camera_changed: bool,
+    success_key: str,
+    skipped: list[str] | None = None,
+) -> None:
+    """Canonical response follows persistence; success follows the app confirmation."""
+    ack: asyncio.Future[None] | None = None
+    if mutation_id is not None and websocket_state.is_client_connected:
+        ack = asyncio.get_running_loop().create_future()
+        state.config_ack_waiters[mutation_id] = ack
+    await get_message_queue().put(_config_message(state, mutation_id))
+
+    async def finish() -> None:
+        try:
+            if ack is not None:
+                await asyncio.wait_for(ack, _CONFIG_ACK_TIMEOUT_SECONDS)
+            if camera_changed:
+                await asyncio.to_thread(_apply_camera)
+            if skipped:
+                toast_warn(
+                    identifier=None,
+                    content=ToastContent(
+                        message_key="toasts_rov_config_imported_partial",
+                        message_args={
+                            "count": len(skipped),
+                            "fields": ", ".join(skipped),
+                        },
+                    ),
+                    action=None,
+                )
+            else:
+                toast_success(
+                    identifier=None,
+                    content=ToastContent(message_key=success_key),
+                    action=None,
+                )
+        except TimeoutError:
+            log_warn(
+                "Config persisted/applied but app did not confirm; no success toast"
+            )
+        finally:
+            if mutation_id is not None:
+                state.config_ack_waiters.pop(mutation_id, None)
+
+    if ack is None:
+        await finish()
+    else:
+        task = asyncio.create_task(finish())
+        state.config_confirmation_tasks.add(task)
+        task.add_done_callback(state.config_confirmation_tasks.discard)
+
+
+async def _persist_candidate(
+    state: RovState,
+    candidate: RovConfig,
+    mutation_id: str | None,
+    *,
+    force_pico: bool = False,
+) -> bool:
+    """Keep canonical state/persistence unchanged until the whole Pico image is applied."""
+    try:
+        image = pico_protocol.settings_image(candidate)
+        pico_changed = force_pico
+        if not pico_changed:
+            try:
+                previous_image = pico_protocol.settings_image(state.rov_config)
+            except ValueError:
+                # A valid corrective candidate must be able to repair an old
+                # unrepresentable configuration; never clamp/truncate the old one.
+                pico_changed = True
+            else:
+                pico_changed = image != previous_image
+        if pico_changed:
+            if state.pico is None:
+                msg = "Pico control is unavailable"
+                raise ConnectionError(msg)
+            await state.pico.apply_config(candidate)
+        candidate.save()
+    except Exception as error:
+        await _reject_config_mutation(state, mutation_id, str(error))
+        return False
+    state.rov_config = candidate
+    if pico_changed and state.pico is not None:
+        state.pico.confirm_persisted_config()
+    return True
+
+
 async def handle_set_config(
+    state: RovState, payload: PartialRovConfig, mutation_id: str | None = None
+) -> None:
+    """Serialize complete config transactions, including imports and persistence."""
+    async with state.config_mutation_lock:
+        try:
+            await _set_config(state, payload, mutation_id)
+        except (ValidationError, ValueError, OSError) as error:
+            await _reject_config_mutation(state, mutation_id, str(error))
+
+
+async def handle_import_config(
+    state: RovState, payload: dict[str, Any], mutation_id: str | None = None
+) -> None:
+    """Imports obey the same actual-apply barrier as individual settings forms."""
+    async with state.config_mutation_lock:
+        try:
+            await _import_config(state, payload, mutation_id)
+        except (ValidationError, ValueError, OSError) as error:
+            await _reject_config_mutation(state, mutation_id, str(error))
+
+
+async def _set_config(
     state: RovState,
     payload: PartialRovConfig,
     mutation_id: str | None = None,
@@ -237,6 +385,13 @@ async def handle_set_config(
         payload: Partial ROV configuration update.
         mutation_id: Identifier echoed in the canonical config response.
     """
+    pending = state.connection_change_task
+    if pending is not None and not pending.done():
+        await _reject_config_mutation(
+            state, mutation_id, "another connection change is still being applied"
+        )
+        return
+
     previous_config = state.rov_config.model_copy(deep=True)
     previous_camera = previous_config.camera
     current_data = state.rov_config.model_dump(by_alias=False)
@@ -248,27 +403,33 @@ async def handle_set_config(
         )
         update_data["camera"] = {**current_data["camera"], **camera_update}
     current_data.update(update_data)
-    state.rov_config = RovConfig.model_validate(current_data)
-    state.rov_config.save()
-    log_info("Received and applied config update.")
+    candidate = RovConfig.model_validate(current_data)
+    blocker = _disruptive_config_blocker(state, previous_config, candidate)
+    if blocker is not None:
+        await _reject_config_mutation(state, mutation_id, blocker)
+        return
+    if not await _persist_candidate(
+        state,
+        candidate,
+        mutation_id,
+        force_pico=bool(payload.model_fields_set & _PICO_CONFIG_FIELDS),
+    ):
+        return
+    log_info("Received, acknowledged and persisted config update.")
     connection_changed = _connection_changed(state.rov_config, previous_config)
-    if not await _confirm_connection_config(state, previous_config, mutation_id):
-        return
-    if not await _apply_connection_change(state, previous_config):
-        await get_message_queue().put(_config_message(state, mutation_id))
+    camera_changed = state.rov_config.camera != previous_camera
+    if connection_changed:
+        await _start_connection_change(
+            state,
+            previous_config,
+            mutation_id,
+            camera_changed=camera_changed,
+            success_message_key="toasts_rov_config_set_successfully",
+        )
         return
 
-    if not connection_changed:
-        await get_message_queue().put(_config_message(state, mutation_id))
-    if state.rov_config.camera != previous_camera:
-        await asyncio.to_thread(_apply_camera)
-
-    toast_success(
-        identifier=None,
-        content=ToastContent(
-            message_key="toasts_rov_config_set_successfully",
-        ),
-        action=None,
+    await _finish_config(
+        state, mutation_id, camera_changed, "toasts_rov_config_set_successfully"
     )
 
 
@@ -294,7 +455,7 @@ def _tolerant_merge(
     return RovConfig.model_validate(working), skipped
 
 
-async def handle_import_config(
+async def _import_config(
     state: RovState,
     payload: dict[str, Any],
     mutation_id: str | None = None,
@@ -307,6 +468,13 @@ async def handle_import_config(
             newer firmware version.
         mutation_id: Identifier echoed in the canonical config response.
     """
+    pending = state.connection_change_task
+    if pending is not None and not pending.done():
+        await _reject_config_mutation(
+            state, mutation_id, "another connection change is still being applied"
+        )
+        return
+
     previous_config = state.rov_config.model_copy(deep=True)
     previous_camera = previous_config.camera
     migration_input = dict(payload)
@@ -330,39 +498,35 @@ async def handle_import_config(
         new_config, skipped = _tolerant_merge(current, raw)
 
     new_config.firmware_version = state.rov_config.firmware_version
-    state.rov_config = new_config
-    state.rov_config.save()
+    blocker = _disruptive_config_blocker(state, previous_config, new_config)
+    if blocker is not None:
+        await _reject_config_mutation(state, mutation_id, blocker)
+        return
+    if not await _persist_candidate(
+        state,
+        new_config,
+        mutation_id,
+        force_pico=bool(
+            set(raw)
+            & {RovConfig.model_fields[name].alias for name in _PICO_CONFIG_FIELDS}
+        ),
+    ):
+        return
     log_info(
         f"Imported config from app. Skipped fields: {skipped or 'none'}.",
     )
     connection_changed = _connection_changed(state.rov_config, previous_config)
-    if not await _confirm_connection_config(state, previous_config, mutation_id):
-        return
-    if not await _apply_connection_change(state, previous_config):
-        await get_message_queue().put(_config_message(state, mutation_id))
-        return
-
-    if not connection_changed:
-        await get_message_queue().put(_config_message(state, mutation_id))
-    if state.rov_config.camera != previous_camera:
-        await asyncio.to_thread(_apply_camera)
-
-    if skipped:
-        toast_warn(
-            identifier=None,
-            content=ToastContent(
-                message_key="toasts_rov_config_imported_partial",
-                message_args={
-                    "count": len(skipped),
-                    "fields": ", ".join(skipped),
-                },
-            ),
-            action=None,
+    camera_changed = state.rov_config.camera != previous_camera
+    if connection_changed:
+        await _start_connection_change(
+            state,
+            previous_config,
+            mutation_id,
+            camera_changed=camera_changed,
+            success_message_key="toasts_rov_config_imported",
         )
         return
 
-    toast_success(
-        identifier=None,
-        content=ToastContent(message_key="toasts_rov_config_imported"),
-        action=None,
+    await _finish_config(
+        state, mutation_id, camera_changed, "toasts_rov_config_imported", skipped
     )

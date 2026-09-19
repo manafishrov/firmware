@@ -310,11 +310,11 @@ def test_rov_config_round_trip_nullspace_vectors_populated():
 def test_camera_defaults_match_stream_baseline():
     camera = Camera()
 
-    assert camera.width == 1440
-    assert camera.height == 1080
+    assert camera.width == 1024
+    assert camera.height == 768
     assert camera.framerate == 30
     assert camera.crop_fov is False
-    assert camera.bitrate == 20000000
+    assert camera.bitrate == 3_538_944
     assert camera.keyframe_interval == 30
     assert camera.profile == "baseline"
     assert camera.level == "4.2"

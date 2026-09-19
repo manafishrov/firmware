@@ -18,7 +18,12 @@ from .receive.actions import (
     handle_direction_vector,
     handle_start_thruster_test,
 )
-from .receive.config import handle_get_config, handle_import_config, handle_set_config
+from .receive.config import (
+    handle_confirm_config,
+    handle_get_config,
+    handle_import_config,
+    handle_set_config,
+)
 from .receive.mcu import handle_flash_mcu_firmware
 from .receive.regulator import (
     handle_cancel_regulator_auto_tuning,
@@ -96,6 +101,8 @@ async def handle_message(
     match message.type:
         case MessageType.GET_CONFIG:
             await handle_get_config(state)
+        case MessageType.CONFIRM_CONFIG:
+            handle_confirm_config(state, cast(str, payload))
         case MessageType.START_REGULATOR_AUTO_TUNING:
             await handle_start_regulator_auto_tuning(state)
         case MessageType.CANCEL_REGULATOR_AUTO_TUNING:

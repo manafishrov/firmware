@@ -10,8 +10,11 @@ class RovStatus(CamelCaseModel):
     auto_stabilization: bool
     depth_hold: bool
     battery_percentage: int
-    current_draw: int
+    current_draw: float | None
     pi_undervoltage: bool
+    thruster_control_ready: bool
+    thruster_protocol_state: str
+    thruster_protocol_error: str | None
     health: SystemHealth
     device_info: DeviceInfo
     esc_firmware_update: EscFirmwareUpdate

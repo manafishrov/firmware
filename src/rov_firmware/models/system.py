@@ -20,16 +20,11 @@ class DeviceInfo(CamelCaseModel):
     """Read-only firmware information reported by connected devices."""
 
     mcu_firmware_version: str = ""
+    mcu_firmware_version_status: str = "querying"
     esc_firmware_versions: list[str | None] = Field(
         default_factory=lambda: [None] * NUM_MOTORS
     )
-
-
-class EscFirmwareUpdateOrigin(StrEnum):
-    """How the current ESC firmware update was started."""
-
-    AUTOMATIC = "automatic"
-    MANUAL = "manual"
+    esc_firmware_version_status: str = "discovering"
 
 
 class EscFirmwareUpdateStage(StrEnum):
@@ -41,6 +36,8 @@ class EscFirmwareUpdateStage(StrEnum):
     PROGRAMMING = "programming"
     AWAITING_TELEMETRY = "awaitingTelemetry"
     SUCCEEDED = "succeeded"
+    UNCONFIRMED = "unconfirmed"
+    VERSION_MISMATCH = "versionMismatch"
     FAILED = "failed"
 
 
@@ -48,12 +45,12 @@ class EscFirmwareUpdate(CamelCaseModel):
     """Live ESC firmware update state exposed to the desktop app."""
 
     active: bool = False
-    origin: EscFirmwareUpdateOrigin | None = None
     stage: EscFirmwareUpdateStage = EscFirmwareUpdateStage.IDLE
     progress: int = 0
     current_esc: int | None = None
     target_version: str | None = None
     error: str | None = None
+    recovery_required: bool = False
 
 
 class SystemStatus(BaseModel):
@@ -62,3 +59,6 @@ class SystemStatus(BaseModel):
     auto_stabilization: bool = False
     depth_hold: bool = False
     battery_percentage: float = 0
+    thruster_control_ready: bool = False
+    thruster_protocol_state: str = "disconnected"
+    thruster_protocol_error: str | None = None

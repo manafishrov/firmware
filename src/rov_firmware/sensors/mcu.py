@@ -4,7 +4,11 @@ import asyncio
 import struct
 import time
 
+from .. import pico_protocol as wire
 from ..constants import (
+    ESC_FIRMWARE_UPDATE_STATUS_RECOVERY_REQUIRED,
+    ESC_FIRMWARE_USB_STATUS_PACKET_SIZE,
+    ESC_FIRMWARE_USB_STATUS_START_BYTE,
     ESC_FIRMWARE_VERSION_MAX_LENGTH,
     LOG_LEVEL_ERROR,
     LOG_LEVEL_INFO,
@@ -12,39 +16,46 @@ from ..constants import (
     LOG_PACKET_HEADER_SIZE,
     LOG_PACKET_START_BYTE,
     MCU_AUTO_UPDATE_WINDOW_S,
+    MCU_CURRENT_BOARD_IDS,
+    MCU_CURRENT_MAX_MILLIAMPS,
     MCU_PROTOCOL_DSHOT,
+    MCU_PROTOCOL_PWM,
     MCU_RELEASE_VERSION_MAX_LENGTH,
     MCU_RELEASE_VERSION_PACKET_OVERHEAD,
     MCU_RELEASE_VERSION_START_BYTE,
+    MCU_RUNTIME_CONFIG_STATE_APPLIED,
+    MCU_RUNTIME_CONFIG_STATUS_PACKET_SIZE,
+    MCU_RUNTIME_CONFIG_STATUS_START_BYTE,
     MCU_SERIAL_READ_TIMEOUT_S,
     MCU_TELEMETRY_BATCH_ENTRY_SIZE,
     MCU_TELEMETRY_BATCH_MAX_ITEMS,
     MCU_TELEMETRY_BATCH_START_BYTE,
     MCU_TELEMETRY_PACKET_SIZE,
+    MCU_TELEMETRY_SIGNAL_QUALITY_UNAVAILABLE,
     MCU_TELEMETRY_STALE_TIMEOUT_S,
     MCU_TELEMETRY_START_BYTE,
+    MCU_TELEMETRY_TYPE_CALIBRATED_BOARD_CURRENT,
     MCU_TELEMETRY_TYPE_CURRENT,
+    MCU_TELEMETRY_TYPE_CURRENT_BASELINE,
     MCU_TELEMETRY_TYPE_ERPM,
     MCU_TELEMETRY_TYPE_ESC_VERSION_CHUNK,
     MCU_TELEMETRY_TYPE_ESC_VERSION_COMPLETE,
+    MCU_TELEMETRY_TYPE_ESC_VERSION_DISCOVERY_COMPLETE,
     MCU_TELEMETRY_TYPE_ESC_VERSION_LENGTH,
     MCU_TELEMETRY_TYPE_SIGNAL_QUALITY,
     MCU_TELEMETRY_TYPE_TEMPERATURE,
     MCU_TELEMETRY_TYPE_VOLTAGE,
-    MCU_VERSION_PACKET_SIZE,
-    MCU_VERSION_START_BYTE,
     NUM_MOTORS,
 )
+from ..diagnostics import log_diagnostic
 from ..esc_firmware import (
-    esc_firmware_update_required,
-    flash_esc_firmware,
+    check_esc_firmware_confirmation,
     is_valid_esc_firmware_version,
-    resolve_esc_firmware,
+    set_esc_firmware_recovery_required,
 )
 from ..log import log_error, log_info, log_warn
 from ..models.config import ThrusterProtocol
 from ..models.log import LogLevel, LogOrigin
-from ..models.system import EscFirmwareUpdateStage
 from ..rov_state import RovState
 from ..serial import SerialManager
 from ..version import is_valid_semver
@@ -55,16 +66,19 @@ from ..websocket.receive.mcu import (
 )
 
 
-_MAX_READ_BUFFER_SIZE = 512
+_MAX_READ_BUFFER_SIZE = 2 * (wire.MAX_PAYLOAD + wire.OVERHEAD)
 _READ_CHUNK_SIZE = 128
 _TELEMETRY_BATCH_MIN_PACKET_SIZE = 3
 _TELEMETRY_START_TOKEN = bytes((MCU_TELEMETRY_START_BYTE,))
 _TELEMETRY_BATCH_START_TOKEN = bytes((MCU_TELEMETRY_BATCH_START_BYTE,))
 _LOG_PACKET_START_TOKEN = bytes((LOG_PACKET_START_BYTE,))
-_VERSION_PACKET_START_TOKEN = bytes((MCU_VERSION_START_BYTE,))
+_RUNTIME_CONFIG_STATUS_PACKET_START_TOKEN = bytes(
+    (MCU_RUNTIME_CONFIG_STATUS_START_BYTE,)
+)
 _RELEASE_VERSION_PACKET_START_TOKEN = bytes((MCU_RELEASE_VERSION_START_BYTE,))
+_ESC_FIRMWARE_STATUS_START_TOKEN = bytes((ESC_FIRMWARE_USB_STATUS_START_BYTE,))
 _TELEMETRY_FIELDS = ("erpm", "voltage", "temperature", "current", "signal_quality")
-_ESC_VERSION_DISCOVERY_DELAY_S = 2.0
+_INVALID_PACKET_LOG_INTERVAL_S = 5.0
 _ESC_VERSION_TYPES = (
     MCU_TELEMETRY_TYPE_ESC_VERSION_LENGTH,
     MCU_TELEMETRY_TYPE_ESC_VERSION_CHUNK,
@@ -111,12 +125,20 @@ class McuSensor:
         self._last_telemetry_time: list[list[float]] = [
             [0.0] * len(_TELEMETRY_FIELDS) for _ in range(NUM_MOTORS)
         ]
+        self._diagnostic_times = [
+            [0.0] * len(_TELEMETRY_FIELDS) for _ in range(NUM_MOTORS)
+        ]
+        self._diagnostic_values: list[list[int | float | None]] = [
+            [None] * len(_TELEMETRY_FIELDS) for _ in range(NUM_MOTORS)
+        ]
+        self._diagnostic_generation = serial_manager.connection_generation
+        self._diagnostic_erpm_min: list[int | None] = [None] * NUM_MOTORS
+        self._diagnostic_erpm_max: list[int | None] = [None] * NUM_MOTORS
+        self.invalid_usb_packets = 0
+        self._last_invalid_log = float("-inf")
         self._startup_time: float = time.monotonic()
         self._flash_task: asyncio.Task[None] | None = None
         self._mcu_auto_flash_attempted = False
-        self._esc_firmware_flash_task: asyncio.Task[None] | None = None
-        self._esc_auto_flash_attempted = False
-        self._esc_firmware_reconcile_task: asyncio.Task[None] | None = None
         self._esc_version_lengths: list[int | None] = [None] * NUM_MOTORS
         self._esc_version_buffers: list[bytearray] = [
             bytearray() for _ in range(NUM_MOTORS)
@@ -124,32 +146,26 @@ class McuSensor:
         self._esc_version_next_chunks: list[int] = [0] * NUM_MOTORS
         self._invalid_release_warning_generation = -1
         self._warned_invalid_release_versions: set[str] = set()
+        self._extended_since: float | None = None
+        self._deferred_release: tuple[str, str | None] | None = None
 
     async def read_loop(self) -> None:
         """Read telemetry data from the MCU in a loop."""
         read_buffer = bytearray()
         while True:
             data = await self._read_chunk()
+            self._expire_stale_telemetry()
+            if self._deferred_release is not None:
+                pico = self.state.pico
+                if pico is None or pico.capability_checked:
+                    release = self._deferred_release
+                    self._deferred_release = None
+                    self._auto_update_mcu_if_needed(*release)
+            check_esc_firmware_confirmation(self.state)
             if data is None:
                 await asyncio.sleep(1)
                 continue
             self._consume_read_buffer(read_buffer, data)
-            self._expire_stale_telemetry()
-
-    async def shutdown(self) -> None:
-        """Cancel MCU-owned ESC tasks before the serial connection closes."""
-        tasks = [
-            task
-            for task in (
-                self._esc_firmware_flash_task,
-                self._esc_firmware_reconcile_task,
-            )
-            if task is not None and not task.done()
-        ]
-        for task in tasks:
-            _ = task.cancel()
-        if tasks:
-            _ = await asyncio.gather(*tasks, return_exceptions=True)
 
     async def _read_chunk(self) -> bytes | None:
         if not await self.serial_manager.ensure_connection():
@@ -180,6 +196,26 @@ class McuSensor:
         return data
 
     def _consume_read_buffer(self, read_buffer: bytearray, data: bytes) -> None:
+        if self._diagnostic_generation != self.serial_manager.connection_generation:
+            read_buffer.clear()
+            self._extended_since = None
+            self.state.mcu_telemetry.clear_board_current()
+            self._diagnostic_generation = self.serial_manager.connection_generation
+            self._diagnostic_times = [
+                [0.0] * len(_TELEMETRY_FIELDS) for _ in range(NUM_MOTORS)
+            ]
+            self._diagnostic_values = [
+                [None] * len(_TELEMETRY_FIELDS) for _ in range(NUM_MOTORS)
+            ]
+            self._diagnostic_erpm_min = [None] * NUM_MOTORS
+            self._diagnostic_erpm_max = [None] * NUM_MOTORS
+        if (
+            self._extended_since is not None
+            and time.monotonic() - self._extended_since >= wire.FRAME_TIMEOUT
+        ):
+            # Never interpret legacy start bytes embedded in an abandoned frame.
+            read_buffer.clear()
+            self._extended_since = None
         read_buffer.extend(data)
         search_start = 0
 
@@ -203,21 +239,77 @@ class McuSensor:
                 read_buffer.clear()
                 return
 
-    def _consume_next_packet(
+    def _consume_next_packet(  # noqa: PLR0911 - packet types have distinct parsers
         self, read_buffer: bytearray, start_idx: int
     ) -> int | None:
         packet_type = read_buffer[start_idx]
+        if packet_type == wire.START:
+            return self._try_consume_extended(read_buffer, start_idx)
         if packet_type == MCU_TELEMETRY_BATCH_START_BYTE:
             return self._try_consume_telemetry_batch(read_buffer, start_idx)
         if packet_type == MCU_TELEMETRY_START_BYTE:
             return self._try_consume_telemetry(read_buffer, start_idx)
         if packet_type == LOG_PACKET_START_BYTE:
             return self._try_consume_log(read_buffer, start_idx)
-        if packet_type == MCU_VERSION_START_BYTE:
-            return self._try_consume_version(read_buffer, start_idx)
+        if packet_type == MCU_RUNTIME_CONFIG_STATUS_START_BYTE:
+            return self._try_consume_runtime_config_status(read_buffer, start_idx)
         if packet_type == MCU_RELEASE_VERSION_START_BYTE:
             return self._try_consume_release_version(read_buffer, start_idx)
+        if packet_type == ESC_FIRMWARE_USB_STATUS_START_BYTE:
+            return self._try_consume_esc_firmware_status(read_buffer, start_idx)
         return start_idx + 1
+
+    def _try_consume_extended(
+        self, read_buffer: bytearray, start_idx: int
+    ) -> int | None:
+        if self._extended_since is None:
+            self._extended_since = time.monotonic()
+        if len(read_buffer) < start_idx + wire.HEADER.size:
+            return None
+        length = read_buffer[start_idx + 4] | (read_buffer[start_idx + 5] << 8)
+        if length > wire.MAX_PAYLOAD:
+            self._extended_since = None
+            return len(read_buffer)
+        end = start_idx + wire.OVERHEAD + length
+        if len(read_buffer) < end:
+            return None
+        self._extended_since = None
+        packet = bytes(read_buffer[start_idx:end])
+        try:
+            frame = wire.decode(packet)
+        except ValueError:
+            self._record_invalid_packet(packet)
+        else:
+            if self.state.pico is not None:
+                self.state.pico.receive(frame)
+        return end
+
+    def _try_consume_esc_firmware_status(
+        self, read_buffer: bytearray, start_idx: int
+    ) -> int | None:
+        end_idx = start_idx + ESC_FIRMWARE_USB_STATUS_PACKET_SIZE
+        if len(read_buffer) < end_idx:
+            return None
+        packet = memoryview(read_buffer)[start_idx:end_idx]
+        checksum = 0
+        for value in packet[:-1]:
+            checksum ^= value
+        if (
+            checksum == packet[-1]
+            and packet[1] == ESC_FIRMWARE_UPDATE_STATUS_RECOVERY_REQUIRED
+        ):
+            self._handle_esc_firmware_recovery_required()
+        return end_idx
+
+    def _handle_esc_firmware_recovery_required(self) -> None:
+        try:
+            set_esc_firmware_recovery_required(self.state, None)
+        except OSError as error:
+            log_error(f"Could not persist Pico ESC recovery state: {error}")
+            self.state.esc_firmware_recovery_required = True
+            self.state.esc_firmware_update.recovery_required = True
+            self.state.system_status.thruster_control_ready = False
+        log_warn("Pico reports that ESC firmware recovery is required")
 
     def _try_consume_telemetry(
         self, read_buffer: bytearray, start_idx: int
@@ -229,6 +321,8 @@ class McuSensor:
         packet = memoryview(read_buffer)[start_idx:end_idx]
         if self._validate_telemetry_packet(packet):
             self._update_telemetry(packet)
+        else:
+            self._record_invalid_packet(packet)
         return end_idx
 
     def _try_consume_telemetry_batch(
@@ -248,6 +342,8 @@ class McuSensor:
         packet = memoryview(read_buffer)[start_idx:end_idx]
         if self._validate_telemetry_batch_packet(packet):
             self._update_telemetry_batch(packet)
+        else:
+            self._record_invalid_packet(packet)
         return end_idx
 
     @staticmethod
@@ -264,24 +360,26 @@ class McuSensor:
             McuSensor._handle_log_packet(packet)
         return end_idx
 
-    def _try_consume_version(
+    def _try_consume_runtime_config_status(
         self, read_buffer: bytearray, start_idx: int
     ) -> int | None:
-        end_idx = start_idx + MCU_VERSION_PACKET_SIZE
+        end_idx = start_idx + MCU_RUNTIME_CONFIG_STATUS_PACKET_SIZE
         if len(read_buffer) < end_idx:
             return None
         packet = memoryview(read_buffer)[start_idx:end_idx]
-        if self._validate_version_packet(packet):
-            self._handle_version_packet(packet)
+        if self._validate_runtime_config_status_packet(packet):
+            self._handle_runtime_config_status_packet(packet)
+        else:
+            self._record_invalid_packet(packet)
         return end_idx
 
     def _try_consume_release_version(
         self, read_buffer: bytearray, start_idx: int
     ) -> int | None:
-        header_end_idx = start_idx + 2
+        header_end_idx = start_idx + 3
         if len(read_buffer) < header_end_idx:
             return None
-        version_length = read_buffer[start_idx + 1]
+        version_length = read_buffer[start_idx + 2]
         if version_length == 0 or version_length > MCU_RELEASE_VERSION_MAX_LENGTH:
             return start_idx + 1
         end_idx = start_idx + version_length + MCU_RELEASE_VERSION_PACKET_OVERHEAD
@@ -290,16 +388,96 @@ class McuSensor:
         packet = memoryview(read_buffer)[start_idx:end_idx]
         if self._validate_release_version_packet(packet):
             self._handle_release_version_packet(packet)
+        else:
+            self._record_invalid_packet(packet)
         return end_idx
+
+    def _record_invalid_packet(self, packet: bytes | bytearray | memoryview) -> None:
+        self.invalid_usb_packets += 1
+        now = time.monotonic()
+        if now - self._last_invalid_log >= _INVALID_PACKET_LOG_INTERVAL_S:
+            log_diagnostic(
+                "invalid_usb_packet",
+                generation=self.serial_manager.connection_generation,
+                count=self.invalid_usb_packets,
+                packet_bytes=len(packet),
+                first_32_bytes_hex=bytes(packet[:32]).hex(),
+            )
+            self._last_invalid_log = now
+
+    def diagnostic_snapshot(self, now: float) -> list[dict[str, object]]:
+        """Last-known values and ages, separate from expired live telemetry."""
+        channels: list[dict[str, object]] = []
+        for channel in range(NUM_MOTORS):
+            row: dict[str, object] = {"channel": channel + 1}
+            same_generation = (
+                self._diagnostic_generation == self.serial_manager.connection_generation
+            )
+            for field_id, field in enumerate(_TELEMETRY_FIELDS):
+                updated = (
+                    self._diagnostic_times[channel][field_id]
+                    if same_generation
+                    else 0.0
+                )
+                age = max(0.0, now - updated) if updated > 0 else None
+                last_value = (
+                    self._diagnostic_values[channel][field_id] if updated > 0 else None
+                )
+                row[field] = (
+                    last_value
+                    if age is not None and age <= MCU_TELEMETRY_STALE_TIMEOUT_S
+                    else None
+                )
+                row[f"{field}_age_s"] = None if age is None else round(age, 3)
+                if field == "erpm":
+                    row["last_erpm"] = last_value
+                    row["erpm_stale"] = (
+                        age is not None and age > MCU_TELEMETRY_STALE_TIMEOUT_S
+                    )
+            row["erpm_min_since_sample"] = (
+                self._diagnostic_erpm_min[channel] if same_generation else None
+            )
+            row["erpm_max_since_sample"] = (
+                self._diagnostic_erpm_max[channel] if same_generation else None
+            )
+            if channel in MCU_CURRENT_BOARD_IDS:
+                board = MCU_CURRENT_BOARD_IDS.index(channel)
+                telemetry = self.state.mcu_telemetry
+                for key, values, times in (
+                    (
+                        "board_current_ma",
+                        telemetry.board_current_ma,
+                        telemetry.board_current_updated_at,
+                    ),
+                    (
+                        "board_baseline_ma",
+                        telemetry.board_baseline_ma,
+                        telemetry.board_baseline_updated_at,
+                    ),
+                ):
+                    updated = times[board] if same_generation else 0.0
+                    age = now - updated if updated > 0 else None
+                    row[key] = (
+                        values[board]
+                        if age is not None and age <= MCU_TELEMETRY_STALE_TIMEOUT_S
+                        else None
+                    )
+                    row[f"{key}_age_s"] = round(age, 3) if age is not None else None
+            channels.append(row)
+        self._diagnostic_erpm_min = [None] * NUM_MOTORS
+        self._diagnostic_erpm_max = [None] * NUM_MOTORS
+        return channels
 
     @staticmethod
     def _find_start_byte(buf: bytearray, start: int) -> int:
         candidates = (
+            buf.find(bytes([wire.START]), start),
             buf.find(_TELEMETRY_START_TOKEN, start),
             buf.find(_TELEMETRY_BATCH_START_TOKEN, start),
             buf.find(_LOG_PACKET_START_TOKEN, start),
-            buf.find(_VERSION_PACKET_START_TOKEN, start),
+            buf.find(_RUNTIME_CONFIG_STATUS_PACKET_START_TOKEN, start),
             buf.find(_RELEASE_VERSION_PACKET_START_TOKEN, start),
+            buf.find(_ESC_FIRMWARE_STATUS_START_TOKEN, start),
         )
         valid_candidates = [idx for idx in candidates if idx >= 0]
         if not valid_candidates:
@@ -355,10 +533,14 @@ class McuSensor:
         return calculated_checksum == packet[-1]
 
     @staticmethod
-    def _validate_version_packet(packet: bytes | bytearray | memoryview) -> bool:
+    def _validate_runtime_config_status_packet(
+        packet: bytes | bytearray | memoryview,
+    ) -> bool:
         if (
-            len(packet) != MCU_VERSION_PACKET_SIZE
-            or packet[0] != MCU_VERSION_START_BYTE
+            len(packet) != MCU_RUNTIME_CONFIG_STATUS_PACKET_SIZE
+            or packet[0] != MCU_RUNTIME_CONFIG_STATUS_START_BYTE
+            or packet[2] not in (1, 2, 3)
+            or packet[4] not in (MCU_PROTOCOL_PWM, MCU_PROTOCOL_DSHOT)
         ):
             return False
         calculated_checksum = 0
@@ -372,7 +554,7 @@ class McuSensor:
     ) -> bool:
         if len(packet) < MCU_RELEASE_VERSION_PACKET_OVERHEAD:
             return False
-        version_length = packet[1]
+        version_length = packet[2]
         if (
             packet[0] != MCU_RELEASE_VERSION_START_BYTE
             or version_length == 0
@@ -388,11 +570,11 @@ class McuSensor:
     def _handle_release_version_packet(
         self, packet: bytes | bytearray | memoryview
     ) -> None:
-        version_length = packet[1]
+        version_length = packet[2]
         try:
-            version = bytes(packet[2 : 2 + version_length]).decode("ascii")
+            version = bytes(packet[3 : 3 + version_length]).decode("ascii")
         except UnicodeDecodeError:
-            encoded = bytes(packet[2 : 2 + version_length])
+            encoded = bytes(packet[3 : 3 + version_length])
             self._warn_invalid_release_version_once(
                 f"non-ascii:{encoded.hex()}",
                 "MCU reported a non-ASCII release version",
@@ -406,6 +588,7 @@ class McuSensor:
             return
 
         self.state.device_info.mcu_firmware_version = version
+        self.state.device_info.mcu_firmware_version_status = "reported"
         self._auto_update_mcu_if_needed(version, self._get_expected_version())
 
     def _warn_invalid_release_version_once(self, key: str, message: str) -> None:
@@ -428,8 +611,9 @@ class McuSensor:
         log_fn = _LOG_FN_MAP[level]
         log_fn(message, origin=LogOrigin.MCU)
 
-    def _handle_version_packet(self, packet: bytes | bytearray | memoryview) -> None:
-        version = f"{packet[1]}.{packet[2]}.{packet[3]}"
+    def _handle_runtime_config_status_packet(
+        self, packet: bytes | bytearray | memoryview
+    ) -> None:
         protocol = (
             ThrusterProtocol.DSHOT
             if packet[4] == MCU_PROTOCOL_DSHOT
@@ -440,26 +624,12 @@ class McuSensor:
         protocol_changed = (
             self.serial_manager.mcu_protocol_config != acknowledged_config
         )
-        self.serial_manager.record_mcu_protocol_config(*acknowledged_config)
-
-        if not self.state.device_info.mcu_firmware_version:
-            # MCU builds predating exact release reporting only send the numeric
-            # packet. Treat that identity as a migration input so they can be
-            # upgraded to a build that reports the full release version.
-            self.state.device_info.mcu_firmware_version = version
-            self._auto_update_mcu_if_needed(version, self._get_expected_version())
-
-        if protocol_changed:
-            self._reset_telemetry()
-        mcu_update_scheduled = (
-            self._flash_task is not None and not self._flash_task.done()
+        self.serial_manager.record_mcu_protocol_status(
+            packet[1], packet[2], packet[3], *acknowledged_config
         )
-        if (
-            protocol == ThrusterProtocol.DSHOT
-            and not mcu_update_scheduled
-            and self._auto_update_window_open()
-        ):
-            self._schedule_esc_firmware_reconciliation()
+
+        if packet[2] == MCU_RUNTIME_CONFIG_STATE_APPLIED and protocol_changed:
+            self._reset_telemetry()
 
     def _auto_update_window_open(self) -> bool:
         return time.monotonic() - self._startup_time <= MCU_AUTO_UPDATE_WINDOW_S
@@ -470,16 +640,26 @@ class McuSensor:
             return None
         return resolved[1]
 
-    def _auto_update_mcu_if_needed(
+    def _auto_update_mcu_if_needed(  # noqa: PLR0911 - explicit capability and flash safety gates
         self, current_version: str, expected_version: str | None
     ) -> None:
+        pico = self.state.pico
+        if pico is not None:
+            if not pico.capability_checked:
+                self._deferred_release = (current_version, expected_version)
+                return
+            if pico.suppress_bundled_reconciliation:
+                log_info(
+                    f"Retaining explicitly enabled development Pico: {pico.development_identity}"
+                )
+                return
         if expected_version is None:
             return
 
         if not mcu_update_required(current_version, expected_version):
             return
 
-        if self.state.mcu_flashing:
+        if self.state.mcu_flashing or self.state.esc_firmware_recovery_required:
             return
 
         if self._flash_task is not None and not self._flash_task.done():
@@ -510,63 +690,8 @@ class McuSensor:
         if not succeeded:
             log_error("Auto-flash of MCU firmware failed.")
 
-    def _auto_update_esc_firmware_if_needed(self) -> None:
-        resolved = resolve_esc_firmware()
-        if resolved is None:
-            return
-        _, version = resolved
-        installed_versions = self.state.device_info.esc_firmware_versions
-        if not esc_firmware_update_required(version, installed_versions):
-            return
-        if self.state.mcu_flashing:
-            return
-        if self._esc_auto_flash_attempted or (
-            self._esc_firmware_flash_task is not None
-            and not self._esc_firmware_flash_task.done()
-        ):
-            return
-        if not self._auto_update_window_open():
-            log_warn(
-                f"ESC firmware {version} has not been applied, but skipping auto-flash "
-                f"because the service has been running for more than {MCU_AUTO_UPDATE_WINDOW_S} seconds."
-            )
-            return
-
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
-        log_warn(
-            f"ESC firmware {version} has not been applied. Auto-flashing all ESCs."
-        )
-        self._esc_auto_flash_attempted = True
-        self._esc_firmware_flash_task = loop.create_task(self._flash_esc_firmware())
-
-    async def _flash_esc_firmware(self) -> None:
-        if not await flash_esc_firmware(
-            self.state, self.serial_manager, automatic=True
-        ):
-            log_error("Auto-flash of ESC firmware failed.")
-
-    def _schedule_esc_firmware_reconciliation(self) -> None:
-        if (
-            self._esc_firmware_reconcile_task is not None
-            and not self._esc_firmware_reconcile_task.done()
-        ):
-            return
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            return
-        self._esc_firmware_reconcile_task = loop.create_task(
-            self._reconcile_esc_firmware()
-        )
-
-    async def _reconcile_esc_firmware(self) -> None:
-        await asyncio.sleep(_ESC_VERSION_DISCOVERY_DELAY_S)
-        self._auto_update_esc_firmware_if_needed()
-
     def _reset_telemetry(self) -> None:
+        self.state.mcu_telemetry.clear_board_current()
         for i in range(NUM_MOTORS):
             for packet_type in range(len(_TELEMETRY_FIELDS)):
                 self._clear_telemetry_item(i, packet_type)
@@ -574,6 +699,7 @@ class McuSensor:
         self._esc_version_buffers = [bytearray() for _ in range(NUM_MOTORS)]
         self._esc_version_next_chunks = [0] * NUM_MOTORS
         self.state.device_info.esc_firmware_versions = [None] * NUM_MOTORS
+        self.state.device_info.esc_firmware_version_status = "discovering"
 
     def _expire_stale_telemetry(self) -> None:
         now = time.monotonic()
@@ -587,6 +713,8 @@ class McuSensor:
         getattr(self.state.mcu_telemetry, field)[global_id] = 0
         if packet_type == MCU_TELEMETRY_TYPE_CURRENT:
             self.state.mcu_telemetry.current_valid[global_id] = False
+        elif packet_type == MCU_TELEMETRY_TYPE_SIGNAL_QUALITY:
+            self.state.mcu_telemetry.signal_quality_valid[global_id] = False
         self._last_telemetry_time[global_id][packet_type] = 0.0
 
     def _update_telemetry(self, packet: bytes | bytearray | memoryview) -> None:
@@ -611,9 +739,48 @@ class McuSensor:
             self._update_telemetry_item(global_id, packet_type, value)
             offset += MCU_TELEMETRY_BATCH_ENTRY_SIZE
 
+    def _update_board_current(
+        self, global_id: int, packet_type: int, value: int
+    ) -> None:
+        if (
+            global_id not in MCU_CURRENT_BOARD_IDS
+            or not -1 <= value <= MCU_CURRENT_MAX_MILLIAMPS
+        ):
+            return
+        board = MCU_CURRENT_BOARD_IDS.index(global_id)
+        telemetry = self.state.mcu_telemetry
+        if packet_type == MCU_TELEMETRY_TYPE_CALIBRATED_BOARD_CURRENT:
+            telemetry.board_current_ma[board] = value if value >= 0 else None
+            telemetry.board_current_updated_at[board] = time.monotonic()
+        else:
+            telemetry.board_baseline_ma[board] = value if value >= 0 else None
+            telemetry.board_baseline_updated_at[board] = time.monotonic()
+            if value < 0:
+                telemetry.board_current_ma[board] = None
+                telemetry.board_current_updated_at[board] = 0.0
+
+    def _update_signal_quality(self, global_id: int, value: int) -> None:
+        if value == MCU_TELEMETRY_SIGNAL_QUALITY_UNAVAILABLE:
+            self.state.mcu_telemetry.signal_quality[global_id] = 0.0
+            self.state.mcu_telemetry.signal_quality_valid[global_id] = False
+        else:
+            self.state.mcu_telemetry.signal_quality[global_id] = value / 100
+            self.state.mcu_telemetry.signal_quality_valid[global_id] = True
+
     def _update_telemetry_item(
         self, global_id: int, packet_type: int, value: int
     ) -> None:
+        if packet_type in (
+            MCU_TELEMETRY_TYPE_CALIBRATED_BOARD_CURRENT,
+            MCU_TELEMETRY_TYPE_CURRENT_BASELINE,
+        ):
+            self._update_board_current(global_id, packet_type, value)
+            return
+        if packet_type == MCU_TELEMETRY_TYPE_ESC_VERSION_DISCOVERY_COMPLETE:
+            self.state.device_info.esc_firmware_version_status = (
+                "reported" if value > 0 else "notReported"
+            )
+            return
         if 0 <= global_id < NUM_MOTORS and packet_type in _ESC_VERSION_TYPES:
             self._update_esc_firmware_version(global_id, packet_type, value)
             return
@@ -626,14 +793,42 @@ class McuSensor:
             elif packet_type == MCU_TELEMETRY_TYPE_TEMPERATURE:
                 self.state.mcu_telemetry.temperature[global_id] = value
             elif packet_type == MCU_TELEMETRY_TYPE_CURRENT:
-                # EDT current is already in whole amperes. Preserve the raw reading
-                # here so changing the configured sensor topology cannot leave a mix
-                # of divided and undivided samples in state. Shared-bus de-duplication
-                # belongs at aggregation time.
+                # Keep original EDT readings for diagnostics. Display current comes
+                # exclusively from MCU auto-zero board reports (type 9).
                 self.state.mcu_telemetry.current[global_id] = max(0, value)
                 self.state.mcu_telemetry.current_valid[global_id] = True
             elif packet_type == MCU_TELEMETRY_TYPE_SIGNAL_QUALITY:
-                self.state.mcu_telemetry.signal_quality[global_id] = value / 100
+                self._update_signal_quality(global_id, value)
+
+            self._record_diagnostic_telemetry(global_id, packet_type, value)
+
+    def _record_diagnostic_telemetry(
+        self, channel: int, packet_type: int, raw_value: int
+    ) -> None:
+        self._diagnostic_times[channel][packet_type] = self._last_telemetry_time[
+            channel
+        ][packet_type]
+        field = _TELEMETRY_FIELDS[packet_type]
+        value = getattr(self.state.mcu_telemetry, field)[channel]
+        if packet_type == MCU_TELEMETRY_TYPE_CURRENT:
+            value = raw_value  # Keep signed wire readings; never change live current policy.
+        elif (
+            packet_type == MCU_TELEMETRY_TYPE_SIGNAL_QUALITY
+            and not self.state.mcu_telemetry.signal_quality_valid[channel]
+        ):
+            value = None
+        elif packet_type == MCU_TELEMETRY_TYPE_ERPM:
+            low, high = (
+                self._diagnostic_erpm_min[channel],
+                self._diagnostic_erpm_max[channel],
+            )
+            self._diagnostic_erpm_min[channel] = (
+                value if low is None else min(low, value)
+            )
+            self._diagnostic_erpm_max[channel] = (
+                value if high is None else max(high, value)
+            )
+        self._diagnostic_values[channel][packet_type] = value
 
     def _update_esc_firmware_version(
         self, global_id: int, packet_type: int, value: int
@@ -689,15 +884,7 @@ class McuSensor:
             versions[global_id] = version
             self.state.device_info.esc_firmware_versions = versions
         self._reset_esc_version_assembly(global_id)
-        if all(item is not None for item in versions):
-            update = self.state.esc_firmware_update
-            if (
-                update.stage == EscFirmwareUpdateStage.AWAITING_TELEMETRY
-                and update.target_version is not None
-                and all(item == update.target_version for item in versions)
-            ):
-                update.stage = EscFirmwareUpdateStage.SUCCEEDED
-            self._auto_update_esc_firmware_if_needed()
+        check_esc_firmware_confirmation(self.state)
 
     def _reset_esc_version_assembly(self, global_id: int) -> None:
         self._esc_version_lengths[global_id] = None

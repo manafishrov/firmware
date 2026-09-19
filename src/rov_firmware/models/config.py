@@ -100,13 +100,6 @@ class ThrusterProtocol(StrEnum):
     DSHOT = "dshot"
 
 
-class CurrentSensingMode(StrEnum):
-    """Enum for ESC current sensing modes."""
-
-    PER_MOTOR = "perMotor"
-    SHARED_BUS = "sharedBus"
-
-
 class FluidType(StrEnum):
     """Enum for fluid types."""
 
@@ -307,14 +300,14 @@ class Camera(CamelCaseModel):
     value can never prevent the camera stream from starting.
     """
 
-    width: int = 1440
-    height: int = 1080
+    width: int = 1024
+    height: int = 768
     framerate: int = 30
     # Whether resolutions smaller than the largest supported crop the field of
     # view (via the imx477's faster 1332x990 sensor mode) instead of scaling
     # down from the full-FOV mode. See _max_framerate_for.
     crop_fov: bool = False
-    bitrate: int = 20_000_000
+    bitrate: int = 3_538_944
     keyframe_interval: int = 30
     profile: H264Profile = H264Profile.BASELINE
     level: H264Level = H264Level.LEVEL_4_2
@@ -414,7 +407,6 @@ class RovConfig(CamelCaseModel):
     mcu_board: McuBoard = McuBoard.PICO
     thruster_protocol: ThrusterProtocol = ThrusterProtocol.DSHOT
     dshot_speed: int = 300
-    current_sensing_mode: CurrentSensingMode = CurrentSensingMode.SHARED_BUS
     fluid_type: FluidType = FluidType.SALTWATER
     smoothing_factor: float = 0.0
     thruster_pin_setup: ThrusterPinSetup = ThrusterPinSetup(
@@ -577,7 +569,6 @@ class PartialRovConfig(CamelCaseModel):
     mcu_board: McuBoard | None = None
     thruster_protocol: ThrusterProtocol | None = None
     dshot_speed: int | None = None
-    current_sensing_mode: CurrentSensingMode | None = None
     fluid_type: FluidType | None = None
     smoothing_factor: float | None = None
     thruster_pin_setup: ThrusterPinSetup | None = None

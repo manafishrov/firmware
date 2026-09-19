@@ -35,13 +35,13 @@
     "esc-firmware": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-mgGjBMSjAyC5FG73i2loPbhlYaOcXPIubgqQd7cRpQk=",
+        "narHash": "sha256-QPYFthba6yuGosWaCTvvV2WSHLMXSW1zKFhdmKRz11Q=",
         "type": "file",
-        "url": "https://github.com/manafishrov/AM32/releases/download/v2.21.0-rc.1/AM32_SKYSTARS_AM60_V2_F421_2.21.0.bin"
+        "url": "https://github.com/manafishrov/esc-firmware/releases/download/v2.21.0/AM32_SKYSTARS_AM60_V2_F421_2.21.0.bin"
       },
       "original": {
         "type": "file",
-        "url": "https://github.com/manafishrov/AM32/releases/download/v2.21.0-rc.1/AM32_SKYSTARS_AM60_V2_F421_2.21.0.bin"
+        "url": "https://github.com/manafishrov/esc-firmware/releases/download/v2.21.0/AM32_SKYSTARS_AM60_V2_F421_2.21.0.bin"
       }
     },
     "flake-compat": {
@@ -104,25 +104,25 @@
     "mcu-firmware-pico": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-8lEUx/J16Ecwc7dp1miR32pb0BfFU/60fgUIEqQECVY=",
+        "narHash": "sha256-HqRFbH6cs1pfmgFc8n9y3NPp7Z6odO6Rkcawevjv8mw=",
         "type": "file",
-        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.3-rc.2/pico-v1.0.3-rc.2.uf2"
+        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.4-rc.1/pico-v1.0.4-rc.1.uf2"
       },
       "original": {
         "type": "file",
-        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.3-rc.2/pico-v1.0.3-rc.2.uf2"
+        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.4-rc.1/pico-v1.0.4-rc.1.uf2"
       }
     },
     "mcu-firmware-pico2": {
       "flake": false,
       "locked": {
-        "narHash": "sha256-/R3fn90UsFnN5E84oiBirqfJEZWzICvAGXixJUBtvH0=",
+        "narHash": "sha256-0TrKxNs9EGXHEK5kVl+zNpE7c27zqX0l/CecC/6YJtU=",
         "type": "file",
-        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.3-rc.2/pico2-v1.0.3-rc.2.uf2"
+        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.4-rc.1/pico2-v1.0.4-rc.1.uf2"
       },
       "original": {
         "type": "file",
-        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.3-rc.2/pico2-v1.0.3-rc.2.uf2"
+        "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.4-rc.1/pico2-v1.0.4-rc.1.uf2"
       }
     },
     "ms5837-src": {
@@ -208,11 +208,11 @@
     "numpydantic-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1782165846,
-        "narHash": "sha256-uSVlC5nZbGZVJamz3wYIdi6IvZobRWTNL70fB74us8w=",
+        "lastModified": 1785625919,
+        "narHash": "sha256-yGMAPiRK1jvfUpmkUB0rWj5dOXCJIiwf9/MTMqvotnw=",
         "owner": "p2p-ld",
         "repo": "numpydantic",
-        "rev": "54b938133fe12137414da3e8d714f5324059d71d",
+        "rev": "82cd798f9916540c80853325d705b544558055d0",
         "type": "github"
       },
       "original": {
@@ -245,11 +245,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1785360170,
-        "narHash": "sha256-XE1lKgQ3eIO3E7zWryqcRsax+mYXod/5RHBn4YaR9YE=",
+        "lastModified": 1786901030,
+        "narHash": "sha256-WSFCsDSE5ffgD2MqzkM2CYjeFiKhRF/dJUN8uedb6YE=",
         "owner": "numtide",
         "repo": "treefmt-nix",
-        "rev": "d1187f8bc71fb8aab02395869ec3f5c1920f75c0",
+        "rev": "27b3b12a8e6375f28ebe122f07d230ca5459bbfa",
         "type": "github"
       },
       "original": {
