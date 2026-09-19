@@ -85,9 +85,15 @@ def test_sync_advances_source_without_dropping_update(sync_project: Path) -> Non
     assert project["tool"]["uv"]["sources"]["numpydantic"]["rev"] == "c" * 40
 
 
-def test_sync_rejects_unterminated_generated_block(sync_project: Path) -> None:
+@pytest.mark.parametrize(
+    "markers",
+    [BEGIN + "\n", "# END generated Nix Python sources\n" + BEGIN + "\n"],
+)
+def test_sync_rejects_malformed_generated_block(
+    sync_project: Path, markers: str
+) -> None:
     path = sync_project / "pyproject.toml"
-    path.write_text(path.read_text() + BEGIN + "\n")
+    path.write_text(path.read_text() + markers)
     result = run_sync(sync_project)
     assert result.returncode != 0
     assert "Invalid generated Nix Python sources block" in result.stderr

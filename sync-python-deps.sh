@@ -110,6 +110,14 @@ if [ "$begin_count" != "$end_count" ] || [ "$begin_count" -gt 1 ]; then
 	echo "Invalid generated Nix Python sources block in pyproject.toml" >&2
 	exit 1
 fi
+if [ "$begin_count" -eq 1 ]; then
+	begin_line=$(grep -n -F -x "$begin" pyproject.toml | cut -d: -f1)
+	end_line=$(grep -n -F -x "$end" pyproject.toml | cut -d: -f1)
+	if [ "$begin_line" -ge "$end_line" ]; then
+		echo "Invalid generated Nix Python sources block in pyproject.toml" >&2
+		exit 1
+	fi
+fi
 sed -i "/^$begin\$/,/^$end\$/d" pyproject.toml
 cat >>pyproject.toml <<EOF
 $begin
