@@ -84,3 +84,10 @@ rules.possibly-unresolved-reference = "warn"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# BEGIN generated Nix Python sources
+[tool.uv.sources]
+numpydantic = { git = "https://github.com/p2p-ld/numpydantic.git", rev = "82cd798f9916540c80853325d705b544558055d0" }
+
+[tool.uv.extra-build-variables.numpydantic]
+PDM_BUILD_SCM_VERSION = "1.10.0"
+# END generated Nix Python sources
