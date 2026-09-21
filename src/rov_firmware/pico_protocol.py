@@ -45,13 +45,29 @@ APPLIED = 0
 STAGED = 1
 
 
-def crc32c(data: bytes | bytearray) -> int:
-    """Castagnoli reflected CRC, initial/final XOR all ones."""
-    crc = 0xFFFFFFFF
-    for value in data:
-        crc ^= value
+def _build_crc32c_table() -> tuple[int, ...]:
+    table = []
+    for byte in range(256):
+        crc = byte
         for _ in range(8):
             crc = (crc >> 1) ^ (0x82F63B78 if crc & 1 else 0)
+        table.append(crc)
+    return tuple(table)
+
+
+_CRC32C_TABLE = _build_crc32c_table()
+
+
+def crc32c(data: bytes | bytearray) -> int:
+    """Castagnoli reflected CRC, initial/final XOR all ones.
+
+    Table-driven (one lookup per byte) instead of bit-by-bit: this runs on
+    every incoming Pico frame, and the bit-loop version measured ~3.8ms per
+    ~100-byte ATTITUDE frame on the Pi, dominating the 60Hz telemetry path.
+    """
+    crc = 0xFFFFFFFF
+    for byte in data:
+        crc = (crc >> 8) ^ _CRC32C_TABLE[(crc ^ byte) & 0xFF]
     return crc ^ 0xFFFFFFFF
 
 
