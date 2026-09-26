@@ -31,7 +31,7 @@ jobs:
           ref: ${{ inputs.version }}
 
       - name: Build, sign and force-upload firmware artifacts
-        uses: manafishrov/firmware/.github/actions/build-and-upload@45e48ec005836b92ac79a437971cb39d1c6e4172 # main
+        uses: manafishrov/firmware/.github/actions/build-and-upload@f5e2e0a7ac0cb75896d6843c691ce03cfe59cf64 # main
         with:
           version: ${{ inputs.version }}
           signing-key: ${{ secrets.FIRMWARE_SIGNING_PRIVATE_KEY }}
