@@ -17,7 +17,7 @@
     # nix manager bumps this string, gated by minimumReleaseAge in
     # .github/renovate.json so nixos-raspberrypi.cachix.org has time to
     # populate aarch64 substitutes before we move.
-    nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi/8e7f1a4a0e80de946f359993087416f581d9c87e";
+    nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi/0b36d0d3d4dd49da49c467214ff3674fc2e89bd0";
     nixpkgs.follows = "nixos-raspberrypi/nixpkgs";
     impermanence = {
       url = "github:nix-community/impermanence";
