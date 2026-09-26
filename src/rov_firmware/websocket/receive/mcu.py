@@ -23,6 +23,48 @@ _BOARD_PREFIXES: dict[McuBoard, str] = {
     McuBoard.PICO2: "pico2",
 }
 _COMPLETE_PERCENT = 100
+_USB_DEVICES_PATH = Path("/sys/bus/usb/devices")
+_RASPBERRY_PI_USB_VENDOR_ID = "2e8a"
+# picotool writes any image to any chip, so a Pico 2 image loaded onto a Pico
+# (or vice versa) verifies fine but never boots. These product IDs identify the
+# attached chip both in BOOTSEL and while running Pico SDK USB stdio.
+_USB_PRODUCT_BOARDS: dict[str, McuBoard] = {
+    "0003": McuBoard.PICO,  # RP2040 BOOTSEL
+    "000a": McuBoard.PICO,  # Pico SDK CDC on RP2040
+    "000f": McuBoard.PICO2,  # RP2350 BOOTSEL
+    "0009": McuBoard.PICO2,  # Pico SDK CDC on RP2350
+}
+
+
+def detect_connected_mcu_boards(
+    devices_path: Path = _USB_DEVICES_PATH,
+) -> set[McuBoard]:
+    """Identify attached Pico boards from their USB vendor/product IDs."""
+    boards: set[McuBoard] = set()
+    for device in devices_path.glob("*"):
+        try:
+            vendor_id = (device / "idVendor").read_text().strip().lower()
+            product_id = (device / "idProduct").read_text().strip().lower()
+        except OSError:
+            continue
+        if vendor_id != _RASPBERRY_PI_USB_VENDOR_ID:
+            continue
+        board = _USB_PRODUCT_BOARDS.get(product_id)
+        if board is not None:
+            boards.add(board)
+    return boards
+
+
+def mcu_board_mismatch(board: McuBoard) -> McuBoard | None:
+    """Return the attached board when it cannot run firmware built for ``board``.
+
+    Detection that finds nothing, or finds several different boards, is
+    inconclusive and never blocks a flash.
+    """
+    detected = detect_connected_mcu_boards()
+    if len(detected) != 1 or board in detected:
+        return None
+    return next(iter(detected))
 
 
 def mcu_versions_match(reported: str, bundled: str) -> bool:
@@ -212,6 +254,16 @@ async def flash_mcu_firmware(  # noqa: PLR0911 - each flash phase has a fail-clo
             )
             return False
         firmware_path, _firmware_version = resolved
+        attached_board = mcu_board_mismatch(board)
+        if attached_board is not None:
+            _report_flash_error(
+                f"Firmware flash refused: {board.value} firmware cannot run on the "
+                f"attached {attached_board.value}. Select {attached_board.value} "
+                "as the MCU board and flash again.",
+                show_toasts=show_toasts,
+                toast_identifier=toast_identifier,
+            )
+            return False
         picotool_path = _resolve_picotool_path()
 
         log_info(f"Flashing firmware '{board.value}' from {firmware_path}")
