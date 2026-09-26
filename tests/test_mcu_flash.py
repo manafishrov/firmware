@@ -114,6 +114,74 @@ def test_load_progress_emits_a_toast_when_visible(monkeypatch):
     assert toast_calls[0]["identifier"] == "firmware-flash"
 
 
+def _add_usb_device(root: Path, name: str, vendor_id: str, product_id: str) -> None:
+    device = root / name
+    device.mkdir()
+    (device / "idVendor").write_text(f"{vendor_id}\n")
+    (device / "idProduct").write_text(f"{product_id}\n")
+
+
+def test_detects_boards_from_bootsel_and_running_usb_ids(tmp_path):
+    _add_usb_device(tmp_path, "usb1", "1d6b", "0002")
+    _add_usb_device(tmp_path, "1-1.3", "2e8a", "0003")
+    (tmp_path / "1-1.3-interface").mkdir()
+
+    assert mcu.detect_connected_mcu_boards(tmp_path) == {McuBoard.PICO}
+
+    _add_usb_device(tmp_path, "1-1.4", "2E8A", "0009")
+
+    assert mcu.detect_connected_mcu_boards(tmp_path) == {
+        McuBoard.PICO,
+        McuBoard.PICO2,
+    }
+
+
+def test_unknown_raspberry_pi_product_is_not_classified(tmp_path):
+    _add_usb_device(tmp_path, "1-1.3", "2e8a", "1234")
+
+    assert mcu.detect_connected_mcu_boards(tmp_path) == set()
+
+
+def test_board_mismatch_reports_the_attached_board(monkeypatch):
+    monkeypatch.setattr(mcu, "detect_connected_mcu_boards", lambda: {McuBoard.PICO})
+
+    assert mcu.mcu_board_mismatch(McuBoard.PICO2) == McuBoard.PICO
+    assert mcu.mcu_board_mismatch(McuBoard.PICO) is None
+
+
+def test_inconclusive_board_detection_does_not_block(monkeypatch):
+    monkeypatch.setattr(mcu, "detect_connected_mcu_boards", set)
+    assert mcu.mcu_board_mismatch(McuBoard.PICO2) is None
+
+    monkeypatch.setattr(
+        mcu,
+        "detect_connected_mcu_boards",
+        lambda: {McuBoard.PICO, McuBoard.PICO2},
+    )
+    assert mcu.mcu_board_mismatch(McuBoard.PICO2) is None
+
+
+def test_mcu_flash_refuses_firmware_for_a_different_board(
+    rov_state, monkeypatch, tmp_path
+):
+    firmware_path = tmp_path / "pico2-v1.0.4.uf2"
+    monkeypatch.setattr(
+        mcu, "resolve_mcu_firmware", lambda _board: (firmware_path, "1.0.4")
+    )
+    monkeypatch.setattr(mcu, "detect_connected_mcu_boards", lambda: {McuBoard.PICO})
+
+    def unexpected_popen(*_args, **_kwargs):
+        msg = "picotool must not run for a mismatched board"
+        raise AssertionError(msg)
+
+    monkeypatch.setattr(mcu.subprocess, "Popen", unexpected_popen)
+
+    assert not asyncio.run(
+        mcu.flash_mcu_firmware(rov_state, McuBoard.PICO2, show_toasts=False)
+    )
+    assert not rov_state.mcu_flashing
+
+
 def test_mcu_flash_is_blocked_during_regulator_auto_tuning(rov_state, monkeypatch):
     rov_state.regulator.auto_tuning_active = True
 
