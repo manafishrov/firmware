@@ -7,7 +7,40 @@ import pytest
 import websockets
 
 from rov_firmware.websocket.message import WebsocketMessage
-from rov_firmware.websocket.server import WebsocketServer
+from rov_firmware.websocket.server import WebsocketServer, _custom_actions_directory
+
+
+def test_custom_action_storage_migrates_scripts_and_preferences(tmp_path, monkeypatch):
+    monkeypatch.setenv("MANAFISH_DATA_DIR", str(tmp_path))
+    legacy = tmp_path / "extensions"
+    legacy.mkdir()
+    files = {"water_sensor.py": b"# installed script\n", "settings.json": b"{}\n"}
+    for name, contents in files.items():
+        (legacy / name).write_bytes(contents)
+
+    directory = _custom_actions_directory()
+
+    assert directory == tmp_path / "custom_actions"
+    assert not legacy.exists()
+    for name, contents in files.items():
+        assert (directory / name).read_bytes() == contents
+    assert _custom_actions_directory() == directory
+
+
+def test_custom_action_storage_does_not_replace_existing_directory(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setenv("MANAFISH_DATA_DIR", str(tmp_path))
+    legacy = tmp_path / "extensions"
+    legacy.mkdir()
+    (legacy / "water_sensor.py").write_text("legacy")
+    directory = tmp_path / "custom_actions"
+    directory.mkdir()
+    (directory / "water_sensor.py").write_text("current")
+
+    assert _custom_actions_directory() == directory
+    assert (directory / "water_sensor.py").read_text() == "current"
+    assert (legacy / "water_sensor.py").read_text() == "legacy"
 
 
 def test_obsolete_runtime_messages_are_not_a_second_control_interface():

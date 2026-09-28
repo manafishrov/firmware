@@ -5,7 +5,7 @@ import asyncio
 import pytest
 
 from manafish_sdk import Script
-from rov_firmware.extensions.runtime import ExtensionRuntime
+from rov_firmware.custom_actions.runtime import CustomActionRuntime
 
 
 def test_stale_timeout_is_opt_in_and_rejects_invalid_limits():
@@ -25,9 +25,9 @@ def test_snapshot_reports_elapsed_age_and_repeat_publication_resets_it(
 ):
     clock = [10.0]
     monkeypatch.setattr(
-        "rov_firmware.extensions.runtime.time.monotonic", lambda: clock[0]
+        "rov_firmware.custom_actions.runtime.time.monotonic", lambda: clock[0]
     )
-    runtime = ExtensionRuntime(rov_state, tmp_path)
+    runtime = CustomActionRuntime(rov_state, tmp_path)
     script = Script("sensor")
     script.reading("wet", bool)
     runtime._register(script._seal())
@@ -46,7 +46,7 @@ def test_snapshot_reports_elapsed_age_and_repeat_publication_resets_it(
 
 
 def test_first_enable_does_not_claim_a_reading_has_arrived(rov_state, tmp_path):
-    runtime = ExtensionRuntime(rov_state, tmp_path)
+    runtime = CustomActionRuntime(rov_state, tmp_path)
 
     async def scenario():
         await runtime.install(

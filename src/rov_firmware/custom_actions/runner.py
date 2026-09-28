@@ -1,4 +1,4 @@
-"""Supervised async extension tasks with direct access to live firmware objects."""
+"""Supervised async custom action tasks with direct access to live firmware objects."""
 
 import asyncio
 from collections.abc import Callable
@@ -13,7 +13,7 @@ from .sdk import Context
 CANCELLATION_TIMEOUT = 1.0
 
 
-class ExtensionRunner:
+class CustomActionRunner:
     """Keep task ownership and cancellation explicit for trusted cooperative code."""
 
     def __init__(
@@ -23,7 +23,7 @@ class ExtensionRunner:
         on_running: Callable[[str, bool], None],
         on_error: Callable[[str], None],
     ) -> None:
-        """Prepare a runner without importing the extension."""
+        """Prepare a runner without importing the customAction."""
         self.context = context
         self.on_running = on_running
         self.on_error = on_error
@@ -55,7 +55,7 @@ class ExtensionRunner:
     ) -> None:
         """Schedule one action, repeating only after the prior call completes."""
         if self.closing:
-            msg = "Extension is not running"
+            msg = "Custom action is not running"
             raise RuntimeError(msg)
         previous = self.tasks.get(identifier)
         if previous is not None and not previous.done():
@@ -92,9 +92,7 @@ class ExtensionRunner:
         if tasks:
             _, pending = await asyncio.wait(tasks, timeout=CANCELLATION_TIMEOUT)
             if pending:
-                msg = (
-                    "Extension ignored cancellation; it must finish before replacement"
-                )
+                msg = "Custom action ignored cancellation; it must finish before replacement"
                 raise TimeoutError(msg)
             await asyncio.gather(*tasks, return_exceptions=True)
 

@@ -15,7 +15,7 @@ the SDK guide and a copy button for working with an agent.
 Scripts, settings and CSV files persist under `~/.local/share/manafish/`, outside
 the deployed checkout. Scripts are trusted Python and must cooperate with async
 cancellation. Operator loops stop on disconnect; background monitoring requires
-explicit opt-in to continue unattended. `examples/extensions/water_sensor.py`
+explicit opt-in to continue unattended. `examples/custom_actions/water_sensor.py`
 provides real GPIO17 monitoring with a bindable pause/resume action.
 
 Upgrade firmware first, then use the matching V1 desktop app before operating the

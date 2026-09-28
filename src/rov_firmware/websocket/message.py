@@ -4,7 +4,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
-from ..extensions.wire import (
+from ..custom_actions.wire import (
     CapabilityCatalog,
     CapabilityRequest,
     CapabilityResponse,

@@ -4,12 +4,12 @@ import asyncio
 from collections.abc import Callable
 from typing import Any
 
-from .runtime import ExtensionRuntime
+from .runtime import CustomActionRuntime
 from .source_bundle import source_bundle
 
 
 async def dispatch(
-    runtime: ExtensionRuntime, operation: str, params: dict[str, Any]
+    runtime: CustomActionRuntime, operation: str, params: dict[str, Any]
 ) -> object:
     """Dispatch supported operations; unavailable and invalid inputs fail clearly."""
     if operation in {"sdk.describe", "sdk.read"}:
@@ -30,45 +30,47 @@ async def dispatch(
         return await runtime.configure(
             params["id"], params["mode"], params["intervalMs"]
         )
-    if operation.startswith("extension."):
-        return await _extension(runtime, operation, params)
+    if operation.startswith("customAction."):
+        return await _custom_action(runtime, operation, params)
     if operation.startswith("csv."):
         return await _csv(runtime, operation, params)
     msg = f"Unknown capability operation {operation}"
     raise ValueError(msg)
 
 
-async def _extension(
-    runtime: ExtensionRuntime, operation: str, params: dict[str, Any]
+async def _custom_action(
+    runtime: CustomActionRuntime, operation: str, params: dict[str, Any]
 ) -> object:
-    if operation == "extension.list":
-        return [item.model_dump(by_alias=True) for item in runtime.extensions.values()]
-    if operation == "extension.validate":
+    if operation == "customAction.list":
+        return [
+            item.model_dump(by_alias=True) for item in runtime.custom_actions.values()
+        ]
+    if operation == "customAction.validate":
         return await runtime.validate(params["source"])
-    if operation == "extension.install":
+    if operation == "customAction.install":
         return await runtime.install(params["source"])
-    if operation == "extension.remove":
+    if operation == "customAction.remove":
         return await runtime.remove(params["id"])
-    if operation == "extension.enable":
+    if operation == "customAction.enable":
         if type(params["enabled"]) is not bool:
             msg = "enabled must be a boolean"
             raise ValueError(msg)
         return await runtime.enable(params["id"], params["enabled"])
-    if operation == "extension.source":
+    if operation == "customAction.source":
         identifier = params["id"]
-        if identifier not in runtime.extensions:
+        if identifier not in runtime.custom_actions:
             raise KeyError(identifier)
         return {
             "source": (runtime.directory / f"{identifier}.py")
             .read_bytes()
             .decode("utf-8")
         }
-    msg = f"Unknown extension operation {operation}"
+    msg = f"Unknown custom action operation {operation}"
     raise ValueError(msg)
 
 
 async def _csv(
-    runtime: ExtensionRuntime, operation: str, params: dict[str, Any]
+    runtime: CustomActionRuntime, operation: str, params: dict[str, Any]
 ) -> object:
     if operation == "csv.list":
         return await _storage(runtime.csv.list)

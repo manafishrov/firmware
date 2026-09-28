@@ -5,7 +5,7 @@ import asyncio
 import pytest
 
 from manafish_sdk import Context, NotificationLevel
-from rov_firmware.extensions.csv_store import CsvStore
+from rov_firmware.custom_actions.csv_store import CsvStore
 from rov_firmware.models.toast import ToastVariant
 
 
@@ -14,7 +14,8 @@ def test_notification_plain_text_severity_and_namespaced_replacement(
 ):
     delivered = []
     monkeypatch.setattr(
-        "rov_firmware.extensions.sdk.toast_content", lambda **kw: delivered.append(kw)
+        "rov_firmware.custom_actions.sdk.toast_content",
+        lambda **kw: delivered.append(kw),
     )
     context = Context(rov_state, lambda *_: None, CsvStore(tmp_path), "sensor")
     asyncio.run(

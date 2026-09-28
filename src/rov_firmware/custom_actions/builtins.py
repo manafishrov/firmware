@@ -1,4 +1,4 @@
-"""Expose existing vehicle capabilities through the extension contract."""
+"""Expose existing vehicle capabilities through the custom action contract."""
 
 from functools import cache
 from typing import Any, cast
@@ -95,7 +95,7 @@ def readings() -> list[Reading]:
 
 @cache
 def actions() -> list[Action]:
-    """List built-in controls alongside installed extension actions."""
+    """List built-in controls alongside installed custom action actions."""
     return [
         Action.model_validate(
             {"id": f"rov.{identifier}", "name": name, "inputType": kind}

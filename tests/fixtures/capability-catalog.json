@@ -5,7 +5,7 @@
       "id": "rov.pitch",
       "name": "Pitch",
       "valueType": "number",
-      "extensionId": null,
+      "customActionId": null,
       "unit": "°",
       "widget": null,
       "staleAfterMs": null
@@ -14,7 +14,7 @@
       "id": "rov.roll",
       "name": "Roll",
       "valueType": "number",
-      "extensionId": null,
+      "customActionId": null,
       "unit": "°",
       "widget": null,
       "staleAfterMs": null
@@ -23,7 +23,7 @@
       "id": "rov.yaw",
       "name": "Heading",
       "valueType": "number",
-      "extensionId": null,
+      "customActionId": null,
       "unit": "°",
       "widget": null,
       "staleAfterMs": null
@@ -32,7 +32,7 @@
       "id": "rov.depth",
       "name": "Depth",
       "valueType": "number",
-      "extensionId": null,
+      "customActionId": null,
       "unit": "m",
       "widget": null,
       "staleAfterMs": null
@@ -41,7 +41,7 @@
       "id": "rov.desiredPitch",
       "name": "Target pitch",
       "valueType": "number",
-      "extensionId": null,
+      "customActionId": null,
       "unit": "°",
       "widget": null,
       "staleAfterMs": null
@@ -50,7 +50,7 @@
       "id": "rov.desiredRoll",
       "name": "Target roll",
       "valueType": "number",
-      "extensionId": null,
+      "customActionId": null,
       "unit": "°",
       "widget": null,
       "staleAfterMs": null
@@ -59,7 +59,7 @@
       "id": "rov.desiredYaw",
       "name": "Target heading",
       "valueType": "number",
-      "extensionId": null,
+      "customActionId": null,
       "unit": "°",
       "widget": null,
       "staleAfterMs": null
@@ -68,7 +68,7 @@
       "id": "rov.desiredDepth",
       "name": "Target depth",
       "valueType": "number",
-      "extensionId": null,
+      "customActionId": null,
       "unit": "m",
       "widget": null,
       "staleAfterMs": null
@@ -77,7 +77,7 @@
       "id": "rov.waterTemperature",
       "name": "Water temperature",
       "valueType": "number",
-      "extensionId": null,
+      "customActionId": null,
       "unit": "°C",
       "widget": null,
       "staleAfterMs": null
@@ -86,7 +86,7 @@
       "id": "rov.electronicsTemperature",
       "name": "Electronics temperature",
       "valueType": "number",
-      "extensionId": null,
+      "customActionId": null,
       "unit": "°C",
       "widget": null,
       "staleAfterMs": null
@@ -95,7 +95,7 @@
       "id": "rov.thrusterRpms",
       "name": "Thruster speeds",
       "valueType": "numberArray",
-      "extensionId": null,
+      "customActionId": null,
       "unit": "rpm",
       "widget": null,
       "staleAfterMs": null
@@ -104,7 +104,7 @@
       "id": "rov.thrusterSignalQualities",
       "name": "Thruster signal quality",
       "valueType": "json",
-      "extensionId": null,
+      "customActionId": null,
       "unit": null,
       "widget": null,
       "staleAfterMs": null
@@ -113,7 +113,7 @@
       "id": "rov.workIndicatorPercentage",
       "name": "Thruster load",
       "valueType": "number",
-      "extensionId": null,
+      "customActionId": null,
       "unit": "%",
       "widget": null,
       "staleAfterMs": null
@@ -122,7 +122,7 @@
       "id": "rov.autoStabilization",
       "name": "Stabilization",
       "valueType": "boolean",
-      "extensionId": null,
+      "customActionId": null,
       "unit": null,
       "widget": null,
       "staleAfterMs": null
@@ -131,7 +131,7 @@
       "id": "rov.depthHold",
       "name": "Depth hold",
       "valueType": "boolean",
-      "extensionId": null,
+      "customActionId": null,
       "unit": null,
       "widget": null,
       "staleAfterMs": null
@@ -140,7 +140,7 @@
       "id": "rov.batteryPercentage",
       "name": "Battery",
       "valueType": "number",
-      "extensionId": null,
+      "customActionId": null,
       "unit": "%",
       "widget": null,
       "staleAfterMs": null
@@ -149,7 +149,7 @@
       "id": "rov.currentDraw",
       "name": "Current draw",
       "valueType": "number",
-      "extensionId": null,
+      "customActionId": null,
       "unit": "A",
       "widget": null,
       "staleAfterMs": null
@@ -158,7 +158,7 @@
       "id": "rov.piUndervoltage",
       "name": "Pi undervoltage",
       "valueType": "boolean",
-      "extensionId": null,
+      "customActionId": null,
       "unit": null,
       "widget": null,
       "staleAfterMs": null
@@ -167,7 +167,7 @@
       "id": "rov.thrusterControlReady",
       "name": "Thrusters ready",
       "valueType": "boolean",
-      "extensionId": null,
+      "customActionId": null,
       "unit": null,
       "widget": null,
       "staleAfterMs": null
@@ -176,7 +176,7 @@
       "id": "rov.thrusterProtocolState",
       "name": "Thruster connection",
       "valueType": "string",
-      "extensionId": null,
+      "customActionId": null,
       "unit": null,
       "widget": null,
       "staleAfterMs": null
@@ -185,7 +185,7 @@
       "id": "rov.thrusterProtocolError",
       "name": "Thruster error",
       "valueType": "string",
-      "extensionId": null,
+      "customActionId": null,
       "unit": null,
       "widget": null,
       "staleAfterMs": null
@@ -194,7 +194,7 @@
       "id": "rov.health",
       "name": "System health",
       "valueType": "json",
-      "extensionId": null,
+      "customActionId": null,
       "unit": null,
       "widget": null,
       "staleAfterMs": null
@@ -203,7 +203,7 @@
       "id": "rov.deviceInfo",
       "name": "Device information",
       "valueType": "json",
-      "extensionId": null,
+      "customActionId": null,
       "unit": null,
       "widget": null,
       "staleAfterMs": null
@@ -212,7 +212,7 @@
       "id": "rov.escFirmwareUpdate",
       "name": "ESC firmware update",
       "valueType": "json",
-      "extensionId": null,
+      "customActionId": null,
       "unit": null,
       "widget": null,
       "staleAfterMs": null
@@ -221,7 +221,7 @@
       "id": "water_sensor.wet",
       "name": "Water detected",
       "valueType": "boolean",
-      "extensionId": "water_sensor",
+      "customActionId": "water_sensor",
       "unit": null,
       "widget": "warning",
       "staleAfterMs": null
@@ -230,7 +230,7 @@
       "id": "dispenser.count",
       "name": "Dispensed",
       "valueType": "number",
-      "extensionId": "dispenser",
+      "customActionId": "dispenser",
       "unit": null,
       "widget": null,
       "staleAfterMs": null
@@ -239,7 +239,7 @@
       "id": "dispenser.dispense.running",
       "name": "Dispense running",
       "valueType": "boolean",
-      "extensionId": "dispenser",
+      "customActionId": "dispenser",
       "unit": null,
       "widget": null,
       "staleAfterMs": null
@@ -248,7 +248,7 @@
       "id": "depth_logger.record.running",
       "name": "Record depth running",
       "valueType": "boolean",
-      "extensionId": "depth_logger",
+      "customActionId": "depth_logger",
       "unit": null,
       "widget": null,
       "staleAfterMs": null
@@ -259,7 +259,7 @@
       "id": "rov.direction",
       "name": "Vehicle movement",
       "inputType": "numberArray",
-      "extensionId": null,
+      "customActionId": null,
       "modes": [
         "once"
       ],
@@ -270,7 +270,7 @@
       "id": "rov.autoStabilization.set",
       "name": "Set stabilization",
       "inputType": "boolean",
-      "extensionId": null,
+      "customActionId": null,
       "modes": [
         "once"
       ],
@@ -281,7 +281,7 @@
       "id": "rov.autoStabilization.toggle",
       "name": "Toggle stabilization",
       "inputType": "none",
-      "extensionId": null,
+      "customActionId": null,
       "modes": [
         "once"
       ],
@@ -292,7 +292,7 @@
       "id": "rov.depthHold.set",
       "name": "Set depth hold",
       "inputType": "boolean",
-      "extensionId": null,
+      "customActionId": null,
       "modes": [
         "once"
       ],
@@ -303,7 +303,7 @@
       "id": "rov.depthHold.toggle",
       "name": "Toggle depth hold",
       "inputType": "none",
-      "extensionId": null,
+      "customActionId": null,
       "modes": [
         "once"
       ],
@@ -314,7 +314,7 @@
       "id": "rov.desiredDepth.set",
       "name": "Set desired depth",
       "inputType": "number",
-      "extensionId": null,
+      "customActionId": null,
       "modes": [
         "once"
       ],
@@ -325,7 +325,7 @@
       "id": "rov.attitude.set",
       "name": "Set desired attitude",
       "inputType": "numberArray",
-      "extensionId": null,
+      "customActionId": null,
       "modes": [
         "once"
       ],
@@ -336,7 +336,7 @@
       "id": "rov.thrusterTest.start",
       "name": "Start thruster test",
       "inputType": "number",
-      "extensionId": null,
+      "customActionId": null,
       "modes": [
         "once"
       ],
@@ -347,7 +347,7 @@
       "id": "rov.thrusterTest.cancel",
       "name": "Cancel thruster test",
       "inputType": "number",
-      "extensionId": null,
+      "customActionId": null,
       "modes": [
         "once"
       ],
@@ -358,7 +358,7 @@
       "id": "rov.regulatorAutoTuning.start",
       "name": "Start regulator tuning",
       "inputType": "none",
-      "extensionId": null,
+      "customActionId": null,
       "modes": [
         "once"
       ],
@@ -369,7 +369,7 @@
       "id": "rov.regulatorAutoTuning.cancel",
       "name": "Cancel regulator tuning",
       "inputType": "none",
-      "extensionId": null,
+      "customActionId": null,
       "modes": [
         "once"
       ],
@@ -380,7 +380,7 @@
       "id": "dispenser.dispense",
       "name": "Dispense",
       "inputType": "none",
-      "extensionId": "dispenser",
+      "customActionId": "dispenser",
       "modes": [
         "once"
       ],
@@ -391,7 +391,7 @@
       "id": "depth_logger.record",
       "name": "Record depth",
       "inputType": "none",
-      "extensionId": "depth_logger",
+      "customActionId": "depth_logger",
       "modes": [
         "once",
         "hold",
@@ -401,7 +401,7 @@
       "intervalMs": 1000
     }
   ],
-  "extensions": [
+  "customActions": [
     {
       "id": "water_sensor",
       "name": "Water sensor (simulated)",

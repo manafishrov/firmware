@@ -1,4 +1,4 @@
-"""Python helpers for trusted extensions sharing the live firmware state."""
+"""Python helpers for trusted custom actions sharing the live firmware state."""
 
 import asyncio
 from collections.abc import Callable
@@ -26,7 +26,7 @@ class NotificationLevel(StrEnum):
 
 
 class Context:
-    """Expose the actual RovState instance and extension-local publishing helpers."""
+    """Expose the actual RovState instance and custom action-local publishing helpers."""
 
     def __init__(
         self,
@@ -43,12 +43,12 @@ class Context:
         self._closed = False
 
     def close(self) -> None:
-        """Prevent stopped extensions from publishing or starting new CSV writes."""
+        """Prevent stopped custom actions from publishing or starting new CSV writes."""
         self._closed = True
 
     def _require_active(self) -> None:
         if self._closed:
-            msg = "Extension has stopped"
+            msg = "Custom action has stopped"
             raise RuntimeError(msg)
 
     async def _publish_reading(self, identifier: str, value: object) -> None:
@@ -106,6 +106,6 @@ class Context:
         await asyncio.sleep(0)
 
     async def log(self, message: str) -> None:
-        """Send an extension-labelled message to the app's firmware debug log."""
-        log_info(f"Extension {self._identifier}: {message}")
+        """Send an custom action-labelled message to the app's firmware debug log."""
+        log_info(f"Custom action {self._identifier}: {message}")
         await asyncio.sleep(0)

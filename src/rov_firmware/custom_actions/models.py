@@ -1,4 +1,4 @@
-"""Versioned extension declarations and capability wire models."""
+"""Versioned custom action declarations and capability wire models."""
 
 import time
 from typing import ClassVar, Literal
@@ -35,7 +35,7 @@ class Reading(Declaration):
     id: str = Field(pattern=r"^[a-z][a-zA-Z0-9_.-]{0,95}$")
     name: str = Field(min_length=1, max_length=100)
     value_type: ValueType
-    extension_id: str | None = None
+    custom_action_id: str | None = None
     unit: str | None = None
     widget: str | None = None
     stale_after_ms: float | None = Field(default=None, gt=0, allow_inf_nan=False)
@@ -47,7 +47,7 @@ class Action(Declaration):
     id: str = Field(pattern=r"^[a-z][a-zA-Z0-9_.-]{0,95}$")
     name: str = Field(min_length=1, max_length=100)
     input_type: Literal["none", "boolean", "number", "string", "numberArray"] = "none"
-    extension_id: str | None = None
+    custom_action_id: str | None = None
     modes: list[Mode] = Field(default=["once"], min_length=1)
     mode: Mode = "once"
     interval_ms: int = Field(default=250, ge=50, le=3_600_000)
@@ -75,7 +75,7 @@ class Manifest(Declaration):
 
     @model_validator(mode="after")
     def check_ids(self) -> "Manifest":
-        """Keep extension IDs stable, namespaced, and unambiguous."""
+        """Keep custom action IDs stable, namespaced, and unambiguous."""
         if self.id == "rov":
             msg = "The rov namespace is reserved"
             raise ValueError(msg)
@@ -87,7 +87,7 @@ class Manifest(Declaration):
             if "." in item.id or "-" in item.id:
                 msg = "Manifest IDs must be local Python identifiers"
                 raise ValueError(msg)
-            item.extension_id = self.id
+            item.custom_action_id = self.id
         return self
 
 
@@ -107,8 +107,8 @@ class Sample(CamelCaseModel):
         return max(0, (time.monotonic() - self._recorded_at) * 1000)
 
 
-class ExtensionInfo(CamelCaseModel):
-    """Persisted extension identity and current runtime health."""
+class CustomActionInfo(CamelCaseModel):
+    """Persisted custom action identity and current runtime health."""
 
     id: str
     name: str
@@ -125,7 +125,7 @@ class TriggerPreferences(Declaration):
     interval_ms: int = Field(ge=50, le=3_600_000, strict=True)
 
 
-class ExtensionPreferences(Declaration):
+class CustomActionPreferences(Declaration):
     """Persisted enablement and per-action trigger overrides."""
 
     enabled: bool = Field(default=False, strict=True)

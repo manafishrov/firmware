@@ -17,7 +17,7 @@ class RequestPayload(CamelCaseModel):
 
 
 class CapabilityRequest(CamelCaseModel):
-    """The single entry point for built-in and extension capabilities."""
+    """The single entry point for built-in and custom action capabilities."""
 
     type: Literal["capabilityRequest"] = "capabilityRequest"
     payload: RequestPayload

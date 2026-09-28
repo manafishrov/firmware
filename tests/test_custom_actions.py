@@ -13,15 +13,15 @@ import numpy as np
 import pytest
 
 from manafish_sdk import RovState
-from rov_firmware.extensions.api import dispatch
-from rov_firmware.extensions.csv_store import CsvStore
-from rov_firmware.extensions.runtime import ExtensionRuntime
-from rov_firmware.extensions.validation import validate_source
-from rov_firmware.extensions.values import normalize_value
+from rov_firmware.custom_actions.api import dispatch
+from rov_firmware.custom_actions.csv_store import CsvStore
+from rov_firmware.custom_actions.runtime import CustomActionRuntime
+from rov_firmware.custom_actions.validation import validate_source
+from rov_firmware.custom_actions.values import normalize_value
 from rov_firmware.rov_state import RovState as FirmwareRovState
 
 
-EXAMPLES = Path(__file__).parent / "fixtures" / "extensions"
+EXAMPLES = Path(__file__).parent / "fixtures" / "custom_actions"
 
 
 def source(name):
@@ -36,7 +36,7 @@ async def wait_until(predicate, timeout=4):
 
 @pytest.fixture
 def runtime(rov_state, tmp_path):
-    return ExtensionRuntime(rov_state, tmp_path / "extensions")
+    return CustomActionRuntime(rov_state, tmp_path / "custom_actions")
 
 
 @pytest.mark.parametrize(
@@ -108,7 +108,7 @@ def test_install_preserves_source_and_invalid_update_keeps_previous(runtime):
         original = source("dispenser").replace("\n", "\r\n")
         info = await runtime.install(original)
         assert info["enabled"] is False
-        assert await dispatch(runtime, "extension.source", {"id": "dispenser"}) == {
+        assert await dispatch(runtime, "customAction.source", {"id": "dispenser"}) == {
             "source": original
         }
         with pytest.raises(SyntaxError):
@@ -120,7 +120,7 @@ def test_install_preserves_source_and_invalid_update_keeps_previous(runtime):
     asyncio.run(scenario())
 
 
-def test_real_extension_state_and_single_invocation(runtime):
+def test_real_custom_action_state_and_single_invocation(runtime):
     async def scenario():
         await runtime.install(source("dispenser"))
         with pytest.raises(ValueError, match="Enable"):
@@ -224,9 +224,11 @@ def test_cooperative_action_cleans_up_on_disconnect(runtime):
     asyncio.run(scenario())
 
 
-def test_extension_error_reported_without_crashing_host(runtime, monkeypatch):
+def test_custom_action_error_reported_without_crashing_host(runtime, monkeypatch):
     warnings = []
-    monkeypatch.setattr("rov_firmware.extensions.runtime.log_error", warnings.append)
+    monkeypatch.setattr(
+        "rov_firmware.custom_actions.runtime.log_error", warnings.append
+    )
 
     async def scenario():
         invalid = source("dispenser").replace(
@@ -237,8 +239,10 @@ def test_extension_error_reported_without_crashing_host(runtime, monkeypatch):
         await runtime.enable("dispenser", True)
         try:
             await runtime.invoke("dispenser.dispense")
-            await wait_until(lambda: runtime.extensions["dispenser"].status == "error")
-            assert "valid number" in runtime.extensions["dispenser"].error
+            await wait_until(
+                lambda: runtime.custom_actions["dispenser"].status == "error"
+            )
+            assert "valid number" in runtime.custom_actions["dispenser"].error
             assert any("valid number" in warning for warning in warnings)
             runtime.refresh_builtins()
         finally:
@@ -283,7 +287,7 @@ def test_csv_rejects_inconsistent_width_and_quota(tmp_path, monkeypatch):
     store.append([1, 2], "file.csv")
     with pytest.raises(ValueError, match="columns"):
         store.append([3], "file.csv")
-    monkeypatch.setattr("rov_firmware.extensions.csv_store.MAX_FILE_BYTES", 1)
+    monkeypatch.setattr("rov_firmware.custom_actions.csv_store.MAX_FILE_BYTES", 1)
     with pytest.raises(ValueError, match="quota"):
         store.append([3, 4], "file.csv")
 
@@ -291,7 +295,7 @@ def test_csv_rejects_inconsistent_width_and_quota(tmp_path, monkeypatch):
 def test_uncancelled_task_prevents_replacement_and_keeps_ownership(
     runtime, monkeypatch
 ):
-    monkeypatch.setattr("rov_firmware.extensions.runner.CANCELLATION_TIMEOUT", 0.02)
+    monkeypatch.setattr("rov_firmware.custom_actions.runner.CANCELLATION_TIMEOUT", 0.02)
 
     async def scenario():
         uncooperative = source("dispenser").replace(
@@ -312,7 +316,7 @@ def test_uncancelled_task_prevents_replacement_and_keeps_ownership(
             runner = runtime.runners["dispenser"]
             with pytest.raises(TimeoutError, match="ignored cancellation"):
                 await runtime.invoke("dispenser.dispense", "stop")
-            assert runtime.extensions["dispenser"].status == "error"
+            assert runtime.custom_actions["dispenser"].status == "error"
             with pytest.raises(TimeoutError):
                 await runtime.install(source("dispenser"))
             assert runtime.runners["dispenser"] is runner
@@ -331,10 +335,10 @@ def test_configuration_survives_restart_without_replaying_actions(runtime, rov_s
         await runtime.enable("depth_logger", True)
         await runtime.configure("depth_logger.record", "hold", 500)
         await runtime.shutdown()
-        replacement = ExtensionRuntime(rov_state, runtime.directory)
+        replacement = CustomActionRuntime(rov_state, runtime.directory)
         try:
             await replacement.initialize()
-            assert replacement.extensions["depth_logger"].enabled
+            assert replacement.custom_actions["depth_logger"].enabled
             assert replacement.actions["depth_logger.record"].mode == "hold"
             assert replacement.actions["depth_logger.record"].interval_ms == 500
             assert not replacement.running
@@ -441,15 +445,15 @@ def test_capability_contract_fixture_matches_live_definitions(runtime):
 
 
 def test_corrupt_settings_does_not_crash_or_enable_code(rov_state, tmp_path):
-    directory = tmp_path / "extensions"
+    directory = tmp_path / "custom_actions"
     directory.mkdir()
     (directory / "settings.json").write_text(
         '{"dispenser": {"enabled": "yes", "actions": 9}}'
     )
     (directory / "dispenser.py").write_text(source("dispenser"))
-    runtime = ExtensionRuntime(rov_state, directory)
+    runtime = CustomActionRuntime(rov_state, directory)
     asyncio.run(runtime.initialize())
-    assert not runtime.extensions["dispenser"].enabled
+    assert not runtime.custom_actions["dispenser"].enabled
     assert not runtime.runners
     asyncio.run(runtime.shutdown())
 
@@ -474,10 +478,10 @@ def test_unattended_startup_requires_background_opt_in(runtime, rov_state):
             .replace("continue_on_disconnect=True", "continue_on_disconnect=False")
         )
         await runtime.install(local_sensor)
-        for identifier in list(runtime.extensions):
+        for identifier in list(runtime.custom_actions):
             await runtime.enable(identifier, True)
         await runtime.shutdown()
-        replacement = ExtensionRuntime(rov_state, runtime.directory)
+        replacement = CustomActionRuntime(rov_state, runtime.directory)
         try:
             await replacement.initialize()
             assert set(replacement.runners) == {"water_sensor"}
@@ -543,7 +547,7 @@ def test_context_exposes_original_typed_objects_and_live_updates(runtime):
     assert not hasattr(context, "invoke")
 
 
-def test_extension_uses_live_state_and_real_typed_methods(runtime):
+def test_custom_action_uses_live_state_and_real_typed_methods(runtime):
 
     async def scenario():
         runtime.state.pico = AsyncMock()

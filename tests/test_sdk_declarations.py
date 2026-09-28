@@ -12,10 +12,10 @@ from numpy.typing import NDArray
 import pytest
 
 from manafish_sdk import Context, Reading, Script, Trigger
-from rov_firmware.extensions.csv_store import CsvStore
-from rov_firmware.extensions.loading import load_script
-from rov_firmware.extensions.runtime import ExtensionRuntime
-from rov_firmware.extensions.validation import validate_source
+from rov_firmware.custom_actions.csv_store import CsvStore
+from rov_firmware.custom_actions.loading import load_script
+from rov_firmware.custom_actions.runtime import CustomActionRuntime
+from rov_firmware.custom_actions.validation import validate_source
 
 
 HEADER = 'from manafish_sdk import Context, Script\nscript = Script("test")\n'
@@ -77,12 +77,12 @@ def test_invalid_declarations_fail_during_discovery(body, message):
 def test_failed_import_does_not_stop_other_scripts_at_startup(rov_state, tmp_path):
     (tmp_path / "broken.py").write_text('raise RuntimeError("bad dependency")')
     (tmp_path / "test.py").write_text(HEADER)
-    runtime = ExtensionRuntime(rov_state, tmp_path)
+    runtime = CustomActionRuntime(rov_state, tmp_path)
     asyncio.run(runtime.initialize())
-    assert set(runtime.extensions) == {"test", "broken"}
-    assert runtime.extensions["broken"].status == "error"
-    assert runtime.extensions["broken"].error is not None
-    assert "bad dependency" in runtime.extensions["broken"].error
+    assert set(runtime.custom_actions) == {"test", "broken"}
+    assert runtime.custom_actions["broken"].status == "error"
+    assert runtime.custom_actions["broken"].error is not None
+    assert "bad dependency" in runtime.custom_actions["broken"].error
     asyncio.run(runtime.shutdown())
 
 
@@ -127,7 +127,7 @@ def test_publication_retains_boolean_type_and_rejects_coercion(rov_state, tmp_pa
 
 
 def test_typed_action_input_and_explicit_stable_id(rov_state, tmp_path):
-    runtime = ExtensionRuntime(rov_state, tmp_path)
+    runtime = CustomActionRuntime(rov_state, tmp_path)
     source = (
         HEADER
         + """
@@ -154,7 +154,7 @@ async def renamed(ctx: Context, value: float) -> None:
 
 
 def test_validation_keeps_active_module_and_never_invokes_hardware(rov_state, tmp_path):
-    runtime = ExtensionRuntime(rov_state, tmp_path)
+    runtime = CustomActionRuntime(rov_state, tmp_path)
     source = (
         HEADER
         + """
@@ -173,7 +173,7 @@ async def sample(ctx: Context) -> None:
             for _ in range(3):
                 await runtime.validate(source)
                 assert sys.modules[loaded.module.__name__] is loaded.module
-            assert runtime.extensions["test"].status == "running"
+            assert runtime.custom_actions["test"].status == "running"
             assert not runtime.runners["test"].tasks
         finally:
             await runtime.shutdown()
@@ -186,14 +186,14 @@ def test_water_sensor_example_uses_gpio_and_shared_readings(
     rov_state, tmp_path, monkeypatch
 ):
     source = (
-        Path(__file__).parents[1] / "examples/extensions/water_sensor.py"
+        Path(__file__).parents[1] / "examples/custom_actions/water_sensor.py"
     ).read_text()
     factory = MockFactory()
     monkeypatch.setattr(Device, "pin_factory", factory)
-    runtime = ExtensionRuntime(rov_state, tmp_path)
+    runtime = CustomActionRuntime(rov_state, tmp_path)
     notifications = []
     monkeypatch.setattr(
-        "rov_firmware.extensions.sdk.toast_content",
+        "rov_firmware.custom_actions.sdk.toast_content",
         lambda **kw: notifications.append(kw),
     )
 
@@ -243,11 +243,11 @@ def test_water_sensor_example_uses_gpio_and_shared_readings(
 
 def test_water_sensor_background_lifecycle(rov_state, tmp_path, monkeypatch):
     source = (
-        Path(__file__).parents[1] / "examples/extensions/water_sensor.py"
+        Path(__file__).parents[1] / "examples/custom_actions/water_sensor.py"
     ).read_text()
     factory = MockFactory()
     monkeypatch.setattr(Device, "pin_factory", factory)
-    runtime = ExtensionRuntime(rov_state, tmp_path)
+    runtime = CustomActionRuntime(rov_state, tmp_path)
 
     async def wait_sample(instance, previous_sequence=0):
         async with asyncio.timeout(2):
@@ -287,7 +287,7 @@ def test_water_sensor_background_lifecycle(rov_state, tmp_path, monkeypatch):
         assert not any(factory._reservations.values())
 
         # Persisted enablement starts monitoring before an app connects.
-        replacement = ExtensionRuntime(rov_state, tmp_path)
+        replacement = CustomActionRuntime(rov_state, tmp_path)
         try:
             await replacement.initialize()
             reading = await wait_sample(replacement)
@@ -302,18 +302,18 @@ def test_water_sensor_background_lifecycle(rov_state, tmp_path, monkeypatch):
 def test_invalid_installed_script_remains_editable_and_removable(rov_state, tmp_path):
     from_source = 'MANIFEST = {"sdkVersion": 1, "id": "test", "name": "Test"}\n'
     (tmp_path / "test.py").write_text(from_source)
-    runtime = ExtensionRuntime(rov_state, tmp_path)
+    runtime = CustomActionRuntime(rov_state, tmp_path)
 
     async def scenario():
         await runtime.initialize()
         await runtime.connected()
-        assert runtime.extensions["test"].status == "error"
+        assert runtime.custom_actions["test"].status == "error"
         assert not runtime.runners
         with pytest.raises(ValueError, match="Edit and save"):
             await runtime.enable("test", True)
         await runtime.install(HEADER)
         await runtime.enable("test", True)
-        assert runtime.extensions["test"].status == "running"
+        assert runtime.custom_actions["test"].status == "running"
         await runtime.remove("test")
         assert not (tmp_path / "test.py").exists()
         await runtime.shutdown()
@@ -334,7 +334,7 @@ async def sample(ctx: Context) -> None:
     await acceleration.publish(ctx.rov.imu.acceleration)
 """
     )
-    runtime = ExtensionRuntime(rov_state, tmp_path)
+    runtime = CustomActionRuntime(rov_state, tmp_path)
 
     async def scenario():
         await runtime.install(code)

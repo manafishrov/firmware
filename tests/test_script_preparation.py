@@ -7,9 +7,9 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from rov_firmware.extensions import preparation
-from rov_firmware.extensions.preparation import ScriptPreparation
-from rov_firmware.extensions.runtime import ExtensionRuntime
+from rov_firmware.custom_actions import preparation
+from rov_firmware.custom_actions.preparation import ScriptPreparation
+from rov_firmware.custom_actions.runtime import CustomActionRuntime
 
 
 SOURCE = 'from manafish_sdk import Script\nscript = Script("test")\n'
@@ -26,7 +26,7 @@ counter = Path({str(counter)!r})
 counter.write_text(str(int(counter.read_text()) + 1) if counter.exists() else "1")
 script = Script("test")
 """
-    runtime = ExtensionRuntime(rov_state, tmp_path / "extensions")
+    runtime = CustomActionRuntime(rov_state, tmp_path / "custom_actions")
 
     async def scenario():
         try:
@@ -57,8 +57,8 @@ def test_slow_import_does_not_block_loop_or_builtin_controls(
 
     monkeypatch.setattr(preparation, "load_script", slow_load)
     invoke = AsyncMock()
-    monkeypatch.setattr("rov_firmware.extensions.runtime.builtins.invoke", invoke)
-    runtime = ExtensionRuntime(rov_state, tmp_path)
+    monkeypatch.setattr("rov_firmware.custom_actions.runtime.builtins.invoke", invoke)
+    runtime = CustomActionRuntime(rov_state, tmp_path)
 
     async def scenario():
         loading = asyncio.create_task(runtime.validate(SOURCE))

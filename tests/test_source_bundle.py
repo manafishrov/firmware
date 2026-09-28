@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from rov_firmware.extensions.source_bundle import (
+from rov_firmware.custom_actions.source_bundle import (
     SourceBundle,
     _add_file,
     _distributions,
@@ -20,7 +20,7 @@ def test_snapshot_uses_actual_sources_and_dependencies_without_importing_scripts
     for name in [
         "manafish_sdk/__init__.py",
         "rov_firmware/rov_state.py",
-        "rov_firmware/extensions/sdk.py",
+        "rov_firmware/custom_actions/sdk.py",
     ]:
         assert files[name] == (root / name).read_text()
     assert "pydantic/main.py" in files

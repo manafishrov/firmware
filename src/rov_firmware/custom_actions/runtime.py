@@ -1,4 +1,4 @@
-"""ROV-owned extension registry, lifecycle and unified samples/actions."""
+"""ROV-owned custom action registry, lifecycle and unified samples/actions."""
 
 import asyncio
 from collections import deque
@@ -17,24 +17,24 @@ from . import builtins
 from .csv_store import CsvStore
 from .models import (
     Action,
-    ExtensionInfo,
-    ExtensionPreferences,
+    CustomActionInfo,
+    CustomActionPreferences,
     Manifest,
     Reading,
     Sample,
 )
 from .preparation import ScriptPreparation
-from .runner import ExtensionRunner
+from .runner import CustomActionRunner
 from .sdk import Context
 from .values import normalize_value
 
 
 STATUS_PERIOD = 0.5
-_SETTINGS = TypeAdapter(dict[str, ExtensionPreferences])
+_SETTINGS = TypeAdapter(dict[str, CustomActionPreferences])
 
 
-class ExtensionRuntime:
-    """Maintain one capability namespace for built-ins and trusted extensions."""
+class CustomActionRuntime:
+    """Maintain one capability namespace for built-ins and trusted custom actions."""
 
     def __init__(self, state: RovState, directory: Path) -> None:
         """Initialize persistent source/config storage, without executing scripts."""
@@ -43,12 +43,12 @@ class ExtensionRuntime:
         self.directory.mkdir(parents=True, exist_ok=True)
         self.csv = CsvStore(directory.parent / "csv")
         self.manifests: dict[str, Manifest] = {}
-        self.extensions: dict[str, ExtensionInfo] = {}
+        self.custom_actions: dict[str, CustomActionInfo] = {}
         self.readings = {item.id: item for item in builtins.readings()}
         self.actions = {item.id: item for item in builtins.actions()}
         self.samples: dict[str, Sample] = {}
         self.events: deque[Sample] = deque(maxlen=4096)
-        self.runners: dict[str, ExtensionRunner] = {}
+        self.runners: dict[str, CustomActionRunner] = {}
         self.running: set[str] = set()
         self.sequence = 0
         self._last_status_sample = float("-inf")
@@ -69,7 +69,7 @@ class ExtensionRuntime:
             preferences = _SETTINGS.validate_python(data)
             return {key: value.model_dump() for key, value in preferences.items()}
         except (ValueError, OSError) as error:
-            log_error(f"Extension settings could not be loaded: {error}")
+            log_error(f"Custom action settings could not be loaded: {error}")
             return {}
 
     def _save(self) -> None:
@@ -92,13 +92,13 @@ class ExtensionRuntime:
                     raise ValueError(msg)
                 self._register(manifest)
             except Exception as error:
-                log_error(f"Cannot load extension {path.name}: {error}")
+                log_error(f"Cannot load custom action {path.name}: {error}")
                 if (
                     path.stem == "rov"
                     or re.fullmatch(r"[a-z][a-z0-9_]{0,47}", path.stem) is None
                 ):
                     continue
-                self.extensions[path.stem] = ExtensionInfo(
+                self.custom_actions[path.stem] = CustomActionInfo(
                     id=path.stem,
                     name=path.stem,
                     description="",
@@ -123,7 +123,7 @@ class ExtensionRuntime:
                     id=f"{action.id}.running",
                     name=f"{action.name} running",
                     value_type="boolean",
-                    extension_id=manifest.id,
+                    custom_action_id=manifest.id,
                 )
             )
         return readings, actions
@@ -131,7 +131,7 @@ class ExtensionRuntime:
     def _register(self, manifest: Manifest) -> None:
         self.manifests[manifest.id] = manifest
         settings = self.settings.get(manifest.id, {})
-        self.extensions[manifest.id] = ExtensionInfo(
+        self.custom_actions[manifest.id] = CustomActionInfo(
             id=manifest.id,
             name=manifest.name,
             description=manifest.description,
@@ -176,7 +176,7 @@ class ExtensionRuntime:
         self.events.append(sample)
 
     def refresh_builtins(self) -> None:
-        """Sample built-in values into the same stream as extension publications."""
+        """Sample built-in values into the same stream as custom action publications."""
         now = time.monotonic()
         include_status = now - self._last_status_sample >= STATUS_PERIOD
         if include_status:
@@ -203,8 +203,8 @@ class ExtensionRuntime:
             "actions": [
                 item.model_dump(by_alias=True) for item in self.actions.values()
             ],
-            "extensions": [
-                item.model_dump(by_alias=True) for item in self.extensions.values()
+            "customActions": [
+                item.model_dump(by_alias=True) for item in self.custom_actions.values()
             ],
             "samples": [
                 item.model_dump(by_alias=True) for item in self.samples.values()
@@ -216,7 +216,7 @@ class ExtensionRuntime:
         if not self._initialized:
             await self._load_sources()
             self._initialized = True
-        for identifier, info in self.extensions.items():
+        for identifier, info in self.custom_actions.items():
             manifest = self.manifests.get(identifier)
             if (
                 manifest is not None
@@ -252,7 +252,7 @@ class ExtensionRuntime:
             self._fault_tasks.add(task)
             task.add_done_callback(self._fault_tasks.discard)
 
-        info = self.extensions[identifier]
+        info = self.custom_actions[identifier]
         try:
             path = self.directory / f"{identifier}.py"
             loaded = await self._preparation.take(path.read_bytes().decode("utf-8"))
@@ -261,7 +261,7 @@ class ExtensionRuntime:
                 msg = "Custom action declarations changed; save the script again"
                 raise ValueError(msg)
             loaded.module.__file__ = str(path)
-            runner = ExtensionRunner(
+            runner = CustomActionRunner(
                 loaded, self._context(identifier), on_running, on_error
             )
             self.runners[identifier] = runner
@@ -272,7 +272,7 @@ class ExtensionRuntime:
             self.runners.pop(identifier, None)
             info.status = "error"
             info.error = str(error)
-            log_error(f"Extension {identifier} failed to start: {error}")
+            log_error(f"Custom action {identifier} failed to start: {error}")
         self.catalog_changed = True
 
     async def _stop(self, identifier: str) -> None:
@@ -281,10 +281,10 @@ class ExtensionRuntime:
             try:
                 await runner.stop()
             except TimeoutError as error:
-                self.extensions[identifier].status = "error"
-                self.extensions[identifier].error = str(error)
+                self.custom_actions[identifier].status = "error"
+                self.custom_actions[identifier].error = str(error)
                 self.catalog_changed = True
-                log_error(f"Extension {identifier}: {error}")
+                log_error(f"Custom action {identifier}: {error}")
                 raise
             self.runners.pop(identifier, None)
         for action_id in list(self.running):
@@ -293,18 +293,18 @@ class ExtensionRuntime:
                 self.publish(f"{action_id}.running", False)
         for reading in self.readings.values():
             if (
-                reading.extension_id == identifier
+                reading.custom_action_id == identifier
                 and not reading.id.endswith(".running")
                 and reading.id in self.samples
             ):
                 self.publish(reading.id, None)
-        self.extensions[identifier].status = "stopped"
+        self.custom_actions[identifier].status = "stopped"
         self.catalog_changed = True
 
     async def enable(self, identifier: str, enabled: bool) -> dict[str, Any]:
         """Persist explicit enablement and reconcile task state."""
         async with self._lock:
-            info = self.extensions[identifier]
+            info = self.custom_actions[identifier]
             if enabled and identifier not in self.manifests:
                 msg = "Edit and save the custom action to fix its declarations before enabling it"
                 raise ValueError(msg)
@@ -338,15 +338,15 @@ class ExtensionRuntime:
             path = self.directory / f"{manifest.id}.py"
             temporary = path.with_suffix(".tmp")
             temporary.write_bytes(source.encode("utf-8"))
-            if manifest.id in self.extensions:
+            if manifest.id in self.custom_actions:
                 await self._stop(manifest.id)
             temporary.replace(path)
-            if manifest.id in self.extensions:
+            if manifest.id in self.custom_actions:
                 self._unregister(manifest.id)
             self._register(manifest)
-            if self.extensions[manifest.id].enabled:
+            if self.custom_actions[manifest.id].enabled:
                 await self._start(manifest.id)
-            return self.extensions[manifest.id].model_dump(by_alias=True)
+            return self.custom_actions[manifest.id].model_dump(by_alias=True)
 
     def _unregister(self, identifier: str) -> None:
         for collection in (self.readings, self.actions, self.samples):
@@ -354,7 +354,7 @@ class ExtensionRuntime:
                 if key.startswith(f"{identifier}."):
                     del collection[key]
         self.manifests.pop(identifier, None)
-        self.extensions.pop(identifier, None)
+        self.custom_actions.pop(identifier, None)
         self.events = deque(
             (
                 sample
@@ -366,9 +366,9 @@ class ExtensionRuntime:
         self.catalog_changed = True
 
     async def remove(self, identifier: str) -> None:
-        """Stop an installed extension before removing its source and preferences."""
+        """Stop an installed custom action before removing its source and preferences."""
         async with self._lock:
-            if identifier not in self.extensions:
+            if identifier not in self.custom_actions:
                 raise KeyError(identifier)
             await self._stop(identifier)
             (self.directory / f"{identifier}.py").unlink()
@@ -379,7 +379,7 @@ class ExtensionRuntime:
     async def configure(
         self, identifier: str, mode: str, interval_ms: int
     ) -> dict[str, Any]:
-        """Serialize trigger edits with extension lifecycle mutations."""
+        """Serialize trigger edits with custom action lifecycle mutations."""
         async with self._lock:
             return await self._configure(identifier, mode, interval_ms)
 
@@ -394,11 +394,11 @@ class ExtensionRuntime:
                 "interval_ms": interval_ms,
             }
         )
-        if action.extension_id is None:
+        if action.custom_action_id is None:
             msg = "Built-in trigger behavior is fixed"
             raise ValueError(msg)
         await self._invoke(identifier, "stop")
-        preferences = self.settings.setdefault(action.extension_id, {}).setdefault(
+        preferences = self.settings.setdefault(action.custom_action_id, {}).setdefault(
             "actions", {}
         )
         preferences[identifier] = {
@@ -418,7 +418,7 @@ class ExtensionRuntime:
         *,
         once: bool = False,
     ) -> None:
-        """Serialize extension invocation without blocking built-in vehicle controls."""
+        """Serialize custom action invocation without blocking built-in vehicle controls."""
         if identifier.startswith("rov."):
             await self._invoke(identifier, phase, value, once=once)
             return
@@ -441,11 +441,11 @@ class ExtensionRuntime:
         if phase not in ("press", "release", "stop"):
             msg = "Unknown action phase"
             raise ValueError(msg)
-        if action.extension_id is None:
+        if action.custom_action_id is None:
             if phase == "press":
                 await builtins.invoke(self.state, identifier, value)
             return
-        runner = self.runners.get(action.extension_id)
+        runner = self.runners.get(action.custom_action_id)
         stopping = phase == "stop" or (phase == "release" and action.mode == "hold")
         stopping = stopping or (
             phase == "press"
@@ -458,8 +458,11 @@ class ExtensionRuntime:
             return
         if phase != "press" or identifier in self.running:
             return
-        if runner is None or self.extensions[action.extension_id].status != "running":
-            msg = "Enable the extension before invoking its actions"
+        if (
+            runner is None
+            or self.custom_actions[action.custom_action_id].status != "running"
+        ):
+            msg = "Enable the custom action before invoking its actions"
             raise ValueError(msg)
         if action.input_type != "none":
             value = normalize_value(value, action.input_type)
@@ -473,26 +476,26 @@ class ExtensionRuntime:
             )
         except Exception as error:
             await self._failed(
-                action.extension_id, f"Action invocation failed: {error}"
+                action.custom_action_id, f"Action invocation failed: {error}"
             )
             raise
 
     async def _cancel_action(
-        self, action: Action, runner: ExtensionRunner | None
+        self, action: Action, runner: CustomActionRunner | None
     ) -> None:
-        if runner is not None and action.extension_id is not None:
+        if runner is not None and action.custom_action_id is not None:
             try:
                 await runner.cancel(action.id.split(".", 1)[1])
             except Exception as error:
                 await self._failed(
-                    action.extension_id, f"Action cancellation failed: {error}"
+                    action.custom_action_id, f"Action cancellation failed: {error}"
                 )
                 raise
         self.running.discard(action.id)
         self.publish(f"{action.id}.running", False)
 
     async def _handle_failure(
-        self, identifier: str, runner: ExtensionRunner, reason: str
+        self, identifier: str, runner: CustomActionRunner, reason: str
     ) -> None:
         async with self._lock:
             if self.runners.get(identifier) is runner:
@@ -502,9 +505,9 @@ class ExtensionRuntime:
 
     async def _failed(self, identifier: str, reason: str) -> None:
         await self._stop(identifier)
-        self.extensions[identifier].status = "error"
-        self.extensions[identifier].error = reason
-        log_error(f"Extension {identifier}: {reason}")
+        self.custom_actions[identifier].status = "error"
+        self.custom_actions[identifier].error = reason
+        log_error(f"Custom action {identifier}: {reason}")
 
     async def disconnected(self) -> None:
         """Cancel operator tasks before restarting opted-in background work."""
@@ -516,7 +519,7 @@ class ExtensionRuntime:
                     continue
                 manifest = self.manifests[identifier]
                 if (
-                    self.extensions[identifier].enabled
+                    self.custom_actions[identifier].enabled
                     and manifest.background
                     and manifest.continue_on_disconnect
                 ):
@@ -524,8 +527,8 @@ class ExtensionRuntime:
             await asyncio.to_thread(self.csv.close_all)
 
     async def connected(self) -> None:
-        """Resume enabled extension availability without replaying operator actions."""
-        for identifier, info in self.extensions.items():
+        """Resume enabled custom action availability without replaying operator actions."""
+        for identifier, info in self.custom_actions.items():
             if (
                 info.enabled
                 and info.status != "error"
@@ -534,7 +537,7 @@ class ExtensionRuntime:
                 await self._start(identifier)
 
     async def shutdown(self) -> None:
-        """Stop extension tasks and release temporary download snapshots."""
+        """Stop custom action tasks and release temporary download snapshots."""
         async with self._lock:
             for identifier in list(self.runners):
                 with suppress(TimeoutError):
