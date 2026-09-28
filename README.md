@@ -4,6 +4,25 @@ The Manafish firmware is designed to run on a Raspberry Pi 3b with an IMX477
 camera module. It provides the firmware for controlling and using the Manafish
 ROV.
 
+## Custom actions and CSV logging
+
+The desktop app manages Python scripts through capability protocol V1. Built-in
+readings and controls use the same catalogue, sample stream and action API as
+custom scripts. Use `manafish_sdk` to declare typed readings and actions;
+`Context.rov` exposes the actual typed `RovState`. The app's instructions include
+the SDK guide and a copy button for working with an agent.
+
+Scripts, settings and CSV files persist under `~/.local/share/manafish/`, outside
+the deployed checkout. Scripts are trusted Python and must cooperate with async
+cancellation. Operator loops stop on disconnect; background monitoring requires
+explicit opt-in to continue unattended. `examples/extensions/water_sensor.py`
+provides real GPIO17 monitoring with a bindable pause/resume action.
+
+Upgrade firmware first, then use the matching V1 desktop app before operating the
+vehicle. This replaces the legacy telemetry/status/custom-action messages; old
+apps cannot operate this branch. Port legacy custom-action modules to SDK scripts
+and rebind them. The MCU wire protocol is unchanged.
+
 ## Current reporting compatibility
 
 Current above idle comes from MCU telemetry type 9: signed int32 milliamps for
@@ -20,8 +39,9 @@ boards, not individual per-motor sensors. Auto-zero estimates incremental curren
 above idle; it does not validate the sensor gain or provide electrical protection.
 Raw current, corrected current, baseline, and freshness remain in diagnostics.
 
-Install app v1.0.17 before this Pi release (v1.1.6). The app must accept
-nullable/fractional `currentDraw`. Install the AM32 raw-current restoration and
+The original v1.1.6 migration required app v1.0.17 for nullable/fractional
+`currentDraw`. This branch additionally requires the matching V1 app described
+above. Install the AM32 raw-current restoration and
 product input policy on all eight ESCs using the old Pico first, then deploy
 the new Pico through an updated Pi bundle. Pi auto-flashing cannot enforce that ESC-first sequence.
 Without new MCU reports, current remains unavailable. This release bundles
