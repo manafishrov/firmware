@@ -29,16 +29,21 @@ def endpoint(rov_state):
 
 def ack(request, result=wire.APPLIED, generation=0, digest=0):
     return wire.Frame(
-        wire.ACK,
-        request.session,
-        request.sequence,
-        struct.pack("<BBHII", request.kind, result, 0, generation, digest),
+        kind=wire.ACK,
+        session=request.session,
+        sequence=request.sequence,
+        payload=struct.pack("<BBHII", request.kind, result, 0, generation, digest),
     )
 
 
 def test_crc32c_standard_check_and_frame_roundtrip():
     assert wire.crc32c(b"123456789") == 0xE3069283
-    packet = wire.Frame(wire.CONTROL, 123, 45, bytes([0x5A, 0xE7, 0xE8]) * 20).encode()
+    packet = wire.Frame(
+        kind=wire.CONTROL,
+        session=123,
+        sequence=45,
+        payload=bytes([0x5A, 0xE7, 0xE8]) * 20,
+    ).encode()
     assert wire.decode(packet).payload == bytes([0x5A, 0xE7, 0xE8]) * 20
     corrupt = bytearray(packet)
     corrupt[20] ^= 1
@@ -94,7 +99,12 @@ def test_reliable_request_retries_identical_sequence_no_wrong_ack(
         frames.append(frame)
         if len(frames) == 1:
             endpoint.receive(
-                wire.Frame(wire.ACK, 43, frame.sequence, ack(frame).payload)
+                wire.Frame(
+                    kind=wire.ACK,
+                    session=43,
+                    sequence=frame.sequence,
+                    payload=ack(frame).payload,
+                )
             )
         else:
             endpoint.receive(ack(frame))
@@ -182,7 +192,7 @@ def test_extended_parser_does_not_dispatch_embedded_legacy_packets(
     handler = Mock()
     monkeypatch.setattr(sensor, "_handle_esc_firmware_recovery_required", handler)
     payload = bytes([0xE9, 9]) + bytes(10)
-    frame = wire.Frame(0xFF, 0, 0, payload).encode()
+    frame = wire.Frame(kind=0xFF, session=0, sequence=0, payload=payload).encode()
     buffer = bytearray()
     for byte in frame:
         sensor._consume_read_buffer(buffer, bytes([byte]))
@@ -306,7 +316,7 @@ def test_attitude_and_raw_imu_project_without_pi_controller_execution(endpoint):
     endpoint._settings_generation = 2
     endpoint._ready = True
     raw = struct.pack("<7f", 1, 2, -9.81, 0.1, 0.2, 0.3, 24)
-    endpoint.receive(wire.Frame(wire.IMU, 3, 4, raw))
+    endpoint.receive(wire.Frame(kind=wire.IMU, session=3, sequence=4, payload=raw))
     payload = struct.pack(
         "<Q9f5I8HI",
         1000,
@@ -328,14 +338,16 @@ def test_attitude_and_raw_imu_project_without_pi_controller_execution(endpoint):
         42,
     )
     assert len(payload) == 84
-    endpoint.receive(wire.Frame(wire.ATTITUDE, 3, 5, payload))
+    endpoint.receive(
+        wire.Frame(kind=wire.ATTITUDE, session=3, sequence=5, payload=payload)
+    )
     assert endpoint.state.regulator.desired_yaw == pytest.approx(90)
     assert endpoint.state.regulator.desired_depth == 2.5
     assert endpoint.state.thrusters.work_indicator_percentage == 42
     assert endpoint.state.system_health.imu_healthy
     assert endpoint.state.imu.temperature == 24
     received = endpoint._last_raw_imu
-    endpoint.receive(wire.Frame(wire.IMU, 3, 4, raw))
+    endpoint.receive(wire.Frame(kind=wire.IMU, session=3, sequence=4, payload=raw))
     assert (
         endpoint._last_raw_imu == received
     )  # Duplicate telemetry cannot renew freshness.

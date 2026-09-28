@@ -22,6 +22,11 @@ ROV's MCU (`mcu-firmware`) and to the desktop `app` over WebSocket.
   read `HANDOFF.md` and the MCU repository's `docs/PICO_CONTROL_PROTOCOL.md`.
   Run the cross-repository differential command in `tests/reference/README.md`
   against the actual MCU C source before claiming mathematical equivalence.
+- `src/manafish_sdk/` — public Python extension SDK; `extensions.runner` under
+  `rov_firmware` runs trusted async tasks with the actual typed `RovState` object.
+- For extension lifecycle, capability protocol, SDK or CSV changes, read
+  `docs/extensions-v1.md`. Examples are in `examples/extensions/`; persistent
+  data belongs in `~/.local/share/manafish`, outside the deployed checkout.
 - `src/tools/` — operator CLI (`uv run tools …`)
 - `tests/` — pytest suite
 - `nix/` — NixOS modules (`firmware.nix`, `camera.nix`, `sensors.nix`,

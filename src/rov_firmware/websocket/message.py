@@ -4,9 +4,11 @@ from typing import Annotated, Any, Literal
 
 from pydantic import Field
 
-from ..models.actions import (
-    CustomAction as CustomActionPayload,
-    DirectionVector as DirectionVectorPayload,
+from ..extensions.wire import (
+    CapabilityCatalog,
+    CapabilityRequest,
+    CapabilityResponse,
+    CapabilitySamples,
 )
 from ..models.base import CamelCaseModel
 from ..models.config import (
@@ -22,13 +24,6 @@ from ..models.rov_telemetry import RovTelemetry
 from ..models.toast import Toast
 from .cancel_messages import CancelRegulatorAutoTuning, CancelThrusterTest
 from .types import MessageType
-
-
-class DirectionVector(CamelCaseModel):
-    """WebSocket message for direction vector."""
-
-    type: Literal[MessageType.DIRECTION_VECTOR] = MessageType.DIRECTION_VECTOR
-    payload: DirectionVectorPayload
 
 
 class GetConfig(CamelCaseModel):
@@ -137,50 +132,6 @@ class Telemetry(CamelCaseModel):
     payload: RovTelemetry
 
 
-class CustomAction(CamelCaseModel):
-    """WebSocket message for custom actions."""
-
-    type: Literal[MessageType.CUSTOM_ACTION] = MessageType.CUSTOM_ACTION
-    payload: CustomActionPayload
-
-
-class ToggleAutoStabilization(CamelCaseModel):
-    """WebSocket message for toggling auto stabilization."""
-
-    type: Literal[MessageType.TOGGLE_AUTO_STABILIZATION] = (
-        MessageType.TOGGLE_AUTO_STABILIZATION
-    )
-
-
-class ToggleDepthHold(CamelCaseModel):
-    """WebSocket message for toggling depth hold."""
-
-    type: Literal[MessageType.TOGGLE_DEPTH_HOLD] = MessageType.TOGGLE_DEPTH_HOLD
-
-
-class SetAutoStabilization(CamelCaseModel):
-    """WebSocket message for setting auto stabilization idempotently."""
-
-    type: Literal[MessageType.SET_AUTO_STABILIZATION] = (
-        MessageType.SET_AUTO_STABILIZATION
-    )
-    payload: bool
-
-
-class SetDepthHold(CamelCaseModel):
-    """WebSocket message for setting depth hold idempotently."""
-
-    type: Literal[MessageType.SET_DEPTH_HOLD] = MessageType.SET_DEPTH_HOLD
-    payload: bool
-
-
-class SetDesiredDepth(CamelCaseModel):
-    """WebSocket message for setting the desired depth."""
-
-    type: Literal[MessageType.SET_DESIRED_DEPTH] = MessageType.SET_DESIRED_DEPTH
-    payload: float
-
-
 class FlashMcuFirmware(CamelCaseModel):
     """WebSocket message for flashing MCU firmware."""
 
@@ -195,7 +146,10 @@ class FlashEscFirmware(CamelCaseModel):
 
 
 WebsocketMessage = Annotated[
-    DirectionVector
+    CapabilityRequest
+    | CapabilityResponse
+    | CapabilityCatalog
+    | CapabilitySamples
     | GetConfig
     | SetConfig
     | ImportConfig
@@ -208,14 +162,6 @@ WebsocketMessage = Annotated[
     | RegulatorSuggestions
     | ShowToast
     | LogMessage
-    | StatusUpdate
-    | Telemetry
-    | CustomAction
-    | ToggleAutoStabilization
-    | ToggleDepthHold
-    | SetAutoStabilization
-    | SetDepthHold
-    | SetDesiredDepth
     | FlashMcuFirmware
     | FlashEscFirmware,
     Field(discriminator="type"),

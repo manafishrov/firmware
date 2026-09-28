@@ -3,6 +3,8 @@
 import asyncio
 import json
 import logging
+import os
+from pathlib import Path
 import time
 from typing import cast
 
@@ -12,6 +14,14 @@ from websockets import Server, ServerConnection
 from websockets.exceptions import ConnectionClosed
 
 from ..constants import CRASH_LOG_SEND_TIMEOUT_S
+from ..extensions.api import dispatch
+from ..extensions.runtime import ExtensionRuntime
+from ..extensions.wire import (
+    CapabilityCatalog,
+    CapabilityRequest,
+    CapabilityResponse,
+    CapabilitySamples,
+)
 from ..log import (
     flush_pending_logs,
     get_local_logger,
@@ -28,10 +38,10 @@ from .message import LogMessage, WebsocketMessage
 from .queue import ConfirmedMessage, get_message_queue
 from .receive.config import reject_invalid_config_message
 from .send.config import build_config
-from .send.status import build_status_update
-from .send.telemetry import build_telemetry
 from .state import websocket_state
 
+
+MAX_CONCURRENT_REQUESTS = 64
 
 _logger = get_local_logger()
 
@@ -48,6 +58,16 @@ class WebsocketServer:
             state: The ROV state.
             serial_manager: The MCU serial connection used for ESC updates.
         """
+        self.capabilities = ExtensionRuntime(
+            state,
+            Path(
+                os.environ.get(
+                    "MANAFISH_DATA_DIR",
+                    str(Path.home() / ".local" / "share" / "manafish"),
+                )
+            )
+            / "extensions",
+        )
         self.state: RovState = state
         self.serial_manager = serial_manager
         self.server: Server | None = None
@@ -60,6 +80,9 @@ class WebsocketServer:
         Args:
             websocket: The WebSocket.
         """
+        if self.client is not None:
+            await websocket.close(code=1008, reason="Another operator is connected")
+            return
         self.client = websocket
         websocket_state.is_client_connected = True
         websocket_state.connection_generation += 1
@@ -68,25 +91,31 @@ class WebsocketServer:
         )
 
         send_task = asyncio.create_task(self._send_from_queue())
-        status_task: asyncio.Task[None] | None = None
         telemetry_task: asyncio.Task[None] | None = None
+        requests: set[asyncio.Task[None]] = set()
         try:
             await flush_pending_logs()
             await self.send_frame(build_config(self.state))
             log_info(
                 f"Sent config to {cast(tuple[str, int] | None, websocket.remote_address)}"
             )
-            status_task = asyncio.create_task(self._send_status_periodically())
-            telemetry_task = asyncio.create_task(self._send_telemetry_periodically())
+            await self.capabilities.connected()
+            await self.send_frame(
+                CapabilityCatalog(payload=self.capabilities.catalog())
+            )
+            telemetry_task = asyncio.create_task(self._send_capabilities_periodically())
 
             async for message in websocket:
                 data: object = None
                 try:
                     data = json.loads(message)
                     deserialized_msg = websocket_message_adapter.validate_python(data)
-                    await handle_message(
-                        self.state, self.serial_manager, deserialized_msg
-                    )
+                    if isinstance(deserialized_msg, CapabilityRequest):
+                        await self._schedule_capability(deserialized_msg, requests)
+                    else:
+                        await handle_message(
+                            self.state, self.serial_manager, deserialized_msg
+                        )
                 except json.JSONDecodeError:
                     log_warn(
                         f"Failed to deserialize message from {cast(tuple[str, int] | None, websocket.remote_address)}"
@@ -94,6 +123,7 @@ class WebsocketServer:
                 except Exception as e:
                     log_warn(f"Error processing message: {e}")
                     await reject_invalid_config_message(self.state, data, str(e))
+                    await self._reject_capability(data, str(e))
         except ConnectionClosed:
             log_info(
                 f"Client connection closed: {cast(tuple[str, int] | None, websocket.remote_address)}"
@@ -101,20 +131,20 @@ class WebsocketServer:
         except Exception:
             _logger.exception("WebSocket connection handler failed")
         finally:
-            tasks = [send_task]
-            if status_task is not None:
-                tasks.append(status_task)
+            tasks = [send_task, *requests]
             if telemetry_task is not None:
                 tasks.append(telemetry_task)
             for task in tasks:
                 _ = task.cancel()
             _ = await asyncio.gather(*tasks, return_exceptions=True)
-            self.client = None
             websocket_state.is_client_connected = False
+            await self.capabilities.disconnected()
+            self.client = None
             log_info("Client disconnected.")
 
     async def initialize(self) -> None:
         """Initialize the WebSocket server."""
+        await self.capabilities.initialize()
         self.server = await websockets.serve(
             self.handler,
             self.state.rov_config.ip_address,
@@ -197,31 +227,97 @@ class WebsocketServer:
         except asyncio.CancelledError:
             pass
 
-    async def _send_status_periodically(self) -> None:
-        try:
-            while True:
-                await self.send_frame(build_status_update(self.state))
-                await asyncio.sleep(1 / 2)
-        except asyncio.CancelledError:
-            pass
+    async def _schedule_capability(
+        self, message: CapabilityRequest, requests: set[asyncio.Task[None]]
+    ) -> None:
+        if len(requests) >= MAX_CONCURRENT_REQUESTS:
+            await self._reject_capability(
+                message.model_dump(by_alias=True), "Too many pending requests"
+            )
+            return
+        task = asyncio.create_task(self._handle_capability(message))
+        requests.add(task)
 
-    async def _send_telemetry_periodically(self) -> None:
+        def completed(finished: asyncio.Task[None]) -> None:
+            requests.discard(finished)
+            if not finished.cancelled() and (error := finished.exception()) is not None:
+                log_warn(f"Capability request failed to complete: {error}")
+
+        task.add_done_callback(completed)
+
+    async def _reject_capability(self, data: object, reason: str) -> None:
+        if not isinstance(data, dict):
+            return
+        envelope = cast(dict[str, object], data)
+        if envelope.get("type") != "capabilityRequest":
+            return
+        payload = envelope.get("payload")
+        if not isinstance(payload, dict):
+            return
+        fields = cast(dict[str, object], payload)
+        if not isinstance(fields.get("requestId"), str):
+            return
+        await self.send_frame(
+            CapabilityResponse(
+                payload={
+                    "version": 1,
+                    "requestId": fields["requestId"],
+                    "ok": False,
+                    "error": {"code": "invalid_request", "message": reason},
+                }
+            )
+        )
+
+    async def _handle_capability(self, message: CapabilityRequest) -> None:
+        payload: dict[str, object] = {
+            "version": 1,
+            "requestId": message.payload.request_id,
+        }
+        try:
+            result = await dispatch(
+                self.capabilities, message.payload.operation, message.payload.params
+            )
+            payload.update({"ok": True, "result": result})
+        except Exception as error:
+            log_warn(f"Capability {message.payload.operation}: {error}")
+            payload.update(
+                {
+                    "ok": False,
+                    "error": {"code": "operation_failed", "message": str(error)},
+                }
+            )
+        await self.send_frame(CapabilityResponse(payload=payload))
+
+    async def _send_capabilities_periodically(self) -> None:
         period = 1 / 60
         deadline = time.monotonic()
         try:
             while True:
                 now = time.monotonic()
                 if now >= deadline + period:
-                    # A late wakeup gets one fresh frame, not a catch-up pair.
-                    # Keep the original phase for sub-period wakeup jitter.
                     deadline = now
-                await self.send_frame(build_telemetry(self.state))
-                deadline += period
-                now = time.monotonic()
-                # Drop missed slots without delaying the next fresh sample.
-                # sleep(0) still yields cooperatively after an overrun.
-                deadline = max(now, deadline)
-                await asyncio.sleep(max(0.0, deadline - now))
+                self.capabilities.refresh_builtins()
+                if self.capabilities.catalog_changed:
+                    self.capabilities.catalog_changed = False
+                    await self.send_frame(
+                        CapabilityCatalog(payload=self.capabilities.catalog())
+                    )
+                events = list(self.capabilities.events)
+                self.capabilities.events.clear()
+                if events:
+                    await self.send_frame(
+                        CapabilitySamples(
+                            payload={
+                                "version": 1,
+                                "samples": [
+                                    sample.model_dump(by_alias=True)
+                                    for sample in events
+                                ],
+                            }
+                        )
+                    )
+                deadline = max(time.monotonic(), deadline + period)
+                await asyncio.sleep(max(0.0, deadline - time.monotonic()))
         except asyncio.CancelledError:
             pass
 

@@ -1,14 +1,17 @@
 """WebSocket message queue for the ROV firmware."""
 
 import asyncio
-from dataclasses import dataclass
+from typing import ClassVar
+
+from pydantic import BaseModel, ConfigDict
 
 from .message import WebsocketMessage
 
 
-@dataclass(slots=True)
-class ConfirmedMessage:
+class ConfirmedMessage(BaseModel):
     """A queued frame whose producer must know whether it reached the socket."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(arbitrary_types_allowed=True)
 
     message: WebsocketMessage
     sent: asyncio.Future[None]
