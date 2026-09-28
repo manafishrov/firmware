@@ -213,18 +213,19 @@ class CustomActionRuntime:
 
     async def initialize(self) -> None:
         """Start explicitly enabled sensor backgrounds; never replay actions."""
-        if not self._initialized:
-            await self._load_sources()
-            self._initialized = True
-        for identifier, info in self.custom_actions.items():
-            manifest = self.manifests.get(identifier)
-            if (
-                manifest is not None
-                and info.enabled
-                and manifest.background
-                and manifest.continue_on_disconnect
-            ):
-                await self._start(identifier)
+        async with self._lock:
+            if not self._initialized:
+                await self._load_sources()
+                self._initialized = True
+            for identifier, info in list(self.custom_actions.items()):
+                manifest = self.manifests.get(identifier)
+                if (
+                    manifest is not None
+                    and info.enabled
+                    and manifest.background
+                    and manifest.continue_on_disconnect
+                ):
+                    await self._start(identifier)
 
     def _context(self, identifier: str) -> Context:
         def publish(local_id: str, value: object) -> None:
@@ -237,6 +238,9 @@ class CustomActionRuntime:
         return Context(self.state, publish, self.csv, identifier)
 
     async def _start(self, identifier: str) -> None:
+        if identifier in self.runners:
+            return
+
         def on_running(local_id: str, running: bool) -> None:
             if self.runners.get(identifier) is not runner:
                 return
@@ -528,13 +532,14 @@ class CustomActionRuntime:
 
     async def connected(self) -> None:
         """Resume enabled custom action availability without replaying operator actions."""
-        for identifier, info in self.custom_actions.items():
-            if (
-                info.enabled
-                and info.status != "error"
-                and identifier not in self.runners
-            ):
-                await self._start(identifier)
+        async with self._lock:
+            for identifier, info in list(self.custom_actions.items()):
+                if (
+                    info.enabled
+                    and info.status != "error"
+                    and identifier not in self.runners
+                ):
+                    await self._start(identifier)
 
     async def shutdown(self) -> None:
         """Stop custom action tasks and release temporary download snapshots."""

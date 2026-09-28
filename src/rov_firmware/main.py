@@ -82,5 +82,7 @@ async def main() -> None:
             _ = task.cancel()
         if tasks:
             _ = await asyncio.gather(*tasks, return_exceptions=True)
-        await ws_server.capabilities.shutdown()
-        await serial_manager.shutdown()
+        try:
+            await ws_server.capabilities.shutdown()
+        finally:
+            await serial_manager.shutdown()

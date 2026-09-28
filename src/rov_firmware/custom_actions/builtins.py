@@ -123,7 +123,7 @@ async def invoke(state: RovState, identifier: str, value: object) -> None:
     }
     if identifier in controls:
         blocker = motor_firmware_operation_blocker(state)
-        if blocker and value:
+        if blocker and (identifier == "rov.desiredDepth.set" or value is True):
             raise ValueError(blocker)
         if identifier == "rov.desiredDepth.set":
             await handle_set_desired_depth(state, cast(float, value))
