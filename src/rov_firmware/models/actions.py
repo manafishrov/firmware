@@ -18,6 +18,3 @@ class DirectionVector(
     def validate_root(cls, v: list[float]) -> NumpyNDArray[np.float32]:
         """Validate and convert direction vector to numpy array."""
         return np.array(v, dtype=np.float32)
-
-
-CustomAction = str

@@ -52,12 +52,13 @@ def run_cadence(
     clock = FakeClock(state, len(costs), oversleep)
     starts = []
     frames = []
-    build = server.build_telemetry
+    instance.capabilities.catalog_changed = False
+    build = instance.capabilities.refresh_builtins
 
-    def timed_build(state):
+    def timed_build():
         starts.append(clock.now)
         clock.now += build_cost
-        return build(state)
+        return build()
 
     class TimedLock:
         async def __aenter__(self):
@@ -74,9 +75,9 @@ def run_cadence(
 
     monkeypatch.setattr(instance, "client", SimpleNamespace(send=send))
     monkeypatch.setattr(instance, "_send_lock", TimedLock())
-    monkeypatch.setattr(server, "build_telemetry", timed_build)
+    monkeypatch.setattr(instance.capabilities, "refresh_builtins", timed_build)
     clock.install(monkeypatch)
-    asyncio.run(instance._send_telemetry_periodically())
+    asyncio.run(instance._send_capabilities_periodically())
     return starts, frames, clock.delays
 
 
@@ -96,7 +97,14 @@ def test_telemetry_work_counts_toward_60hz_period(
 
     assert starts == pytest.approx([100.0 + i * PERIOD for i in range(61)])
     assert delays == pytest.approx([PERIOD - send_cost - build_cost - lock_cost] * 61)
-    assert [frame["payload"]["pitch"] for frame in frames] == list(range(0, 122, 2))
+    assert [
+        next(
+            sample["value"]
+            for sample in frame["payload"]["samples"]
+            if sample["id"] == "rov.pitch"
+        )
+        for frame in frames
+    ] == list(range(0, 122, 2))
 
 
 @pytest.mark.parametrize("overrun", [PERIOD, 0.020, 0.100])
@@ -116,7 +124,14 @@ def test_telemetry_overruns_rebase_and_sleep_without_catch_up(
         ]
     )
     assert delays == pytest.approx([0.0, 0.0, PERIOD, PERIOD])
-    assert [frame["payload"]["pitch"] for frame in frames] == [0, 2, 4, 6]
+    assert [
+        next(
+            sample["value"]
+            for sample in frame["payload"]["samples"]
+            if sample["id"] == "rov.pitch"
+        )
+        for frame in frames
+    ] == [0, 2, 4, 6]
 
 
 @pytest.mark.parametrize("oversleep", [PERIOD, 0.100, 10.0])
@@ -133,7 +148,14 @@ def test_telemetry_late_wakeup_drops_missed_slots(
     )
     assert delays == pytest.approx([PERIOD - send_cost] * 11)
     assert all(later > earlier for earlier, later in pairwise(starts))
-    assert [frame["payload"]["pitch"] for frame in frames] == list(range(0, 22, 2))
+    assert [
+        next(
+            sample["value"]
+            for sample in frame["payload"]["samples"]
+            if sample["id"] == "rov.pitch"
+        )
+        for frame in frames
+    ] == list(range(0, 22, 2))
 
 
 def test_telemetry_small_wakeup_jitter_preserves_deadline_phase(rov_state, monkeypatch):
@@ -150,7 +172,14 @@ def test_sustained_20ms_sends_run_at_50hz(rov_state, monkeypatch):
 
     assert starts == pytest.approx([100.0 + i * 0.020 for i in range(51)])
     assert delays == [0.0] * 51
-    assert [frame["payload"]["pitch"] for frame in frames] == list(range(0, 102, 2))
+    assert [
+        next(
+            sample["value"]
+            for sample in frame["payload"]["samples"]
+            if sample["id"] == "rov.pitch"
+        )
+        for frame in frames
+    ] == list(range(0, 102, 2))
 
 
 @pytest.mark.parametrize("send_cost", [0.0, 0.005])
@@ -165,6 +194,7 @@ def test_long_send_stall_resumes_60hz_without_catch_up_burst(
 
 def test_overrun_zero_sleep_yields_and_allows_cancellation(rov_state, monkeypatch):
     instance = server.WebsocketServer(rov_state, Mock())
+    instance.capabilities.catalog_changed = False
     now = [100.0]
     frames = []
 
@@ -177,7 +207,7 @@ def test_overrun_zero_sleep_yields_and_allows_cancellation(rov_state, monkeypatc
     monkeypatch.setattr(server, "time", SimpleNamespace(monotonic=lambda: now[0]))
 
     async def run():
-        task = asyncio.create_task(instance._send_telemetry_periodically())
+        task = asyncio.create_task(instance._send_capabilities_periodically())
         await asyncio.sleep(0)
         assert len(frames) == 1
         task.cancel()
@@ -193,6 +223,7 @@ def test_telemetry_cancellation_exits_and_releases_send_lock(
     rov_state, monkeypatch, blocked_at
 ):
     instance = server.WebsocketServer(rov_state, Mock())
+    instance.capabilities.catalog_changed = False
     entered = asyncio.Event()
     frames = []
 
@@ -218,7 +249,7 @@ def test_telemetry_cancellation_exits_and_releases_send_lock(
     async def run():
         if blocked_at == "lock":
             await instance._send_lock.acquire()
-        task = asyncio.create_task(instance._send_telemetry_periodically())
+        task = asyncio.create_task(instance._send_capabilities_periodically())
         try:
             if blocked_at == "lock":
                 # Let the producer reach the held lock without a wall-clock delay.

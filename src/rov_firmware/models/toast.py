@@ -28,9 +28,11 @@ class ToastAction(CamelCaseModel):
 
 
 class ToastContent(CamelCaseModel):
-    """Localized toast text payload and optional interpolation args."""
+    """Localized or plain toast text, with optional interpolation arguments."""
 
-    message_key: str
+    message_key: str = ""
+    message: str | None = None
+    description: str | None = None
     message_args: ToastArgs | None = None
     description_key: str | None = None
     description_args: ToastArgs | None = None
