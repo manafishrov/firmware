@@ -1,0 +1,658 @@
+{
+  "version": 1,
+  "readings": [
+    {
+      "id": "rov.pitch",
+      "name": "Pitch",
+      "valueType": "number",
+      "customActionId": null,
+      "unit": "°",
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.roll",
+      "name": "Roll",
+      "valueType": "number",
+      "customActionId": null,
+      "unit": "°",
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.yaw",
+      "name": "Heading",
+      "valueType": "number",
+      "customActionId": null,
+      "unit": "°",
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.depth",
+      "name": "Depth",
+      "valueType": "number",
+      "customActionId": null,
+      "unit": "m",
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.desiredPitch",
+      "name": "Target pitch",
+      "valueType": "number",
+      "customActionId": null,
+      "unit": "°",
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.desiredRoll",
+      "name": "Target roll",
+      "valueType": "number",
+      "customActionId": null,
+      "unit": "°",
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.desiredYaw",
+      "name": "Target heading",
+      "valueType": "number",
+      "customActionId": null,
+      "unit": "°",
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.desiredDepth",
+      "name": "Target depth",
+      "valueType": "number",
+      "customActionId": null,
+      "unit": "m",
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.waterTemperature",
+      "name": "Water temperature",
+      "valueType": "number",
+      "customActionId": null,
+      "unit": "°C",
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.electronicsTemperature",
+      "name": "Electronics temperature",
+      "valueType": "number",
+      "customActionId": null,
+      "unit": "°C",
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.thrusterRpms",
+      "name": "Thruster speeds",
+      "valueType": "numberArray",
+      "customActionId": null,
+      "unit": "rpm",
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.thrusterSignalQualities",
+      "name": "Thruster signal quality",
+      "valueType": "json",
+      "customActionId": null,
+      "unit": null,
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.workIndicatorPercentage",
+      "name": "Thruster load",
+      "valueType": "number",
+      "customActionId": null,
+      "unit": "%",
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.autoStabilization",
+      "name": "Stabilization",
+      "valueType": "boolean",
+      "customActionId": null,
+      "unit": null,
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.depthHold",
+      "name": "Depth hold",
+      "valueType": "boolean",
+      "customActionId": null,
+      "unit": null,
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.batteryPercentage",
+      "name": "Battery",
+      "valueType": "number",
+      "customActionId": null,
+      "unit": "%",
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.currentDraw",
+      "name": "Current draw",
+      "valueType": "number",
+      "customActionId": null,
+      "unit": "A",
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.piUndervoltage",
+      "name": "Pi undervoltage",
+      "valueType": "boolean",
+      "customActionId": null,
+      "unit": null,
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.thrusterControlReady",
+      "name": "Thrusters ready",
+      "valueType": "boolean",
+      "customActionId": null,
+      "unit": null,
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.thrusterProtocolState",
+      "name": "Thruster connection",
+      "valueType": "string",
+      "customActionId": null,
+      "unit": null,
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.thrusterProtocolError",
+      "name": "Thruster error",
+      "valueType": "string",
+      "customActionId": null,
+      "unit": null,
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.health",
+      "name": "System health",
+      "valueType": "json",
+      "customActionId": null,
+      "unit": null,
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.deviceInfo",
+      "name": "Device information",
+      "valueType": "json",
+      "customActionId": null,
+      "unit": null,
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "rov.escFirmwareUpdate",
+      "name": "ESC firmware update",
+      "valueType": "json",
+      "customActionId": null,
+      "unit": null,
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "water_sensor.wet",
+      "name": "Water detected",
+      "valueType": "boolean",
+      "customActionId": "water_sensor",
+      "unit": null,
+      "widget": "warning",
+      "staleAfterMs": null
+    },
+    {
+      "id": "dispenser.count",
+      "name": "Dispensed",
+      "valueType": "number",
+      "customActionId": "dispenser",
+      "unit": null,
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "dispenser.dispense.running",
+      "name": "Dispense running",
+      "valueType": "boolean",
+      "customActionId": "dispenser",
+      "unit": null,
+      "widget": null,
+      "staleAfterMs": null
+    },
+    {
+      "id": "depth_logger.record.running",
+      "name": "Record depth running",
+      "valueType": "boolean",
+      "customActionId": "depth_logger",
+      "unit": null,
+      "widget": null,
+      "staleAfterMs": null
+    }
+  ],
+  "actions": [
+    {
+      "id": "rov.direction",
+      "name": "Vehicle movement",
+      "inputType": "numberArray",
+      "customActionId": null,
+      "modes": [
+        "once"
+      ],
+      "mode": "once",
+      "intervalMs": 250
+    },
+    {
+      "id": "rov.autoStabilization.set",
+      "name": "Set stabilization",
+      "inputType": "boolean",
+      "customActionId": null,
+      "modes": [
+        "once"
+      ],
+      "mode": "once",
+      "intervalMs": 250
+    },
+    {
+      "id": "rov.autoStabilization.toggle",
+      "name": "Toggle stabilization",
+      "inputType": "none",
+      "customActionId": null,
+      "modes": [
+        "once"
+      ],
+      "mode": "once",
+      "intervalMs": 250
+    },
+    {
+      "id": "rov.depthHold.set",
+      "name": "Set depth hold",
+      "inputType": "boolean",
+      "customActionId": null,
+      "modes": [
+        "once"
+      ],
+      "mode": "once",
+      "intervalMs": 250
+    },
+    {
+      "id": "rov.depthHold.toggle",
+      "name": "Toggle depth hold",
+      "inputType": "none",
+      "customActionId": null,
+      "modes": [
+        "once"
+      ],
+      "mode": "once",
+      "intervalMs": 250
+    },
+    {
+      "id": "rov.desiredDepth.set",
+      "name": "Set desired depth",
+      "inputType": "number",
+      "customActionId": null,
+      "modes": [
+        "once"
+      ],
+      "mode": "once",
+      "intervalMs": 250
+    },
+    {
+      "id": "rov.attitude.set",
+      "name": "Set desired attitude",
+      "inputType": "numberArray",
+      "customActionId": null,
+      "modes": [
+        "once"
+      ],
+      "mode": "once",
+      "intervalMs": 250
+    },
+    {
+      "id": "rov.thrusterTest.start",
+      "name": "Start thruster test",
+      "inputType": "number",
+      "customActionId": null,
+      "modes": [
+        "once"
+      ],
+      "mode": "once",
+      "intervalMs": 250
+    },
+    {
+      "id": "rov.thrusterTest.cancel",
+      "name": "Cancel thruster test",
+      "inputType": "number",
+      "customActionId": null,
+      "modes": [
+        "once"
+      ],
+      "mode": "once",
+      "intervalMs": 250
+    },
+    {
+      "id": "rov.regulatorAutoTuning.start",
+      "name": "Start regulator tuning",
+      "inputType": "none",
+      "customActionId": null,
+      "modes": [
+        "once"
+      ],
+      "mode": "once",
+      "intervalMs": 250
+    },
+    {
+      "id": "rov.regulatorAutoTuning.cancel",
+      "name": "Cancel regulator tuning",
+      "inputType": "none",
+      "customActionId": null,
+      "modes": [
+        "once"
+      ],
+      "mode": "once",
+      "intervalMs": 250
+    },
+    {
+      "id": "dispenser.dispense",
+      "name": "Dispense",
+      "inputType": "none",
+      "customActionId": "dispenser",
+      "modes": [
+        "once"
+      ],
+      "mode": "once",
+      "intervalMs": 250
+    },
+    {
+      "id": "depth_logger.record",
+      "name": "Record depth",
+      "inputType": "none",
+      "customActionId": "depth_logger",
+      "modes": [
+        "once",
+        "hold",
+        "toggle"
+      ],
+      "mode": "toggle",
+      "intervalMs": 1000
+    }
+  ],
+  "customActions": [
+    {
+      "id": "water_sensor",
+      "name": "Water sensor (simulated)",
+      "description": "Publishes a simulated leak status every second.",
+      "enabled": false,
+      "status": "stopped",
+      "error": null
+    },
+    {
+      "id": "dispenser",
+      "name": "Dispenser (simulated)",
+      "description": "",
+      "enabled": false,
+      "status": "stopped",
+      "error": null
+    },
+    {
+      "id": "depth_logger",
+      "name": "Depth logger",
+      "description": "",
+      "enabled": false,
+      "status": "stopped",
+      "error": null
+    }
+  ],
+  "samples": [
+    {
+      "id": "rov.pitch",
+      "value": 0,
+      "sequence": 1,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.roll",
+      "value": 0,
+      "sequence": 2,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.yaw",
+      "value": 0,
+      "sequence": 3,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.depth",
+      "value": 0,
+      "sequence": 4,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.desiredPitch",
+      "value": 0,
+      "sequence": 5,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.desiredRoll",
+      "value": 0,
+      "sequence": 6,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.desiredYaw",
+      "value": 0,
+      "sequence": 7,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.desiredDepth",
+      "value": 0,
+      "sequence": 8,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.waterTemperature",
+      "value": 0,
+      "sequence": 9,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.electronicsTemperature",
+      "value": 0,
+      "sequence": 10,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.thrusterRpms",
+      "value": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0
+      ],
+      "sequence": 11,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.thrusterSignalQualities",
+      "value": [
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null
+      ],
+      "sequence": 12,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.workIndicatorPercentage",
+      "value": 0,
+      "sequence": 13,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.autoStabilization",
+      "value": false,
+      "sequence": 14,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.depthHold",
+      "value": false,
+      "sequence": 15,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.batteryPercentage",
+      "value": 0,
+      "sequence": 16,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.currentDraw",
+      "value": null,
+      "sequence": 17,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.piUndervoltage",
+      "value": false,
+      "sequence": 18,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.thrusterControlReady",
+      "value": false,
+      "sequence": 19,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.thrusterProtocolState",
+      "value": "disconnected",
+      "sequence": 20,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.thrusterProtocolError",
+      "value": null,
+      "sequence": 21,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.health",
+      "value": {
+        "imuHealthy": false,
+        "pressureSensorHealthy": false,
+        "mcuHealthy": false
+      },
+      "sequence": 22,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.deviceInfo",
+      "value": {
+        "mcuFirmwareVersion": "",
+        "mcuFirmwareVersionStatus": "querying",
+        "escFirmwareVersions": [
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null
+        ],
+        "escFirmwareVersionStatus": "discovering"
+      },
+      "sequence": 23,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "rov.escFirmwareUpdate",
+      "value": {
+        "active": false,
+        "stage": "idle",
+        "progress": 0,
+        "currentEsc": null,
+        "targetVersion": null,
+        "error": null,
+        "recoveryRequired": false
+      },
+      "sequence": 24,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "dispenser.dispense.running",
+      "value": false,
+      "sequence": 25,
+      "timestamp": 0,
+      "ageMs": 0
+    },
+    {
+      "id": "depth_logger.record.running",
+      "value": false,
+      "sequence": 26,
+      "timestamp": 0,
+      "ageMs": 0
+    }
+  ]
+}

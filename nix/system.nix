@@ -9,6 +9,10 @@
   homeDir = "/home/${username}";
   firmwareSource = ./..;
 in {
+  # The SD image uses ext4 and vfat. The base profile's unused ZFS support
+  # can force a full kernel rebuild when its module is missing from caches.
+  boot.supportedFilesystems.zfs = false;
+
   nixpkgs.overlays = [
     (_: prev: {
       libadwaita = prev.libadwaita.overrideAttrs (_: {
