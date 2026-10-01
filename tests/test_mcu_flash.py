@@ -169,8 +169,13 @@ def test_mcu_flash_refuses_firmware_for_a_different_board(
         mcu, "resolve_mcu_firmware", lambda _board: (firmware_path, "1.0.4")
     )
     monkeypatch.setattr(mcu, "detect_connected_mcu_boards", lambda: {McuBoard.PICO})
+    monkeypatch.setattr(mcu, "_resolve_picotool_path", lambda: "picotool")
+    popen_calls: list[tuple[object, ...]] = []
 
-    def unexpected_popen(*_args, **_kwargs):
+    # flash_mcu_firmware catches Exception, so record calls rather than relying
+    # on a raised assertion to fail the test.
+    def unexpected_popen(*args, **_kwargs):
+        popen_calls.append(args)
         msg = "picotool must not run for a mismatched board"
         raise AssertionError(msg)
 
@@ -180,6 +185,7 @@ def test_mcu_flash_refuses_firmware_for_a_different_board(
         mcu.flash_mcu_firmware(rov_state, McuBoard.PICO2, show_toasts=False)
     )
     assert not rov_state.mcu_flashing
+    assert not popen_calls
 
 
 def test_mcu_flash_is_blocked_during_regulator_auto_tuning(rov_state, monkeypatch):
