@@ -40,11 +40,11 @@
       flake = false;
     };
     mcu-firmware-pico = {
-      url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.4-rc.2/pico-v1.0.4-rc.2.uf2";
+      url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.4-rc.3/pico-v1.0.4-rc.3.uf2";
       flake = false;
     };
     mcu-firmware-pico2 = {
-      url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.4-rc.2/pico2-v1.0.4-rc.2.uf2";
+      url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.4-rc.3/pico2-v1.0.4-rc.3.uf2";
       flake = false;
     };
     esc-firmware = {
