@@ -174,7 +174,9 @@ class PicoControl:
             msg = "Pico sequence exhausted"
             raise ConnectionError(msg)
         self._sequence += 1
-        return wire.Frame(kind, self.session, self._sequence, payload)
+        return wire.Frame(
+            kind=kind, session=self.session, sequence=self._sequence, payload=payload
+        )
 
     async def _request(
         self,

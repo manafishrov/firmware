@@ -1,10 +1,11 @@
 """Bounded, explicitly packed Pico control v1 wire format (no native structs)."""
 
-from dataclasses import dataclass
 import math
 import struct
+from typing import ClassVar
 
 import numpy as np
+from pydantic import BaseModel, ConfigDict
 
 from .models.config import RovConfig
 
@@ -71,9 +72,10 @@ def crc32c(data: bytes | bytearray) -> int:
     return crc ^ 0xFFFFFFFF
 
 
-@dataclass(frozen=True)
-class Frame:
+class Frame(BaseModel):
     """A CRC-verified frame; sequences are scoped to a negotiated session."""
+
+    model_config: ClassVar[ConfigDict] = ConfigDict(frozen=True, strict=True)
 
     kind: int
     session: int
@@ -116,7 +118,9 @@ def decode(packet: bytes) -> Frame:
     ):
         msg = "Invalid Pico frame"
         raise ValueError(msg)
-    return Frame(kind, session, sequence, packet[HEADER.size : -4])
+    return Frame(
+        kind=kind, session=session, sequence=sequence, payload=packet[HEADER.size : -4]
+    )
 
 
 def settings_image(config: RovConfig) -> bytes:

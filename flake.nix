@@ -17,7 +17,7 @@
     # nix manager bumps this string, gated by minimumReleaseAge in
     # .github/renovate.json so nixos-raspberrypi.cachix.org has time to
     # populate aarch64 substitutes before we move.
-    nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi/2bbb6ee54ed431a59b38d8aa1e254a9e848b7f2b";
+    nixos-raspberrypi.url = "github:nvmd/nixos-raspberrypi/8e7f1a4a0e80de946f359993087416f581d9c87e";
     nixpkgs.follows = "nixos-raspberrypi/nixpkgs";
     impermanence = {
       url = "github:nix-community/impermanence";
@@ -48,7 +48,7 @@
       flake = false;
     };
     esc-firmware = {
-      url = "https://github.com/manafishrov/AM32/releases/download/v2.21.0/AM32_SKYSTARS_AM60_V2_F421_2.21.0.bin";
+      url = "https://github.com/manafishrov/esc-firmware/releases/download/v2.21.0/AM32_SKYSTARS_AM60_V2_F421_2.21.0.bin";
       flake = false;
     };
   };
@@ -126,6 +126,25 @@
     packages = forAllSystems (_: {
       inherit (self.nixosConfigurations.pi3-imx477.config.system.build) sdImage;
       default = self.nixosConfigurations.pi3-imx477.config.system.build.sdImage;
+    });
+
+    checks = forAllSystems (system: let
+      pkgs = nixpkgs.legacyPackages.${system};
+      cameraPkgs = self.nixosConfigurations.pi3-imx477.pkgs;
+      headlessFlags = map (backend: "-Denable_${backend}=disabled") [
+        "libav"
+        "drm"
+        "egl"
+        "wayland"
+        "qt"
+        "opencv"
+      ];
+      isHeadless = package: builtins.all (flag: builtins.elem flag package.mesonFlags) headlessFlags;
+    in {
+      camera-headless = assert nixpkgs.lib.assertMsg
+      (builtins.all isHeadless [cameraPkgs.rpicam-apps cameraPkgs.rpi.rpicam-apps])
+      "Both rpicam-apps variants must keep every headless backend disabled";
+        pkgs.runCommand "camera-headless" {} "touch $out";
     });
 
     formatter = forAllSystems (system:

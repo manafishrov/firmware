@@ -37,11 +37,11 @@
       "locked": {
         "narHash": "sha256-QPYFthba6yuGosWaCTvvV2WSHLMXSW1zKFhdmKRz11Q=",
         "type": "file",
-        "url": "https://github.com/manafishrov/AM32/releases/download/v2.21.0/AM32_SKYSTARS_AM60_V2_F421_2.21.0.bin"
+        "url": "https://github.com/manafishrov/esc-firmware/releases/download/v2.21.0/AM32_SKYSTARS_AM60_V2_F421_2.21.0.bin"
       },
       "original": {
         "type": "file",
-        "url": "https://github.com/manafishrov/AM32/releases/download/v2.21.0/AM32_SKYSTARS_AM60_V2_F421_2.21.0.bin"
+        "url": "https://github.com/manafishrov/esc-firmware/releases/download/v2.21.0/AM32_SKYSTARS_AM60_V2_F421_2.21.0.bin"
       }
     },
     "flake-compat": {
@@ -175,27 +175,27 @@
         "nixpkgs": "nixpkgs"
       },
       "locked": {
-        "lastModified": 1784434257,
-        "narHash": "sha256-Feyvs5OkNaiG2ymUdOxWirTy9/HPJopywhnwlBIAPiY=",
+        "lastModified": 1789303702,
+        "narHash": "sha256-uNP8AWLxN/fYygw+i79QwK1J+KNI7xivq0SHutqkfkg=",
         "owner": "nvmd",
         "repo": "nixos-raspberrypi",
-        "rev": "2bbb6ee54ed431a59b38d8aa1e254a9e848b7f2b",
+        "rev": "8e7f1a4a0e80de946f359993087416f581d9c87e",
         "type": "github"
       },
       "original": {
         "owner": "nvmd",
         "repo": "nixos-raspberrypi",
-        "rev": "2bbb6ee54ed431a59b38d8aa1e254a9e848b7f2b",
+        "rev": "8e7f1a4a0e80de946f359993087416f581d9c87e",
         "type": "github"
       }
     },
     "nixpkgs": {
       "locked": {
-        "lastModified": 1784280462,
-        "narHash": "sha256-DtoqIqM7VkR6NxAkcLpMwmi02USwWb3JdmNGLyhthc0=",
+        "lastModified": 1789114715,
+        "narHash": "sha256-ugpsyk3NM2s87vXfUiIIiibbJ4Pp0JPS5p/3mfs+q+c=",
         "owner": "NixOS",
         "repo": "nixpkgs",
-        "rev": "293d6abedf0478e681a4dfcfcb35b30fc796a32f",
+        "rev": "21a67dc470149f337cecafbe965d8d252a390518",
         "type": "github"
       },
       "original": {
@@ -208,11 +208,11 @@
     "numpydantic-src": {
       "flake": false,
       "locked": {
-        "lastModified": 1782165846,
-        "narHash": "sha256-uSVlC5nZbGZVJamz3wYIdi6IvZobRWTNL70fB74us8w=",
+        "lastModified": 1785625919,
+        "narHash": "sha256-yGMAPiRK1jvfUpmkUB0rWj5dOXCJIiwf9/MTMqvotnw=",
         "owner": "p2p-ld",
         "repo": "numpydantic",
-        "rev": "54b938133fe12137414da3e8d714f5324059d71d",
+        "rev": "82cd798f9916540c80853325d705b544558055d0",
         "type": "github"
       },
       "original": {
@@ -245,11 +245,11 @@
         ]
       },
       "locked": {
-        "lastModified": 1785360170,
-        "narHash": "sha256-XE1lKgQ3eIO3E7zWryqcRsax+mYXod/5RHBn4YaR9YE=",
+        "lastModified": 1786901030,
+        "narHash": "sha256-WSFCsDSE5ffgD2MqzkM2CYjeFiKhRF/dJUN8uedb6YE=",
         "owner": "numtide",
         "repo": "treefmt-nix",
-        "rev": "d1187f8bc71fb8aab02395869ec3f5c1920f75c0",
+        "rev": "27b3b12a8e6375f28ebe122f07d230ca5459bbfa",
         "type": "github"
       },
       "original": {

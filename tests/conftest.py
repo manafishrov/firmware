@@ -24,6 +24,7 @@ def rov_state(monkeypatch, tmp_path):
         "_RECOVERY_JOURNAL_PATH",
         tmp_path / "esc-firmware-update.json",
     )
+    monkeypatch.setenv("MANAFISH_DATA_DIR", str(tmp_path))
     state = RovState.__new__(RovState)
     state.rov_config = RovConfig()
     state.system_health = SystemHealth()

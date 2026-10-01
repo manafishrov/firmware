@@ -82,7 +82,8 @@ for entry in "${CUSTOM_GIT_PACKAGES[@]}"; do
 	pkg="${entry%%:*}"
 	input="${entry#*:}"
 	input="${input%%:*}"
-	url="${entry##*:}"
+	url="${entry#*:}"
+	url="${url#*:}"
 
 	echo "  $pkg (custom git)..."
 	rev=$(nix flake metadata --json | jq -r ".locks.nodes.\"$input\".locked.rev")
@@ -95,4 +96,37 @@ for entry in "${CUSTOM_GIT_PACKAGES[@]}"; do
 	fi
 done
 
-echo "Done! pyproject.toml updated with versions from nixpkgs."
+# Nix builds numpydantic from this exact flake input, which can advance between
+# releases. A PyPI version alone does not reproduce that source. Match both the
+# source and the metadata version supplied by nixpkgs' pdm-backend setup hook.
+numpydantic_rev=$(jq -er '.nodes["numpydantic-src"].locked.rev | select(test("^[0-9a-f]{40}$"))' flake.lock)
+numpydantic_version=$(sed -n '/pname = "numpydantic";/,/version =/p' "$NIX_PKG_FILE" | grep 'version =' | sed -E 's/.*version = "([^"]+)";.*/\1/')
+test -n "$numpydantic_version"
+begin='# BEGIN generated Nix Python sources'
+end='# END generated Nix Python sources'
+begin_count=$(grep -c -F -x "$begin" pyproject.toml || true)
+end_count=$(grep -c -F -x "$end" pyproject.toml || true)
+if [ "$begin_count" != "$end_count" ] || [ "$begin_count" -gt 1 ]; then
+	echo "Invalid generated Nix Python sources block in pyproject.toml" >&2
+	exit 1
+fi
+if [ "$begin_count" -eq 1 ]; then
+	begin_line=$(grep -n -F -x "$begin" pyproject.toml | cut -d: -f1)
+	end_line=$(grep -n -F -x "$end" pyproject.toml | cut -d: -f1)
+	if [ "$begin_line" -ge "$end_line" ]; then
+		echo "Invalid generated Nix Python sources block in pyproject.toml" >&2
+		exit 1
+	fi
+fi
+sed -i "/^$begin\$/,/^$end\$/d" pyproject.toml
+cat >>pyproject.toml <<EOF
+$begin
+[tool.uv.sources]
+numpydantic = { git = "https://github.com/p2p-ld/numpydantic.git", rev = "$numpydantic_rev" }
+
+[tool.uv.extra-build-variables.numpydantic]
+PDM_BUILD_SCM_VERSION = "$numpydantic_version"
+$end
+EOF
+
+echo "Done! pyproject.toml updated with versions and sources from Nix."

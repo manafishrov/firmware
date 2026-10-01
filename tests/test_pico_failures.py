@@ -20,10 +20,10 @@ from rov_firmware.websocket.state import websocket_state
 
 def reply(frame, result=0, generation=0, digest=0):
     return wire.Frame(
-        wire.ACK,
-        frame.session,
-        frame.sequence,
-        struct.pack("<BBHII", frame.kind, result, 0, generation, digest),
+        kind=wire.ACK,
+        session=frame.session,
+        sequence=frame.sequence,
+        payload=struct.pack("<BBHII", frame.kind, result, 0, generation, digest),
     )
 
 
@@ -148,7 +148,9 @@ def test_lost_maintenance_ack_keeps_latch_and_disallows_settings(endpoint, monke
 
 def test_rejected_stream_command_is_fail_closed(endpoint):
     endpoint._ready = True
-    frame = wire.Frame(wire.CONTROL, endpoint.session, 15, b"")
+    frame = wire.Frame(
+        kind=wire.CONTROL, session=endpoint.session, sequence=15, payload=b""
+    )
     endpoint.receive(reply(frame, result=3))
     assert not endpoint._ready
     assert not endpoint.state.system_status.thruster_control_ready
@@ -277,7 +279,8 @@ def test_failed_depth_setter_warns_without_changing_local_target(endpoint, monke
     )
     warning = Mock()
     monkeypatch.setattr(regulator_handler, "toast_warn", warning)
-    asyncio.run(regulator_handler.handle_set_desired_depth(endpoint.state, 4))
+    with pytest.raises(TimeoutError, match="ACK lost"):
+        asyncio.run(regulator_handler.handle_set_desired_depth(endpoint.state, 4))
     assert (
         endpoint.state.regulator.pending_desired_depth
         == endpoint.state.regulator.desired_depth
