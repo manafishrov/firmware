@@ -9,9 +9,10 @@ from ms5837 import DENSITY_FRESHWATER, DENSITY_SALTWATER, MS5837_30BA
 from ..constants import (
     DEPTH_DERIVATIVE_EMA_TAU,
     PRESSURE_SENSOR_READ_FREQUENCY,
+    PRESSURE_SENSOR_RECONNECT_INTERVAL_S,
     SYSTEM_FAILURE_THRESHOLD,
 )
-from ..log import log_error, log_info
+from ..log import log_error, log_info, log_warn
 from ..models.config import FluidType
 from ..models.sensors import PressureData
 from ..rov_state import RovState
@@ -30,15 +31,14 @@ class PressureSensor:
         self.state: RovState = state
         self.sensor: MS5837_30BA | None = None
         self.current_fluid_type: FluidType | None = None
+        self._next_reconnect_time: float = 0.0
+        self._reconnect_failure_logged: bool = False
 
     async def initialize(self) -> None:
         """Asynchronously initialize the pressure sensor."""
         try:
             log_info("Attempting to initialize MS5837 pressure sensor...")
-            sensor_instance = await asyncio.to_thread(MS5837_30BA)
-            _ = await asyncio.to_thread(sensor_instance.init)
-            self.sensor = sensor_instance
-            self._update_fluid_density()
+            await asyncio.to_thread(self._open_sensor)
             self.state.system_health.pressure_sensor_healthy = True
             log_info("MS5837 pressure sensor initialized successfully.")
         except Exception as e:
@@ -54,6 +54,48 @@ class PressureSensor:
                 ),
                 action=None,
             )
+
+    def _open_sensor(self) -> None:
+        """Reset the sensor and reload its calibration PROM.
+
+        Reuses the open I2C bus when one exists, so reconnecting after the
+        sensor was unplugged does not leak bus handles.
+        """
+        if self.sensor is None:
+            self.sensor = MS5837_30BA()
+        if not self.sensor.init():
+            msg = "sensor did not respond with valid calibration data"
+            raise OSError(msg)
+        self._update_fluid_density()
+
+    def _schedule_reconnect(self) -> None:
+        self._next_reconnect_time = (
+            time.monotonic() + PRESSURE_SENSOR_RECONNECT_INTERVAL_S
+        )
+
+    def _reconnect_if_due(self) -> bool:
+        """Periodically try to bring a disconnected sensor back.
+
+        Returns whether the sensor is healthy again. Only the first failed
+        attempt of an outage is logged.
+        """
+        if time.monotonic() < self._next_reconnect_time:
+            return False
+        self._schedule_reconnect()
+        try:
+            self._open_sensor()
+        except Exception as e:
+            if not self._reconnect_failure_logged:
+                log_warn(
+                    "MS5837 pressure sensor is unavailable; retrying every "
+                    f"{PRESSURE_SENSOR_RECONNECT_INTERVAL_S:.0f} s. Error: {e}"
+                )
+                self._reconnect_failure_logged = True
+            return False
+        self._reconnect_failure_logged = False
+        self.state.system_health.pressure_sensor_healthy = True
+        log_info("MS5837 pressure sensor reconnected.")
+        return True
 
     def _update_fluid_density(self) -> None:
         """Update the fluid density on the sensor based on current config."""
@@ -104,14 +146,16 @@ class PressureSensor:
         previous_depth: float = 0.0
         filtered_depth_change: float = 0.0
         previous_read_time: float = 0.0
+        self._schedule_reconnect()
         while True:
             if self.state.rov_config.fluid_type != self.current_fluid_type:
                 self._update_fluid_density()
-            if not self.state.system_health.pressure_sensor_healthy:
+            if (
+                not self.state.system_health.pressure_sensor_healthy
+                and not self._reconnect_if_due()
+            ):
                 time.sleep(1)
                 next_tick = time.perf_counter() + interval
-                previous_read_time = 0.0
-                failure_count = 0
                 continue
             try:
                 data = self.read_data()
@@ -139,7 +183,12 @@ class PressureSensor:
             if failure_count >= SYSTEM_FAILURE_THRESHOLD:
                 self.state.system_health.pressure_sensor_healthy = False
                 failure_count = 0
-                log_error("Pressure sensor failed 3 times, disabling pressure sensor")
+                previous_read_time = 0.0
+                self._schedule_reconnect()
+                log_error(
+                    "Pressure sensor failed 3 times, disabling pressure sensor until "
+                    "it reconnects"
+                )
             sleep_time = next_tick - time.perf_counter()
             if sleep_time > 0:
                 time.sleep(sleep_time)
