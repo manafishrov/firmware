@@ -14,6 +14,7 @@ from rov_firmware.constants import (
     MCU_TELEMETRY_TYPE_ERPM,
     MCU_TELEMETRY_TYPE_SIGNAL_QUALITY,
 )
+from rov_firmware.pico_control import PicoControl
 from rov_firmware.regulator import Regulator
 from rov_firmware.sensors import mcu as mcu_module
 from rov_firmware.sensors.mcu import McuSensor
@@ -246,3 +247,24 @@ def test_command_observation_does_not_modify_wire_packet(recorder):
     assert len(writer.writes) == 1
     assert len(writer.writes[0]) == 18
     assert snapshot["write_failures"] == 0
+
+
+def test_summary_accepts_pico_control_snapshots(rov_state, monkeypatch):
+    serial = SerialManager(rov_state)
+    control = PicoControl(rov_state, serial)
+    recorder = diagnostics.FieldDiagnostics(
+        rov_state, serial, McuSensor(rov_state, serial), control
+    )
+    events = []
+    monkeypatch.setattr(
+        diagnostics,
+        "log_diagnostic",
+        lambda event, **fields: events.append((event, fields)),
+    )
+    monkeypatch.setattr(websocket_state, "is_client_connected", False)
+    for now in range(100, 112):
+        recorder.sample(float(now), undervoltage=False)
+    summaries = [fields for event, fields in events if event == "snapshot"]
+    assert summaries
+    assert "pico_session" in summaries[-1]["control"]
+    assert "max_write_gap_s" not in summaries[-1]["control"]

@@ -261,23 +261,25 @@ class FieldDiagnostics:
             )
         controls = [cast(dict[str, object], sample["control"]) for sample in window]
         control = dict(cast(dict[str, object], snapshot["control"]))
-        control["max_write_gap_s"] = max(
-            (cast(float, row["max_write_gap_s"]) for row in controls), default=0.0
-        )
-        control["write_gaps_over_two_periods"] = sum(
-            cast(int, row["write_gaps_over_two_periods"]) for row in controls
-        )
-        for suffix, operation in (("min", min), ("max", max)):
-            values = [
-                cast(list[int], row[f"usb_command_{suffix}_since_sample"])
-                for row in controls
-                if row[f"usb_command_{suffix}_since_sample"] is not None
-            ]
-            control[f"usb_command_window_{suffix}"] = (
-                [operation(channel) for channel in zip(*values, strict=True)]
-                if values
-                else None
+        # Pico control reports measured device stats instead of host write gaps.
+        if "max_write_gap_s" in control:
+            control["max_write_gap_s"] = max(
+                (cast(float, row["max_write_gap_s"]) for row in controls), default=0.0
             )
+            control["write_gaps_over_two_periods"] = sum(
+                cast(int, row["write_gaps_over_two_periods"]) for row in controls
+            )
+            for suffix, operation in (("min", min), ("max", max)):
+                values = [
+                    cast(list[int], row[f"usb_command_{suffix}_since_sample"])
+                    for row in controls
+                    if row[f"usb_command_{suffix}_since_sample"] is not None
+                ]
+                control[f"usb_command_window_{suffix}"] = (
+                    [operation(channel) for channel in zip(*values, strict=True)]
+                    if values
+                    else None
+                )
         return {
             **snapshot,
             "esc": channels,
