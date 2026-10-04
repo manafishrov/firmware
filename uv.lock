@@ -109,7 +109,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/56/33/26ec2e8049eaa2f07
 
 [[package]]
 name = "manafish"
-version = "1.2.0rc2"
+version = "1.2.0rc3"
 source = { editable = "." }
 dependencies = [
     { name = "bmi270" },
