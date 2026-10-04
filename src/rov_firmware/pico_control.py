@@ -5,6 +5,7 @@ remains a test oracle, never a fallback for incompatible or unavailable hardware
 """
 
 import asyncio
+from collections import Counter
 import contextlib
 import math
 import os
@@ -19,7 +20,7 @@ from scipy.spatial.transform import Rotation
 from . import pico_protocol as wire
 from .constants import THRUSTER_TEST_DURATION_SECONDS, THRUSTER_TEST_TOAST_ID
 from .log import log_error, log_info
-from .models.config import RovConfig
+from .models.config import RovConfig, ThrusterProtocol
 from .models.sensors import ImuData
 from .models.toast import ToastVariant
 from .toast import ToastContent, cancel_thruster_test_action, toast_content
@@ -38,6 +39,13 @@ CONTROL_INTERVAL = 1 / 60
 HOST_TIMEOUT = 0.2
 TELEMETRY_TIMEOUT = 0.2
 PRESSURE_TIMEOUT = 0.5
+# RAW_MOTORS uses 1000 as neutral and 0.5 us per step in PWM. The PWM step
+# also clears the AM32 product dead band (+/-35 us, 70 steps) so both
+# protocols run a thruster test at roughly the same throttle.
+DSHOT_TEST_COMMAND = 1100
+PWM_TEST_COMMAND = 1170
+ATTITUDE_STALL_TIMEOUT = 2.0
+ATTITUDE_STALL_MAX_TIMEOUT = 60.0
 MAX_SEQUENCE = 0xFFFFFFFE
 QUATERNION_SIZE = 4
 MIN_QUATERNION_NORM = 1e-6
@@ -71,6 +79,10 @@ class PicoControl:
         self._last_telemetry_sequence = 0
         self._last_imu_sequence = 0
         self._last_raw_imu = 0.0
+        self._applied_at = 0.0
+        self._attitude_rejections: Counter[str] = Counter()
+        self._last_attitude_rejection: str | None = None
+        self._stall_recoveries = 0
         self._last_source = 0.0
         self._previous_direction = np.zeros(8, dtype=np.float32)
         self._last_pressure: object | None = None
@@ -282,7 +294,7 @@ class PicoControl:
                 capability.cancel()
             self._capability = None
 
-    async def _apply(self, image: bytes) -> None:
+    async def _apply(self, config: RovConfig, image: bytes) -> None:
         self._ready = False
         self.state.system_status.thruster_control_ready = False
         self.state.system_status.thruster_protocol_state = "applying"
@@ -316,7 +328,13 @@ class PicoControl:
             raise RuntimeError(msg)
         self._settings_generation = generation
         self._settings_crc = digest
+        # The device sends COMMIT APPLIED only after the image's protocol is
+        # running, so this is the MCU's acknowledgement of that protocol.
+        self.serial.record_committed_protocol_config(
+            config.thruster_protocol.value, config.dshot_speed
+        )
         self._ready = True
+        self._applied_at = time.monotonic()
         self._last_error = None
         self.state.system_status.thruster_protocol_state = "ready"
         self.state.system_status.thruster_protocol_error = None
@@ -337,7 +355,7 @@ class PicoControl:
                     msg = "Pico control is not negotiated"
                     raise ConnectionError(msg)
                 try:
-                    await self._apply(image)
+                    await self._apply(config, image)
                     # Persistence must finish before actuation resumes with this image.
                     self._ready = False
                 except BaseException:
@@ -494,20 +512,32 @@ class PicoControl:
         ):
             waiter.set_result(frame)
 
+    def _reject_attitude(self, kind: str, detail: str | None = None) -> None:
+        self._attitude_rejections[kind] += 1
+        self._last_attitude_rejection = kind if detail is None else f"{kind}: {detail}"
+
     def _attitude(self, frame: wire.Frame) -> None:
-        if (
-            len(frame.payload) != wire.ATTITUDE_SIZE
-            or frame.sequence <= self._last_telemetry_sequence
-        ):
+        if len(frame.payload) != wire.ATTITUDE_SIZE:
+            self._reject_attitude("size", str(len(frame.payload)))
+            return
+        if frame.sequence <= self._last_telemetry_sequence:
+            self._reject_attitude(
+                "stale_sequence",
+                f"{frame.sequence} <= {self._last_telemetry_sequence}",
+            )
             return
         values = struct.unpack("<Q9f5I8HI", frame.payload)
         current = values[1:5]
         desired = values[5:9]
         depth = values[9]
         generation, _control_sequence, health, _host_age, _output_age = values[10:15]
-        if generation != self._settings_generation or not all(
-            math.isfinite(value) for value in (*current, *desired, depth)
-        ):
+        if generation != self._settings_generation:
+            self._reject_attitude(
+                "generation", f"{generation} != {self._settings_generation}"
+            )
+            return
+        if not all(math.isfinite(value) for value in (*current, *desired, depth)):
+            self._reject_attitude("non_finite")
             return
         if (
             min(
@@ -516,7 +546,10 @@ class PicoControl:
             )
             < MIN_QUATERNION_NORM**2
         ):
+            self._reject_attitude("zero_quaternion")
             return
+        self._last_attitude_rejection = None
+        self._stall_recoveries = 0
         self.current_quaternion = tuple(current)
         self.desired_quaternion = tuple(desired)
         yaw, pitch, roll = Rotation.from_quat(current).as_euler("ZYX", degrees=True)
@@ -571,6 +604,29 @@ class PicoControl:
         ):
             self.state.system_health.imu_healthy = False
             self.state.system_status.thruster_control_ready = False
+
+    def _recover_stalled_attitude(self, now: float) -> None:
+        """Renegotiate when a ready session never gets usable attitude telemetry.
+
+        The device streams ATTITUDE at 60 Hz whenever a session is active, so a
+        long silence after a successful apply means this host is rejecting or
+        missing every frame. Without this, thruster control stays unavailable
+        with no error until the Pico is reset.
+        """
+        if not self._ready:
+            return
+        timeout = min(
+            ATTITUDE_STALL_MAX_TIMEOUT,
+            ATTITUDE_STALL_TIMEOUT * 2**self._stall_recoveries,
+        )
+        if now - max(self._last_telemetry, self._applied_at) <= timeout:
+            return
+        self._stall_recoveries += 1
+        rejection = self._last_attitude_rejection or "no frames received"
+        self._invalidate_session(
+            f"Pico attitude telemetry was not accepted for {timeout:.0f} s "
+            f"({rejection}); renegotiating"
+        )
 
     async def _send_pressure(self) -> None:
         pressure = self.state.pressure
@@ -680,7 +736,11 @@ class PicoControl:
         request = thrusters.test_request_id
         thrusters.work_indicator_percentage = 0
         motors = [1000] * 8
-        motors[index] = 1100
+        motors[index] = (
+            PWM_TEST_COMMAND
+            if self.state.rov_config.thruster_protocol == ThrusterProtocol.PWM
+            else DSHOT_TEST_COMMAND
+        )
         await self._write(
             self._frame(wire.RAW_MOTORS, struct.pack("<8H", *motors)).encode()
         )
@@ -713,6 +773,8 @@ class PicoControl:
             "last_motors": self._last_motor_commands,
             "stats": self._last_stats,
             "attitude_age_s": now - self._last_telemetry,
+            "attitude_rejections": dict(self._attitude_rejections),
+            "last_attitude_rejection": self._last_attitude_rejection,
             "development_identity": self.development_identity,
         }
 
@@ -745,10 +807,11 @@ class PicoControl:
                     if not self._negotiated:
                         async with asyncio.timeout(APPLY_TIMEOUT):
                             await self._negotiate()
-                            await self._apply(
-                                wire.settings_image(self.state.rov_config)
-                            )
-                    self._expire_health(time.monotonic())
+                            config = self.state.rov_config
+                            await self._apply(config, wire.settings_image(config))
+                    now = time.monotonic()
+                    self._expire_health(now)
+                    self._recover_stalled_attitude(now)
                     if not self._ready:
                         await self.neutral()
                     else:

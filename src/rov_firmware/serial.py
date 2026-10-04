@@ -216,6 +216,14 @@ class SerialManager:
             self.state.system_status.thruster_protocol_state = "ready"
             self.state.system_status.thruster_protocol_error = None
 
+    def record_committed_protocol_config(self, protocol: str, dshot_speed: int) -> None:
+        """Record the protocol of a settings image the Pico committed.
+
+        Pico control owns thruster readiness, so this only updates the
+        acknowledged configuration that ESC maintenance checks.
+        """
+        self._mcu_protocol_config = (protocol, dshot_speed)
+
     def begin_mcu_protocol_request(self, request_id: int) -> None:
         """Track the current correlated runtime-config request."""
         self._mcu_protocol_request_id = request_id

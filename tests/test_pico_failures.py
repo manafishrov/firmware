@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from rov_firmware import pico_protocol as wire
-from rov_firmware.models.config import PartialRovConfig, RovConfig
+from rov_firmware.models.config import PartialRovConfig, RovConfig, ThrusterProtocol
 from rov_firmware.pico_control import PicoControl
 from rov_firmware.serial import SerialManager
 from rov_firmware.websocket.receive import (
@@ -317,3 +317,22 @@ def test_clock_rollback_ends_calibration_with_neutral_and_error(endpoint, monkey
     assert frame.kind == wire.RAW_MOTORS
     assert struct.unpack("<8H", frame.payload) == (1000,) * 8
     assert toast.call_args.kwargs["variant"].value == "error"
+
+
+@pytest.mark.parametrize(
+    ("protocol", "command"),
+    [(ThrusterProtocol.DSHOT, 1100), (ThrusterProtocol.PWM, 1170)],
+)
+def test_thruster_test_step_clears_pwm_dead_band(
+    endpoint, monkeypatch, protocol, command
+):
+    endpoint.state.rov_config.thruster_protocol = protocol
+    endpoint.state.system_status.thruster_control_ready = True
+    endpoint.state.thrusters.test_thruster = 2
+    write = AsyncMock()
+    monkeypatch.setattr(endpoint, "_write", write)
+    monkeypatch.setattr("rov_firmware.pico_control.toast_content", Mock())
+    assert asyncio.run(endpoint._send_test())
+    frame = wire.decode(write.call_args.args[0])
+    assert frame.kind == wire.RAW_MOTORS
+    assert struct.unpack("<8H", frame.payload) == (1000, 1000, command, *(1000,) * 5)

@@ -1,6 +1,7 @@
 """Wire compatibility, actual-apply barriers and stale authority regression tests."""
 
 import asyncio
+from pathlib import Path
 import struct
 import time
 from unittest.mock import AsyncMock, Mock
@@ -8,7 +9,7 @@ from unittest.mock import AsyncMock, Mock
 import numpy as np
 import pytest
 
-from rov_firmware import pico_protocol as wire
+from rov_firmware import esc_firmware, pico_protocol as wire
 from rov_firmware.models.config import PartialRovConfig, RovConfig
 from rov_firmware.models.sensors import PressureData
 from rov_firmware.pico_control import PicoControl
@@ -116,9 +117,8 @@ def test_reliable_request_retries_identical_sequence_no_wrong_ack(
     assert frames[0] == frames[1]
 
 
-def test_atomic_settings_commit_checks_digest(endpoint, monkeypatch):
-    endpoint.session = 123
-    endpoint._negotiated = True
+def acknowledge_settings_transaction(endpoint, monkeypatch):
+    """Answer every settings request the way the device does; return sent frames."""
     frames = []
     generation = digest = 0
 
@@ -136,6 +136,13 @@ def test_atomic_settings_commit_checks_digest(endpoint, monkeypatch):
             endpoint.receive(ack(frame))
 
     monkeypatch.setattr(endpoint, "_write", write)
+    return frames
+
+
+def test_atomic_settings_commit_checks_digest(endpoint, monkeypatch):
+    endpoint.session = 123
+    endpoint._negotiated = True
+    frames = acknowledge_settings_transaction(endpoint, monkeypatch)
     asyncio.run(endpoint.apply_config(endpoint.state.rov_config))
     assert [frame.kind for frame in frames] == [
         wire.RAW_MOTORS,
@@ -149,6 +156,30 @@ def test_atomic_settings_commit_checks_digest(endpoint, monkeypatch):
     assert not endpoint._ready  # Persistence is a separate mandatory barrier.
     endpoint.confirm_persisted_config()
     assert endpoint._ready
+
+
+def test_settings_commit_acknowledges_protocol_for_esc_flash_preflight(
+    endpoint, monkeypatch
+):
+    endpoint.session = 123
+    endpoint._negotiated = True
+    acknowledge_settings_transaction(endpoint, monkeypatch)
+    image = (Path("esc-v2.20.0.bin"), "2.20.0", b"image")
+    monkeypatch.setattr(esc_firmware, "_resolve_validated_image", lambda: image)
+    monkeypatch.setattr(
+        endpoint.serial, "ensure_connection", AsyncMock(return_value=True)
+    )
+    assert endpoint.serial.mcu_protocol_config is None
+
+    asyncio.run(endpoint.apply_config(endpoint.state.rov_config))
+    endpoint.confirm_persisted_config()
+    endpoint.state.system_status.thruster_control_ready = True
+
+    assert endpoint.serial.mcu_protocol_config == ("dshot", 300)
+    assert (
+        asyncio.run(esc_firmware._preflight_update(endpoint.state, endpoint.serial))
+        == image
+    )
 
 
 def test_stale_app_input_is_invalid_despite_live_usb(endpoint, monkeypatch):
@@ -354,6 +385,43 @@ def test_attitude_and_raw_imu_project_without_pi_controller_execution(endpoint):
     endpoint._expire_health(time.monotonic() + 1)
     assert not endpoint.state.system_health.imu_healthy
     assert not endpoint.state.system_status.thruster_control_ready
+
+
+def test_rejected_attitude_stream_renegotiates_with_reason(endpoint):
+    endpoint.session = 3
+    endpoint._negotiated = True
+    endpoint._settings_generation = 2
+    endpoint._ready = True
+    endpoint._applied_at = 100.0
+    payload = struct.pack(
+        "<Q9f5I8HI", 1000, *([0, 0, 0, 1] * 2), 0, 7, 15, 1, 0, 0, *([1000] * 8), 0
+    )
+    endpoint.receive(
+        wire.Frame(kind=wire.ATTITUDE, session=3, sequence=5, payload=payload)
+    )
+    assert not endpoint.state.system_status.thruster_control_ready
+    assert endpoint.diagnostic_snapshot(101.0)["attitude_rejections"] == {
+        "generation": 1
+    }
+
+    endpoint._recover_stalled_attitude(101.0)
+    assert endpoint._negotiated
+
+    endpoint._recover_stalled_attitude(102.5)
+    assert not endpoint._negotiated
+    assert endpoint.session == 0
+    assert endpoint.state.system_status.thruster_protocol_state == "failed"
+    assert "generation: 7 != 2" in str(
+        endpoint.state.system_status.thruster_protocol_error
+    )
+
+    # Repeated failures back off instead of renegotiating every two seconds.
+    endpoint._ready = True
+    endpoint._applied_at = 200.0
+    endpoint._recover_stalled_attitude(203.0)
+    assert endpoint._ready
+    endpoint._recover_stalled_attitude(204.5)
+    assert not endpoint._ready
 
 
 def test_old_pressure_is_not_relabelled_fresh_after_reconnect(endpoint, monkeypatch):
