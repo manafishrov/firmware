@@ -18,7 +18,7 @@
   "vulnerabilityAlerts": {
     "labels": ["dependencies", "security"]
   },
-  "enabledManagers": ["nix", "github-actions", "custom.regex"],
+  "enabledManagers": ["nix", "pep621", "github-actions", "custom.regex"],
   "nix": {
     "enabled": true
   },
@@ -79,8 +79,20 @@
       "groupName": "custom python packages"
     },
     {
-      "description": "Python deps (incl. python itself) are governed by nixpkgs and synced via sync-python-deps.sh. The pep621 manager is disabled globally; this rule is a belt-and-braces guard for any other manager that might still try to bump Python.",
+      "description": "Python itself is governed by nixpkgs and synced via sync-python-deps.sh. Don't let any manager bump it.",
       "matchDepNames": ["python"],
+      "enabled": false
+    },
+    {
+      "description": "Runtime deps, ruff and ty are governed by nixpkgs and synced via sync-python-deps.sh; a pep621 bump would be reverted by the next sync. pep621 stays enabled only for uv.lock maintenance (transitive deps such as virtualenv) and the dev tools nixpkgs does not pin (pytest, pre-commit).",
+      "matchManagers": ["pep621"],
+      "matchDepTypes": ["project.dependencies", "tool.uv.sources"],
+      "enabled": false
+    },
+    {
+      "description": "ruff and ty versions come from nixpkgs via sync-python-deps.sh.",
+      "matchManagers": ["pep621"],
+      "matchPackageNames": ["ruff", "ty"],
       "enabled": false
     }
   ],
