@@ -27,7 +27,7 @@ tools = "tools:cli"
 package = true
 
 [dependency-groups]
-dev = ["pre-commit==4.6.0", "pytest==9.0.3", "ruff==0.15.14", "ty==0.0.38"]
+dev = ["pre-commit==4.7.0", "pytest==9.1.1", "ruff==0.15.14", "ty==0.0.38"]
 
 [tool.ruff]
 target-version = "py313"
@@ -86,7 +86,7 @@ rules.possibly-unresolved-reference = "warn"
 testpaths = ["tests"]
 # BEGIN generated Nix Python sources
 [tool.uv.sources]
-numpydantic = { git = "https://github.com/p2p-ld/numpydantic.git", rev = "82cd798f9916540c80853325d705b544558055d0" }
+numpydantic = { git = "https://github.com/p2p-ld/numpydantic.git", rev = "b4e33faadd7963c319ff487293d180390adf1f29" }
 
 [tool.uv.extra-build-variables.numpydantic]
 PDM_BUILD_SCM_VERSION = "1.10.0"

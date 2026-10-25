@@ -53,7 +53,6 @@ def test_connected_logs_are_in_both_journal_and_stream(
     isolated_logs, monkeypatch, caplog
 ):
     caplog.set_level(logging.INFO)
-    monkeypatch.setattr(log._logger, "propagate", True)
 
     async def run():
         monkeypatch.setattr(
