@@ -141,7 +141,7 @@ requires-dist = [
     { name = "lgpio", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'", specifier = "==0.2.2" },
     { name = "ms5837", git = "https://github.com/bluerobotics/ms5837-python.git?rev=02996d71d2f08339b3d317b3f4da0a83781c706e" },
     { name = "numpy", specifier = "==2.4.4" },
-    { name = "numpydantic", git = "https://github.com/p2p-ld/numpydantic.git?rev=4422845bab82548d9eccb89951d48f6f2ec785f0" },
+    { name = "numpydantic", git = "https://github.com/p2p-ld/numpydantic.git?rev=b4e33faadd7963c319ff487293d180390adf1f29" },
     { name = "psutil", specifier = "==7.2.2" },
     { name = "pydantic", specifier = "==2.12.5" },
     { name = "pyserial-asyncio-fast", specifier = "==0.16" },
@@ -207,7 +207,7 @@ wheels = [
 [[package]]
 name = "numpydantic"
 version = "1.10.0"
-source = { git = "https://github.com/p2p-ld/numpydantic.git?rev=4422845bab82548d9eccb89951d48f6f2ec785f0#4422845bab82548d9eccb89951d48f6f2ec785f0" }
+source = { git = "https://github.com/p2p-ld/numpydantic.git?rev=b4e33faadd7963c319ff487293d180390adf1f29#b4e33faadd7963c319ff487293d180390adf1f29" }
 dependencies = [
     { name = "numpy" },
     { name = "pydantic" },
