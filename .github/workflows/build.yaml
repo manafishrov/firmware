@@ -16,6 +16,9 @@ jobs:
       RELEASES_PREFIX: releases
       RETAIN_STABLE: "4"
       RETAIN_PRERELEASE: "3"
+      # The last release for ROVs with the IMU on the white JST connector (I2C).
+      # App users can always install it, so it is never pruned.
+      LEGACY_RELEASE: v1.1.6
       VERSION: ${{ github.ref_name }}
       FIRMWARE_RELEASE_BASE_URL: https://s3.manafishrov.com/manafishrov-firmware
     steps:
@@ -67,7 +70,8 @@ jobs:
           # shows. A prerelease tag carries a '-' suffix (e.g. v1.2.0-rc.1);
           # everything else is stable. Each list is sorted oldest-first so the
           # oldest entries beyond the retention count are the ones deleted.
-          mapfile -t STABLE_DIRS < <(rclone lsf "remote:${RELEASES_PREFIX}" --dirs-only | tr -d '/' | awk '/^v/ && !/-/' | sort -V)
+          # The legacy release is left out so it is never deleted.
+          mapfile -t STABLE_DIRS < <(rclone lsf "remote:${RELEASES_PREFIX}" --dirs-only | tr -d '/' | awk -v legacy="$LEGACY_RELEASE" '/^v/ && !/-/ && $0 != legacy' | sort -V)
           mapfile -t PRERELEASE_DIRS < <(rclone lsf "remote:${RELEASES_PREFIX}" --dirs-only | tr -d '/' | awk '/^v/ && /-/' | sort -V)
 
           prune_kind() {
