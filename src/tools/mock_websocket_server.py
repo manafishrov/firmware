@@ -2,16 +2,24 @@
 
 import argparse
 import asyncio
+from collections.abc import Awaitable, Callable
 import json
 import logging
 import math
+import os
+from pathlib import Path
+import tempfile
 import time
 from typing import Any, cast
 
+from pydantic import JsonValue
 import websockets
 from websockets import ServerConnection
 
-from rov_firmware.models.config import CURRENT_FIRMWARE_VERSION
+from rov_firmware.custom_actions.api import dispatch
+from rov_firmware.custom_actions.runtime import STATUS_PERIOD, CustomActionRuntime
+from rov_firmware.models.config import CURRENT_FIRMWARE_VERSION, RovConfig
+from rov_firmware.rov_state import RovState
 from tools.mock_esc_firmware import MockEscFirmware
 
 
@@ -22,7 +30,6 @@ MOCK_CONFIG: dict[str, Any] = {
     "mcuBoard": "pico",
     "thrusterProtocol": "dshot",
     "dshotSpeed": 300,
-    "currentSensingMode": "sharedBus",
     "fluidType": "saltwater",
     "smoothingFactor": 0.0,
     "thrusterPinSetup": {
@@ -111,6 +118,133 @@ FLASH_DURATION_SECONDS = 3
 PERCENT_COMPLETE = 100
 MOCK_ESC_FIRMWARE = MockEscFirmware(flash_duration_seconds=FLASH_DURATION_SECONDS)
 MCU_FLASH_TASK: asyncio.Task[None] | None = None
+CAPABILITY_PERIOD_SECONDS = 1 / 60
+
+type Control = Callable[[str, JsonValue], Awaitable[None]]
+
+
+def _telemetry_readings(current_time: float) -> dict[str, Any]:
+    """Simulate the readings the firmware samples at the capability rate."""
+    depth = 10 + 5 * math.sin(current_time / 4)
+    if SYSTEM_STATUS["depthHold"]:
+        desired_depth = SYSTEM_STATUS["desiredDepth"]
+    elif SYSTEM_STATUS["pendingDesiredDepth"] is not None:
+        desired_depth = SYSTEM_STATUS["pendingDesiredDepth"]
+    else:
+        desired_depth = depth
+    return {
+        "pitch": round(20 * math.sin(current_time / 2), 2),
+        "roll": round(15 * math.cos(current_time / 3), 2),
+        "yaw": round(30 * math.sin(current_time / 2.5), 2),
+        "depth": round(depth, 2),
+        "desiredPitch": round(25 * math.sin(current_time / 2), 2),
+        "desiredRoll": round(20 * math.cos(current_time / 3), 2),
+        "desiredYaw": round(35 * math.sin(current_time / 2.5), 2),
+        "desiredDepth": round(desired_depth, 2),
+        "waterTemperature": round(20 + 5 * math.cos(current_time / 5), 2),
+        "electronicsTemperature": round(25 + 3 * math.sin(current_time / 6), 2),
+        "thrusterRpms": [
+            int(1000 + 500 * math.sin(current_time + i)) for i in range(8)
+        ],
+        "thrusterSignalQualities": [
+            round(100 - abs(2 * math.sin(current_time / 3 + i)), 2) for i in range(8)
+        ],
+        "workIndicatorPercentage": int(50 + 30 * math.sin(current_time / 10)),
+    }
+
+
+def _status_readings(current_time: float) -> dict[str, Any]:
+    """Simulate the readings the firmware samples at the status rate."""
+    esc_versions, esc_update = MOCK_ESC_FIRMWARE.status_payload()
+    return {
+        "autoStabilization": SYSTEM_STATUS["autoStabilization"],
+        "depthHold": SYSTEM_STATUS["depthHold"],
+        "batteryPercentage": int((math.sin(current_time / 5) + 1) * 50),
+        "currentDraw": int(20 + 10 * math.sin(current_time / 4)),
+        "piUndervoltage": False,
+        "thrusterControlReady": True,
+        "thrusterProtocolState": "ready",
+        "thrusterProtocolError": None,
+        "health": {
+            "mcuHealthy": True,
+            "imuHealthy": True,
+            "pressureSensorHealthy": True,
+        },
+        "deviceInfo": {
+            "mcuFirmwareVersion": "1.0.4-rc.1",
+            "mcuFirmwareVersionStatus": "reported",
+            "escFirmwareVersions": esc_versions,
+            "escFirmwareVersionStatus": "reported",
+        },
+        "escFirmwareUpdate": esc_update,
+    }
+
+
+class MockCapabilities(CustomActionRuntime):
+    """The firmware's capability runtime, fed by simulated vehicle readings.
+
+    Catalog, samples, custom actions and CSV logs use the real implementation, so
+    the mock speaks the same capability protocol as the firmware. Built-in `rov.*`
+    actions go to the connected client's simulation instead of the Pico.
+    """
+
+    def __init__(self, directory: Path) -> None:
+        """Keep custom actions, CSV logs and config in a throwaway directory."""
+        config_path = RovConfig._config_path
+        RovConfig._config_path = directory / "config.json"
+        try:
+            state = RovState()
+        finally:
+            RovConfig._config_path = config_path
+        self.control: Control | None = None
+        self._last_status = float("-inf")
+        super().__init__(state, directory / "custom_actions")
+
+    def refresh_builtins(self) -> None:
+        """Publish simulated readings that changed, like the firmware does."""
+        current_time = time.time()
+        readings = _telemetry_readings(current_time)
+        now = time.monotonic()
+        if now - self._last_status >= STATUS_PERIOD:
+            self._last_status = now
+            readings.update(_status_readings(current_time))
+        for key, value in readings.items():
+            identifier = f"rov.{key}"
+            previous = self.samples.get(identifier)
+            if previous is None or previous.value != value:
+                self.publish(identifier, value)
+
+    async def invoke(
+        self,
+        identifier: str,
+        phase: str = "press",
+        value: JsonValue = None,
+        *,
+        once: bool = False,
+    ) -> None:
+        """Simulate built-in vehicle controls; run custom actions for real."""
+        if not identifier.startswith("rov."):
+            logging.getLogger(__name__).info(f"Custom action {identifier}: {phase}")
+            await super().invoke(identifier, phase, value, once=once)
+            return
+        if identifier not in self.actions:
+            msg = f"Action {identifier} is not available"
+            raise ValueError(msg)
+        if phase == "press" and self.control is not None:
+            await self.control(identifier, value)
+
+
+CAPABILITIES: MockCapabilities | None = None
+
+
+def _capabilities() -> MockCapabilities:
+    global CAPABILITIES  # noqa: PLW0603
+    if CAPABILITIES is None:
+        data_dir = os.environ.get("MANAFISH_DATA_DIR") or tempfile.mkdtemp(
+            prefix="manafish-mock-"
+        )
+        CAPABILITIES = MockCapabilities(Path(data_dir))
+    return CAPABILITIES
 
 
 def _update_mock_config(payload: dict[str, Any], *, imported: bool = False) -> None:
@@ -159,99 +293,53 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
         f"Client connected: {cast(tuple[str, int] | None, websocket.remote_address)}"
     )
 
-    async def send_telemetry() -> None:
-        """Send mock telemetry data periodically."""
+    capabilities = _capabilities()
+
+    async def send_capabilities() -> None:
+        """Stream catalog changes and samples like the firmware does."""
         while True:
-            current_time = time.time()
-            pitch = 20 * math.sin(current_time / 2)
-            roll = 15 * math.cos(current_time / 3)
-            yaw = 30 * math.sin(current_time / 2.5)
-            desired_pitch = 25 * math.sin(current_time / 2)
-            desired_roll = 20 * math.cos(current_time / 3)
-            desired_yaw = 35 * math.sin(current_time / 2.5)
-            depth = 10 + 5 * math.sin(current_time / 4)
-            if SYSTEM_STATUS["depthHold"]:
-                desired_depth = SYSTEM_STATUS["desiredDepth"]
-            elif SYSTEM_STATUS["pendingDesiredDepth"] is not None:
-                desired_depth = SYSTEM_STATUS["pendingDesiredDepth"]
-            else:
-                desired_depth = depth
-            water_temperature = 20 + 5 * math.cos(current_time / 5)
-            electronics_temperature = 25 + 3 * math.sin(current_time / 6)
-            thruster_rpms = [
-                int(1000 + 500 * math.sin(current_time + i)) for i in range(8)
-            ]
-            thruster_signal_qualities = [
-                round(100 - abs(2 * math.sin(current_time / 3 + i)), 2)
-                for i in range(8)
-            ]
-            work_indicator_percentage = 50 + 30 * math.sin(current_time / 10)
+            capabilities.refresh_builtins()
+            if capabilities.catalog_changed:
+                capabilities.catalog_changed = False
+                await send_mock_message(
+                    {"type": "capabilityCatalog", "payload": capabilities.catalog()}
+                )
+            samples = list(capabilities.events)
+            capabilities.events.clear()
+            if samples:
+                await send_mock_message(
+                    {
+                        "type": "capabilitySamples",
+                        "payload": {
+                            "version": 1,
+                            "samples": [
+                                sample.model_dump(by_alias=True) for sample in samples
+                            ],
+                        },
+                    }
+                )
+            await asyncio.sleep(CAPABILITY_PERIOD_SECONDS)
 
-            telemetry_msg = {
-                "type": "telemetry",
-                "payload": {
-                    "pitch": round(pitch, 2),
-                    "roll": round(roll, 2),
-                    "yaw": round(yaw, 2),
-                    "depth": round(depth, 2),
-                    "desiredPitch": round(desired_pitch, 2),
-                    "desiredRoll": round(desired_roll, 2),
-                    "desiredYaw": round(desired_yaw, 2),
-                    "desiredDepth": round(desired_depth, 2),
-                    "waterTemperature": round(water_temperature, 2),
-                    "electronicsTemperature": round(electronics_temperature, 2),
-                    "thrusterRpms": thruster_rpms,
-                    "thrusterSignalQualities": thruster_signal_qualities,
-                    "workIndicatorPercentage": int(work_indicator_percentage),
-                },
-            }
-            try:
-                await websocket.send(json.dumps(telemetry_msg))
-            except Exception:
-                break
-            await asyncio.sleep(1 / 60)
+    async def respond_to_capability(payload: dict[str, Any]) -> None:
+        """Answer a capability request through the firmware's dispatcher."""
+        response: dict[str, Any] = {"version": 1, "requestId": payload["requestId"]}
+        try:
+            result = await dispatch(
+                capabilities, payload["operation"], payload.get("params") or {}
+            )
+            response.update({"ok": True, "result": result})
+        except Exception as error:
+            logger.warning(f"Capability {payload.get('operation')}: {error}")
+            response.update(
+                {
+                    "ok": False,
+                    "error": {"code": "operation_failed", "message": str(error)},
+                }
+            )
+        await send_mock_message({"type": "capabilityResponse", "payload": response})
 
-    async def send_status() -> None:
-        """Send mock status data periodically."""
-        while True:
-            current_time = time.time()
-            battery_percentage = int((math.sin(current_time / 5) + 1) * 50)
-            current_draw = int(20 + 10 * math.sin(current_time / 4))
-            esc_versions, esc_update = MOCK_ESC_FIRMWARE.status_payload()
-
-            status_msg = {
-                "type": "statusUpdate",
-                "payload": {
-                    "autoStabilization": SYSTEM_STATUS["autoStabilization"],
-                    "depthHold": SYSTEM_STATUS["depthHold"],
-                    "batteryPercentage": battery_percentage,
-                    "currentDraw": current_draw,
-                    "piUndervoltage": False,
-                    "thrusterControlReady": True,
-                    "thrusterProtocolState": "ready",
-                    "thrusterProtocolError": None,
-                    "health": {
-                        "mcuHealthy": True,
-                        "imuHealthy": True,
-                        "pressureSensorHealthy": True,
-                    },
-                    "deviceInfo": {
-                        "mcuFirmwareVersion": "1.0.4-rc.1",
-                        "mcuFirmwareVersionStatus": "reported",
-                        "escFirmwareVersions": esc_versions,
-                        "escFirmwareVersionStatus": "reported",
-                    },
-                    "escFirmwareUpdate": esc_update,
-                },
-            }
-            try:
-                await websocket.send(json.dumps(status_msg))
-            except Exception:
-                break
-            await asyncio.sleep(0.5)
-
-    telemetry_task: asyncio.Task[None] = asyncio.create_task(send_telemetry())
-    status_task: asyncio.Task[None] = asyncio.create_task(send_status())
+    capability_task: asyncio.Task[None] | None = None
+    capability_requests: set[asyncio.Task[None]] = set()
     thruster_test_task: asyncio.Task[None] | None = None
     auto_tuning_task: asyncio.Task[None] | None = None
 
@@ -545,10 +633,124 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
     async def send_mock_message(message: dict[str, Any]) -> None:
         await websocket.send(json.dumps(message))
 
+    async def send_log(message: str) -> None:
+        await send_mock_message(
+            {
+                "type": "logMessage",
+                "payload": {"origin": "firmware", "level": "info", "message": message},
+            }
+        )
+
+    async def start_thruster_test(thruster_index: int) -> None:
+        nonlocal thruster_test_task
+        if thruster_test_task is not None and not thruster_test_task.done():
+            _ = thruster_test_task.cancel()
+        thruster_test_task = asyncio.create_task(run_thruster_test(thruster_index))
+
+    async def cancel_thruster_test() -> None:
+        SYSTEM_STATUS["thrusterTest"]["active"] = False
+        if thruster_test_task is not None and not thruster_test_task.done():
+            _ = thruster_test_task.cancel()
+        await send_mock_message(
+            {
+                "type": "showToast",
+                "payload": {
+                    "identifier": THRUSTER_TEST_TOAST_ID,
+                    "variant": "info",
+                    "content": {"messageKey": "toasts_thruster_test_cancelled"},
+                    "action": None,
+                },
+            }
+        )
+
+    async def start_auto_tuning() -> None:
+        nonlocal auto_tuning_task
+        if auto_tuning_task is not None and not auto_tuning_task.done():
+            _ = auto_tuning_task.cancel()
+        auto_tuning_task = asyncio.create_task(run_auto_tuning())
+
+    async def cancel_auto_tuning() -> None:
+        SYSTEM_STATUS["autoTuning"]["active"] = False
+        if auto_tuning_task is not None and not auto_tuning_task.done():
+            _ = auto_tuning_task.cancel()
+        await send_mock_message(
+            {
+                "type": "showToast",
+                "payload": {
+                    "identifier": AUTO_TUNING_TOAST_ID,
+                    "variant": "info",
+                    "content": {"messageKey": "toasts_auto_tuning_cancelled"},
+                    "action": None,
+                },
+            }
+        )
+
+    def set_depth_hold(enabled: bool) -> None:
+        if enabled and not SYSTEM_STATUS["depthHold"]:
+            pending = SYSTEM_STATUS["pendingDesiredDepth"]
+            SYSTEM_STATUS["desiredDepth"] = (
+                pending if pending is not None else 10 + 5 * math.sin(time.time() / 4)
+            )
+        if not enabled:
+            SYSTEM_STATUS["pendingDesiredDepth"] = None
+        SYSTEM_STATUS["depthHold"] = enabled
+
+    last_direction: JsonValue = None
+
+    async def control(identifier: str, value: JsonValue) -> None:  # noqa: C901
+        """Simulate a built-in `rov.*` action in place of the Pico."""
+        nonlocal last_direction
+        if identifier == "rov.direction":
+            if value != last_direction:
+                logger.info(f"Direction: {value}")
+                last_direction = value
+        elif identifier == "rov.attitude.set":
+            logger.info(f"Desired attitude: {value}")
+        elif identifier in {
+            "rov.autoStabilization.set",
+            "rov.autoStabilization.toggle",
+        }:
+            SYSTEM_STATUS["autoStabilization"] = (
+                bool(value)
+                if identifier.endswith(".set")
+                else not SYSTEM_STATUS["autoStabilization"]
+            )
+            await send_log(
+                f"Auto stabilization set to {SYSTEM_STATUS['autoStabilization']}"
+            )
+        elif identifier in {"rov.depthHold.set", "rov.depthHold.toggle"}:
+            set_depth_hold(
+                bool(value)
+                if identifier.endswith(".set")
+                else not SYSTEM_STATUS["depthHold"]
+            )
+            await send_log(f"Depth hold set to {SYSTEM_STATUS['depthHold']}")
+        elif identifier == "rov.desiredDepth.set":
+            desired_depth = float(cast(float, value))
+            if not math.isfinite(desired_depth):
+                msg = "Desired depth must be finite"
+                raise ValueError(msg)
+            clamped = max(0.0, desired_depth)
+            SYSTEM_STATUS["pendingDesiredDepth"] = clamped
+            if SYSTEM_STATUS["depthHold"]:
+                SYSTEM_STATUS["desiredDepth"] = clamped
+            await send_log(f"Desired depth set to {SYSTEM_STATUS['desiredDepth']}")
+        elif identifier == "rov.thrusterTest.start":
+            await start_thruster_test(cast(int, value))
+        elif identifier == "rov.thrusterTest.cancel":
+            await cancel_thruster_test()
+        elif identifier == "rov.regulatorAutoTuning.start":
+            await start_auto_tuning()
+        elif identifier == "rov.regulatorAutoTuning.cancel":
+            await cancel_auto_tuning()
+
     try:
         await websocket.send(json.dumps(_config_message()))
+        capabilities.control = control
+        await capabilities.connected()
+        capabilities.catalog_changed = True
+        capability_task = asyncio.create_task(send_capabilities())
 
-        last_direction_vector = None
         pending_connection_mutation: str | None = None
         pending_connection_toast: dict[str, Any] | None = None
         async for message in websocket:
@@ -557,10 +759,12 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                 msg_type = data.get("type")
                 payload = data.get("payload")
 
-                if msg_type == "directionVector":
-                    if last_direction_vector != payload:
-                        logger.info(f"DirectionVector: {payload}")
-                        last_direction_vector = payload
+                if msg_type == "capabilityRequest":
+                    request = asyncio.create_task(
+                        respond_to_capability(cast(dict[str, Any], payload))
+                    )
+                    capability_requests.add(request)
+                    request.add_done_callback(capability_requests.discard)
                 elif msg_type == "getConfig":
                     await websocket.send(json.dumps(_config_message()))
                 elif msg_type == "setConfig":
@@ -621,93 +825,6 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         pending_connection_toast = toast_msg
                     else:
                         await websocket.send(json.dumps(toast_msg))
-                elif msg_type == "toggleAutoStabilization":
-                    SYSTEM_STATUS["autoStabilization"] = not SYSTEM_STATUS[
-                        "autoStabilization"
-                    ]
-                    log_msg = {
-                        "type": "logMessage",
-                        "payload": {
-                            "origin": "firmware",
-                            "level": "info",
-                            "message": f"Auto stabilization set to {SYSTEM_STATUS['autoStabilization']}",
-                        },
-                    }
-                    await websocket.send(json.dumps(log_msg))
-                elif msg_type == "setAutoStabilization":
-                    SYSTEM_STATUS["autoStabilization"] = bool(payload)
-                    log_msg = {
-                        "type": "logMessage",
-                        "payload": {
-                            "origin": "firmware",
-                            "level": "info",
-                            "message": f"Auto stabilization set to {SYSTEM_STATUS['autoStabilization']}",
-                        },
-                    }
-                    await websocket.send(json.dumps(log_msg))
-                elif msg_type == "toggleDepthHold":
-                    SYSTEM_STATUS["depthHold"] = not SYSTEM_STATUS["depthHold"]
-                    if SYSTEM_STATUS["depthHold"]:
-                        pending = SYSTEM_STATUS["pendingDesiredDepth"]
-                        if pending is not None:
-                            SYSTEM_STATUS["desiredDepth"] = pending
-                        else:
-                            current_time = time.time()
-                            SYSTEM_STATUS["desiredDepth"] = 10 + 5 * math.sin(
-                                current_time / 4
-                            )
-                    else:
-                        SYSTEM_STATUS["pendingDesiredDepth"] = None
-                    log_msg = {
-                        "type": "logMessage",
-                        "payload": {
-                            "origin": "firmware",
-                            "level": "info",
-                            "message": f"Depth hold set to {SYSTEM_STATUS['depthHold']}",
-                        },
-                    }
-                    await websocket.send(json.dumps(log_msg))
-                elif msg_type == "setDepthHold":
-                    enabled = bool(payload)
-                    if enabled and not SYSTEM_STATUS["depthHold"]:
-                        pending = SYSTEM_STATUS["pendingDesiredDepth"]
-                        if pending is not None:
-                            SYSTEM_STATUS["desiredDepth"] = pending
-                        else:
-                            current_time = time.time()
-                            SYSTEM_STATUS["desiredDepth"] = 10 + 5 * math.sin(
-                                current_time / 4
-                            )
-                    if not enabled:
-                        SYSTEM_STATUS["pendingDesiredDepth"] = None
-                    SYSTEM_STATUS["depthHold"] = enabled
-                    log_msg = {
-                        "type": "logMessage",
-                        "payload": {
-                            "origin": "firmware",
-                            "level": "info",
-                            "message": f"Depth hold set to {SYSTEM_STATUS['depthHold']}",
-                        },
-                    }
-                    await websocket.send(json.dumps(log_msg))
-                elif msg_type == "setDesiredDepth":
-                    desired_depth = cast(float, payload)
-                    if not math.isfinite(desired_depth):
-                        logger.warning(f"Invalid desired depth payload: {payload}")
-                        continue
-                    clamped = max(0.0, desired_depth)
-                    SYSTEM_STATUS["pendingDesiredDepth"] = clamped
-                    if SYSTEM_STATUS["depthHold"]:
-                        SYSTEM_STATUS["desiredDepth"] = clamped
-                    log_msg = {
-                        "type": "logMessage",
-                        "payload": {
-                            "origin": "firmware",
-                            "level": "info",
-                            "message": f"Desired depth set to {SYSTEM_STATUS['desiredDepth']}",
-                        },
-                    }
-                    await websocket.send(json.dumps(log_msg))
                 elif msg_type == "flashMcuFirmware":
                     if (
                         MCU_FLASH_TASK is not None and not MCU_FLASH_TASK.done()
@@ -731,47 +848,13 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                             ESC_FLASH_TOAST_ID, "toasts_esc_flash_failed"
                         )
                 elif msg_type == "startThrusterTest":
-                    if thruster_test_task is not None and not thruster_test_task.done():
-                        _ = thruster_test_task.cancel()
-                    thruster_test_task = asyncio.create_task(
-                        run_thruster_test(cast(int, payload))
-                    )
+                    await start_thruster_test(cast(int, payload))
                 elif msg_type == "cancelThrusterTest":
-                    SYSTEM_STATUS["thrusterTest"]["active"] = False
-                    if thruster_test_task is not None and not thruster_test_task.done():
-                        _ = thruster_test_task.cancel()
-                    toast_msg = {
-                        "type": "showToast",
-                        "payload": {
-                            "identifier": THRUSTER_TEST_TOAST_ID,
-                            "variant": "info",
-                            "content": {
-                                "messageKey": "toasts_thruster_test_cancelled",
-                            },
-                            "action": None,
-                        },
-                    }
-                    await websocket.send(json.dumps(toast_msg))
+                    await cancel_thruster_test()
                 elif msg_type == "startRegulatorAutoTuning":
-                    if auto_tuning_task is not None and not auto_tuning_task.done():
-                        _ = auto_tuning_task.cancel()
-                    auto_tuning_task = asyncio.create_task(run_auto_tuning())
+                    await start_auto_tuning()
                 elif msg_type == "cancelRegulatorAutoTuning":
-                    SYSTEM_STATUS["autoTuning"]["active"] = False
-                    if auto_tuning_task is not None and not auto_tuning_task.done():
-                        _ = auto_tuning_task.cancel()
-                    toast_msg = {
-                        "type": "showToast",
-                        "payload": {
-                            "identifier": AUTO_TUNING_TOAST_ID,
-                            "variant": "info",
-                            "content": {
-                                "messageKey": "toasts_auto_tuning_cancelled",
-                            },
-                            "action": None,
-                        },
-                    }
-                    await websocket.send(json.dumps(toast_msg))
+                    await cancel_auto_tuning()
                 else:
                     logger.warning(f"Unhandled message type: {msg_type}")
                     logger.info(payload)
@@ -781,12 +864,21 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
     except Exception as e:
         logger.info(f"Client disconnected: {e}")
     finally:
-        _ = telemetry_task.cancel()
-        _ = status_task.cancel()
-        if thruster_test_task is not None:
-            _ = thruster_test_task.cancel()
-        if auto_tuning_task is not None:
-            _ = auto_tuning_task.cancel()
+        capabilities.control = None
+        tasks = [
+            task
+            for task in (
+                capability_task,
+                thruster_test_task,
+                auto_tuning_task,
+                *capability_requests,
+            )
+            if task is not None
+        ]
+        for task in tasks:
+            _ = task.cancel()
+        _ = await asyncio.gather(*tasks, return_exceptions=True)
+        await capabilities.disconnected()
 
 
 async def main() -> None:
@@ -797,8 +889,14 @@ async def main() -> None:
         action="store_true",
         help="Use local IP 127.0.0.1 instead of 10.10.10.10",
     )
+    _ = parser.add_argument(
+        "--host",
+        help="Listen on this address, such as this computer's LAN address for a phone or simulator",
+    )
     args = parser.parse_args()
-    host = "127.0.0.1" if cast(bool, args.local) else "10.10.10.10"
+    host = cast(str | None, args.host) or (
+        "127.0.0.1" if cast(bool, args.local) else "10.10.10.10"
+    )
     MOCK_CONFIG["ipAddress"] = host
 
     logger = logging.getLogger(__name__)
