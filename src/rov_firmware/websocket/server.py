@@ -15,7 +15,7 @@ from websockets.exceptions import ConnectionClosed
 
 from ..constants import CRASH_LOG_SEND_TIMEOUT_S
 from ..custom_actions.api import dispatch
-from ..custom_actions.runtime import CustomActionRuntime
+from ..custom_actions.runtime import DEFAULTS_DIRECTORY, CustomActionRuntime
 from ..custom_actions.wire import (
     CapabilityCatalog,
     CapabilityRequest,
@@ -54,11 +54,7 @@ def _custom_actions_directory() -> Path:
             "MANAFISH_DATA_DIR", str(Path.home() / ".local" / "share" / "manafish")
         )
     )
-    directory = root / "custom_actions"
-    legacy = root / "extensions"
-    if legacy.is_dir() and not directory.exists():
-        legacy.rename(directory)
-    return directory
+    return root / "custom_actions"
 
 
 class WebsocketServer:
@@ -71,7 +67,9 @@ class WebsocketServer:
             state: The ROV state.
             serial_manager: The MCU serial connection used for ESC updates.
         """
-        self.capabilities = CustomActionRuntime(state, _custom_actions_directory())
+        self.capabilities = CustomActionRuntime(
+            state, _custom_actions_directory(), DEFAULTS_DIRECTORY
+        )
         self.state: RovState = state
         self.serial_manager = serial_manager
         self.server: Server | None = None

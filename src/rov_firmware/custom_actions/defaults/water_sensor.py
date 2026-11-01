@@ -1,11 +1,11 @@
 """Continuously monitor the original active-high water sensor on GPIO17.
 
 Wiring (S / + / -): S -> Pi pin 11 (GPIO17), + -> pin 1 (3V3), - -> pin 6 (GND).
-Save and enable this script in Custom actions; disable it to stop monitoring.
+Installed disabled by default: enable it in Custom actions to start monitoring.
 Add "Water detected" in Appearance. Bind "Toggle monitoring" to an action widget
 or keyboard/controller button to pause/resume. Pausing is temporary: monitoring
-starts again after an app disconnect, script reload, or ROV restart while enabled. Change WATER_SENSOR_GPIO_PIN
-if the signal is wired to a different BCM pin.
+starts again after an app disconnect, script reload, or ROV restart while enabled.
+Change WATER_SENSOR_GPIO_PIN if the signal is wired to a different BCM pin.
 """
 
 import asyncio

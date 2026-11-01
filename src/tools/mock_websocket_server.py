@@ -730,8 +730,6 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                         await reject_concurrent_firmware_flash(
                             ESC_FLASH_TOAST_ID, "toasts_esc_flash_failed"
                         )
-                elif msg_type == "customAction":
-                    logger.info(f"Custom action: {payload}")
                 elif msg_type == "startThrusterTest":
                     if thruster_test_task is not None and not thruster_test_task.done():
                         _ = thruster_test_task.cancel()

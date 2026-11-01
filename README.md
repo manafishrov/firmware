@@ -15,13 +15,23 @@ the SDK guide and a copy button for working with an agent.
 Scripts, settings and CSV files persist under `~/.local/share/manafish/`, outside
 the deployed checkout. Scripts are trusted Python and must cooperate with async
 cancellation. Operator loops stop on disconnect; background monitoring requires
-explicit opt-in to continue unattended. `examples/custom_actions/water_sensor.py`
-provides real GPIO17 monitoring with a bindable pause/resume action.
+explicit opt-in to continue unattended.
+
+The scripts in `src/rov_firmware/custom_actions/defaults/` are installed once,
+disabled, the first time the firmware starts with them:
+
+- `water_sensor`: GPIO17 leak monitoring with a bindable pause/resume action.
+- `blackbox`: records the built-in readings to CSV, also while disconnected,
+  with a bindable logging toggle.
+- `extended_telemetry`: Pi CPU, memory, storage, network and firmware load, plus
+  raw IMU, pressure and per-ESC readings for diagnostics.
+
+`defaults.json` records which defaults were installed, so a removed default is
+not reinstalled and an existing script with the same ID is never replaced.
 
 Upgrade firmware first, then use the matching V1 desktop app before operating the
-vehicle. This replaces the legacy telemetry/status/custom-action messages; old
-apps cannot operate this branch. Port legacy custom-action modules to SDK scripts
-and rebind them. The MCU wire protocol is unchanged.
+vehicle. Older apps cannot operate this firmware. The MCU wire protocol is
+unchanged.
 
 ## Current reporting compatibility
 

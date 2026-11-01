@@ -1,7 +1,6 @@
 """Typed SDK discovery, publication ownership and action signature regressions."""
 
 import asyncio
-from pathlib import Path
 import sys
 from typing import assert_type, cast
 
@@ -14,7 +13,7 @@ import pytest
 from manafish_sdk import Context, Reading, Script, Trigger
 from rov_firmware.custom_actions.csv_store import CsvStore
 from rov_firmware.custom_actions.loading import load_script
-from rov_firmware.custom_actions.runtime import CustomActionRuntime
+from rov_firmware.custom_actions.runtime import DEFAULTS_DIRECTORY, CustomActionRuntime
 from rov_firmware.custom_actions.validation import validate_source
 
 
@@ -182,12 +181,10 @@ async def sample(ctx: Context) -> None:
     asyncio.run(scenario())
 
 
-def test_water_sensor_example_uses_gpio_and_shared_readings(
+def test_water_sensor_default_uses_gpio_and_shared_readings(
     rov_state, tmp_path, monkeypatch
 ):
-    source = (
-        Path(__file__).parents[1] / "examples/custom_actions/water_sensor.py"
-    ).read_text()
+    source = (DEFAULTS_DIRECTORY / "water_sensor.py").read_text()
     factory = MockFactory()
     monkeypatch.setattr(Device, "pin_factory", factory)
     runtime = CustomActionRuntime(rov_state, tmp_path)
@@ -242,9 +239,7 @@ def test_water_sensor_example_uses_gpio_and_shared_readings(
 
 
 def test_water_sensor_background_lifecycle(rov_state, tmp_path, monkeypatch):
-    source = (
-        Path(__file__).parents[1] / "examples/custom_actions/water_sensor.py"
-    ).read_text()
+    source = (DEFAULTS_DIRECTORY / "water_sensor.py").read_text()
     factory = MockFactory()
     monkeypatch.setattr(Device, "pin_factory", factory)
     runtime = CustomActionRuntime(rov_state, tmp_path)

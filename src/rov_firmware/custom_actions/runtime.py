@@ -30,16 +30,21 @@ from .values import normalize_value
 
 
 STATUS_PERIOD = 0.5
+DEFAULTS_DIRECTORY = Path(__file__).parent / "defaults"
 _SETTINGS = TypeAdapter(dict[str, CustomActionPreferences])
+_INSTALLED_DEFAULTS = TypeAdapter(list[str])
 
 
 class CustomActionRuntime:
     """Maintain one capability namespace for built-ins and trusted custom actions."""
 
-    def __init__(self, state: RovState, directory: Path) -> None:
+    def __init__(
+        self, state: RovState, directory: Path, defaults: Path | None = None
+    ) -> None:
         """Initialize persistent source/config storage, without executing scripts."""
         self.state = state
         self.directory = directory
+        self.defaults = defaults
         self.directory.mkdir(parents=True, exist_ok=True)
         self.csv = CsvStore(directory.parent / "csv")
         self.manifests: dict[str, Manifest] = {}
@@ -78,7 +83,44 @@ class CustomActionRuntime:
         temporary.write_text(json.dumps(self.settings, indent=2))
         temporary.replace(path)
 
+    def _install_defaults(self) -> None:
+        """Copy each bundled script once, disabled; a removed default stays removed."""
+        if self.defaults is None:
+            return
+        path = self.directory / "defaults.json"
+        try:
+            installed = (
+                _INSTALLED_DEFAULTS.validate_json(path.read_bytes())
+                if path.exists()
+                else []
+            )
+        except (ValueError, OSError) as error:
+            log_error(f"Default custom actions could not be checked: {error}")
+            return
+        pending = [
+            source
+            for source in sorted(self.defaults.glob("*.py"))
+            if source.stem not in installed
+        ]
+        if not pending:
+            return
+        for source in pending:
+            target = self.directory / source.name
+            # Never replace a script the operator installed under the same ID.
+            if not target.exists():
+                temporary = target.with_suffix(".tmp")
+                temporary.write_bytes(source.read_bytes())
+                temporary.replace(target)
+            installed.append(source.stem)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(installed, indent=2))
+        temporary.replace(path)
+
     async def _load_sources(self) -> None:
+        try:
+            self._install_defaults()
+        except OSError as error:
+            log_error(f"Default custom actions could not be installed: {error}")
         for path in sorted(self.directory.glob("*.py")):
             try:
                 if path.stem in self.manifests:
