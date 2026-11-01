@@ -108,7 +108,10 @@ def _cpu_temperature() -> float | None:
 
 def _read_system(process: psutil.Process) -> SystemSample:
     """CPU percentages cover the time since the previous call."""
-    frequency = psutil.cpu_freq()
+    try:
+        frequency = psutil.cpu_freq()
+    except (OSError, NotImplementedError, SystemError):
+        frequency = None
     memory = psutil.virtual_memory()
     counters = psutil.net_io_counters(pernic=True)
     interfaces = [stats for name, stats in counters.items() if name != "lo"]

@@ -3,6 +3,7 @@ import csv
 from datetime import datetime, timedelta
 from itertools import count
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -325,10 +326,23 @@ def test_blackbox_reports_errors_other_than_quota(
     assert len(list(runtime.csv.directory.glob("blackbox_*.csv"))) == 1
 
 
+@pytest.mark.parametrize(
+    "frequency_result",
+    [2400.0, None, OSError, NotImplementedError, SystemError],
+)
 def test_extended_telemetry_reports_system_and_only_healthy_sensors(
-    rov_state, directory, monkeypatch
+    rov_state, directory, monkeypatch, frequency_result
 ):
     runtime = CustomActionRuntime(rov_state, directory)
+
+    def cpu_freq():
+        if isinstance(frequency_result, type):
+            raise frequency_result
+        if frequency_result is None:
+            return None
+        return SimpleNamespace(current=frequency_result)
+
+    monkeypatch.setattr("psutil.cpu_freq", cpu_freq)
 
     def value(identifier):
         sample = runtime.samples.get(f"extended_telemetry.{identifier}")
@@ -343,6 +357,9 @@ def test_extended_telemetry_reports_system_and_only_healthy_sensors(
         monkeypatch.setattr(module, "SAMPLE_INTERVAL_SECONDS", 0.01)
         try:
             await wait_until(lambda: value("network_sent") is not None)
+            assert value("cpu_frequency") == (
+                None if isinstance(frequency_result, type) else frequency_result
+            )
             assert 0 <= value("cpu_usage") <= 100
             assert value("cpu_core_usage")
             assert value("firmware_memory") > 0
