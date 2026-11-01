@@ -4,8 +4,40 @@
   ...
 }: let
   jq = lib.getExe pkgs.jq;
-  rpicamVid = lib.getExe' pkgs.rpi.rpicam-apps "rpicam-vid";
   systemctl = lib.getExe' pkgs.systemd "systemctl";
+  rpicamApps = pkgs.rpi.rpicam-apps;
+
+  # The firmware sends photo requests here (see rov_firmware/photo.py).
+  # systemd creates the directory for go2rtc, which starts the camera.
+  photoSocketDirectory = "manafish-camera";
+  photoSocket = "/run/${photoSocketDirectory}/photo.sock";
+
+  # rpicam-vid's streaming plus full-resolution photos on request, built
+  # against the same rpicam-apps library the stock apps use.
+  camerad = pkgs.stdenv.mkDerivation {
+    pname = "manafish-camerad";
+    version = "1.0.0";
+    src = ../camera;
+    nativeBuildInputs = [pkgs.pkg-config];
+    buildInputs = [rpicamApps pkgs.rpi.libcamera pkgs.boost];
+    buildPhase = ''
+      runHook preBuild
+      $CXX -std=c++20 -O2 -Wall -Wextra -Wno-unused-parameter -faligned-new \
+        -D_FILE_OFFSET_BITS=64 \
+        -I${rpicamApps}/include/rpicam-apps \
+        $(pkg-config --cflags libcamera) \
+        manafish_camerad.cpp -o manafish-camerad \
+        -L${rpicamApps}/lib -lrpicam_app \
+        $(pkg-config --libs libcamera) -lboost_program_options -pthread
+      runHook postBuild
+    '';
+    installPhase = ''
+      runHook preInstall
+      install -Dm755 manafish-camerad $out/bin/manafish-camerad
+      runHook postInstall
+    '';
+    meta.mainProgram = "manafish-camerad";
+  };
   headlessRpicamApps = package:
     package.override {
       withLibavEncoder = false;
@@ -143,7 +175,7 @@
     if [ "$HFLIP" = "true" ]; then set -- "$@" --hflip; fi
     if [ "$VFLIP" = "true" ]; then set -- "$@" --vflip; fi
 
-    exec ${rpicamVid} "$@" -o -
+    exec ${lib.getExe camerad} --photo-socket "${photoSocket}" "$@" -o -
   '';
 
   # Applied by the firmware after a camera config change. Restarts the stream so
@@ -208,6 +240,9 @@ in {
       User = lib.mkForce "pi";
       Group = lib.mkForce "video";
       ProtectHome = lib.mkForce false;
+      # Owned by `pi`, so only the firmware can ask the camera for photos.
+      RuntimeDirectory = photoSocketDirectory;
+      RuntimeDirectoryMode = "0700";
     };
   };
 
