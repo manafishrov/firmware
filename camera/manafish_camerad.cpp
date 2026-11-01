@@ -26,11 +26,12 @@
 #include <memory>
 #include <mutex>
 #include <optional>
-#include <span>
+#include <sstream>
 #include <string>
 #include <thread>
 #include <vector>
 
+#include <fcntl.h>
 #include <sys/resource.h>
 #include <sys/socket.h>
 #include <sys/un.h>
@@ -184,17 +185,31 @@ static std::vector<std::vector<uint8_t>> copy_planes(RPiCamApp &app, libcamera::
 {
 	BufferReadSync sync(&app, buffer);
 	std::vector<std::vector<uint8_t>> planes;
-	for (std::span<uint8_t> const &span : sync.Get())
+	for (libcamera::Span<uint8_t> const &span : sync.Get())
 		planes.emplace_back(span.begin(), span.end());
 	return planes;
 }
 
-static std::vector<std::span<uint8_t>> spans(std::vector<std::vector<uint8_t>> &planes)
+// The installed rpicam-apps 1.13.0 headers use libcamera::Span, not std::span.
+static std::vector<libcamera::Span<uint8_t>> spans(std::vector<std::vector<uint8_t>> &planes)
 {
-	std::vector<std::span<uint8_t>> result;
+	std::vector<libcamera::Span<uint8_t>> result;
 	for (std::vector<uint8_t> &plane : planes)
-		result.emplace_back(plane);
+		result.emplace_back(plane.data(), plane.size());
 	return result;
+}
+
+// Cached file pages may sit in the CMA pool the camera allocates its buffers
+// from. ~30 MB per photo can leave too little contiguous memory for the next
+// full-resolution capture, so write the files out and drop them from the cache.
+static void release_page_cache(std::string const &path)
+{
+	int fd = open(path.c_str(), O_RDONLY | O_CLOEXEC);
+	if (fd < 0)
+		return;
+	fdatasync(fd);
+	posix_fadvise(fd, 0, 0, POSIX_FADV_DONTNEED);
+	close(fd);
 }
 
 // Encodes photos on a low-priority thread, one at a time, so the video keeps
@@ -246,6 +261,8 @@ public:
 					if (std::rename((dng + ".part").c_str(), dng.c_str()) ||
 						std::rename((jpeg + ".part").c_str(), jpeg.c_str()))
 						throw std::runtime_error(std::string("failed to rename photo: ") + std::strerror(errno));
+					release_page_cache(dng);
+					release_page_cache(jpeg);
 					reply(request.fd, "saved " + jpeg);
 				}
 				catch (std::exception const &e)
@@ -266,6 +283,26 @@ private:
 	std::atomic<bool> busy_ = false;
 };
 
+// Records how long each step of a photo takes, for the log.
+class Stopwatch
+{
+public:
+	void Lap(char const *step)
+	{
+		auto now = std::chrono::steady_clock::now();
+		laps_ << " " << step << "=" << std::chrono::duration_cast<std::chrono::milliseconds>(now - last_).count();
+		last_ = now;
+	}
+	std::string Summary() const
+	{
+		return laps_.str();
+	}
+
+private:
+	std::chrono::steady_clock::time_point last_ = std::chrono::steady_clock::now();
+	std::ostringstream laps_;
+};
+
 static unsigned int get_colourspace_flags(std::string const &codec)
 {
 	if (codec == "mjpeg" || codec == "yuv420")
@@ -280,17 +317,10 @@ static void start_video(RPiCamEncoder &app, unsigned int video_flags)
 	app.StartCamera();
 }
 
-static void stop_camera(RPiCamEncoder &app)
-{
-	app.StopCamera(); // stop the camera first; stop complains if the encoder is slow to close
-	app.StopEncoder(); // returns once the encoder has finished every frame it was given
-	app.Teardown();
-}
-
 // Takes the first frame in the still mode. The control algorithms keep their
 // exposure and white balance across the mode switch (as rpicam-still relies
 // on), so that frame already matches the live video.
-static CapturedPhoto capture_still(RPiCamEncoder &app)
+static CapturedPhoto capture_still(RPiCamEncoder &app, Stopwatch &stopwatch)
 {
 	OptsInternal &opts = app.GetOptions()->Set();
 	OptsInternal const video = opts;
@@ -308,7 +338,9 @@ static CapturedPhoto capture_still(RPiCamEncoder &app)
 	try
 	{
 		app.ConfigureStill(RPiCamApp::FLAG_STILL_RAW);
+		stopwatch.Lap("configure");
 		app.StartCamera();
+		stopwatch.Lap("start");
 		while (!photo)
 		{
 			RPiCamApp::Msg msg = app.Wait();
@@ -317,6 +349,7 @@ static CapturedPhoto capture_still(RPiCamEncoder &app)
 			if (msg.type == RPiCamApp::MsgType::Quit)
 				throw std::runtime_error("camera is shutting down");
 			CompletedRequestPtr &request = std::get<CompletedRequestPtr>(msg.payload);
+			stopwatch.Lap("frame");
 			photo = CapturedPhoto {
 				copy_planes(app, request->buffers[app.StillStream()]),
 				copy_planes(app, request->buffers[app.RawStream()]),
@@ -324,6 +357,7 @@ static CapturedPhoto capture_still(RPiCamEncoder &app)
 				app.GetStreamInfo(app.RawStream()),
 				request->metadata,
 			};
+			stopwatch.Lap("copy");
 		}
 	}
 	catch (std::exception const &e)
@@ -337,6 +371,7 @@ static CapturedPhoto capture_still(RPiCamEncoder &app)
 	opts.denoise = video.denoise;
 	app.StopCamera();
 	app.Teardown();
+	stopwatch.Lap("stop");
 	if (!photo)
 		throw std::runtime_error(error);
 	return std::move(*photo);
@@ -352,12 +387,18 @@ static void take_photo(RPiCamEncoder &app, PhotoRequest request, PhotoSaver &sav
 	}
 
 	auto start = std::chrono::steady_clock::now();
-	stop_camera(app);
+	Stopwatch stopwatch;
+	// The H.264 encoder keeps running: the video comes back at exactly the same
+	// size, and restarting it costs up to 400 ms. Frames it is still encoding
+	// keep their dma-buf memory alive until it hands them back.
+	app.StopCamera();
+	app.Teardown();
+	stopwatch.Lap("video-stop");
 	std::optional<CapturedPhoto> photo;
 	std::string error;
 	try
 	{
-		photo = capture_still(app);
+		photo = capture_still(app, stopwatch);
 	}
 	catch (std::exception const &e)
 	{
@@ -365,9 +406,12 @@ static void take_photo(RPiCamEncoder &app, PhotoRequest request, PhotoSaver &sav
 	}
 	// Restart the video even when the photo failed; an exception from here
 	// ends the process and go2rtc starts a fresh stream.
-	start_video(app, video_flags);
+	app.ConfigureVideo(video_flags);
+	app.StartCamera();
+	stopwatch.Lap("video-start");
 	auto frozen = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
-	LOG(1, "Photo capture paused the video for " << frozen.count() << " ms");
+	LOG(1, "Photo capture paused the video for " << frozen.count() << " ms (ms per step:" << stopwatch.Summary()
+												 << ")");
 
 	if (!photo)
 	{
