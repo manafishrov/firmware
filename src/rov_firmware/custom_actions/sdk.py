@@ -57,8 +57,15 @@ class Context:
         self._publish(identifier, value)
         await asyncio.sleep(0)
 
-    async def log_csv(self, values: object, filename: str) -> None:
-        """Append a list or one-dimensional numpy array as one CSV row."""
+    async def log_csv(
+        self, values: object, filename: str, *, delete_oldest: str | None = None
+    ) -> None:
+        """Append a list or one-dimensional numpy array as one CSV row.
+
+        When the total CSV quota is full, delete_oldest="prefix_" permanently
+        deletes the oldest other CSV files whose names start with that prefix,
+        if that makes room for the row.
+        """
         self._require_active()
         if isinstance(values, np.ndarray):
             values = np.asarray(values).tolist()
@@ -69,7 +76,10 @@ class Context:
         # return while a detached thread can still append to the recording.
         write = asyncio.create_task(
             asyncio.to_thread(
-                self._csv.append, _CSV_ROW.validate_python(values), filename
+                self._csv.append,
+                _CSV_ROW.validate_python(values),
+                filename,
+                delete_oldest,
             )
         )
         cancelled = False

@@ -20,6 +20,10 @@ MAX_CHUNK_BYTES = 64 * 1024
 MAX_SNAPSHOTS = 4
 
 
+class CsvQuotaError(ValueError):
+    """A row does not fit within the per-file or total CSV quota."""
+
+
 class CsvStore:
     """Serialize append/delete/snapshot operations independently of control."""
 
@@ -43,8 +47,15 @@ class CsvStore:
             raise ValueError(msg)
         return path
 
-    def append(self, values: list[JsonValue], name: str) -> None:
-        """Append one consistent-width row; reject quotas and invalid cells."""
+    def append(
+        self, values: list[JsonValue], name: str, delete_oldest: str | None = None
+    ) -> None:
+        """Append one consistent-width row; reject quotas and invalid cells.
+
+        With delete_oldest, a full total quota first deletes the oldest files
+        whose names start with that prefix, never name itself, when that frees
+        enough space for the row.
+        """
         if not values or any(isinstance(v, (dict, list)) for v in values):
             msg = "CSV rows require a nonempty list of scalar values"
             raise ValueError(msg)
@@ -62,14 +73,31 @@ class CsvStore:
                     msg = f"{name} expects {columns} columns"
                     raise ValueError(msg)
             total = sum(p.stat().st_size for p in self.directory.glob("*.csv"))
-            if (
-                size + len(encoded) > MAX_FILE_BYTES
-                or total + len(encoded) > MAX_TOTAL_BYTES
-            ):
+            excess = total + len(encoded) - MAX_TOTAL_BYTES
+            if size + len(encoded) <= MAX_FILE_BYTES and excess > 0 and delete_oldest:
+                excess -= self._delete_oldest(delete_oldest, path, excess)
+            if size + len(encoded) > MAX_FILE_BYTES or excess > 0:
                 msg = "CSV storage quota reached; download and delete files"
-                raise ValueError(msg)
+                raise CsvQuotaError(msg)
             with path.open("ab") as stream:
                 stream.write(encoded)
+
+    def _delete_oldest(self, prefix: str, keep: Path, needed: int) -> int:
+        """Free at least needed bytes, oldest name first, or delete nothing."""
+        candidates = [
+            (path, path.stat().st_size)
+            for path in sorted(self.directory.glob("*.csv"))
+            if path.name.startswith(prefix) and path != keep and not path.is_symlink()
+        ]
+        if sum(size for _, size in candidates) < needed:
+            return 0
+        freed = 0
+        for path, size in candidates:
+            if freed >= needed:
+                break
+            path.unlink()
+            freed += size
+        return freed
 
     def list(self) -> list[dict[str, JsonValue]]:
         """Count logical rows, including quoted multiline CSV cells."""

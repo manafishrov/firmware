@@ -8,8 +8,13 @@ Pausing is temporary: recording resumes after an app disconnect, script reload,
 or ROV restart while enabled. Disable the custom action to stop recording.
 
 Each start writes a new blackbox_<UTC time>.csv, including the restart after an
-app disconnects, and a new file begins every FILE_DURATION_SECONDS. Download or
-delete recordings in CSV logging. Edit COLUMNS to choose the logged readings.
+app disconnects, and a new file begins every FILE_DURATION_SECONDS or when the
+current file reaches the per-file CSV limit. Download or delete recordings in
+CSV logging. Edit COLUMNS to choose the logged readings.
+
+When CSV storage is full, the oldest blackbox_*.csv recordings are permanently
+deleted to make room, so download recordings you want to keep. Other CSV files
+are never deleted; if they alone leave no room, logging stops with an error.
 """
 
 import asyncio
@@ -21,10 +26,12 @@ from pydantic import BaseModel, ConfigDict
 
 from manafish_sdk import Context, NotificationLevel, Script, Widget
 from rov_firmware.custom_actions.builtins import READING_DEFINITIONS, values
+from rov_firmware.custom_actions.csv_store import CsvQuotaError
 
 
 LOG_INTERVAL_SECONDS = 0.1
 FILE_DURATION_SECONDS = 3600
+FILE_PREFIX = "blackbox_"
 # Built-in reading IDs without the "rov." prefix; arrays get one column per item.
 COLUMNS = (
     "depth",
@@ -91,22 +98,24 @@ def _snapshot(ctx: Context) -> tuple[list[str], list[object]]:
 
 
 async def _append(ctx: Context, row: list[object]) -> None:
-    """Report storage failures clearly instead of silently losing the recording."""
+    """Append to the current file, deleting the oldest recordings to make room."""
     filename = recorder.filename
     if filename is None:
         msg = "No blackbox file is open"
         raise RuntimeError(msg)
-    try:
-        await ctx.log_csv(row, filename)
-    except ValueError as error:
-        await ctx.notify(
-            "Blackbox logging stopped",
-            level=NotificationLevel.ERROR,
-            description=str(error),
-            key="status",
-        )
-        msg = f"Failed to write {filename}: {error}"
-        raise RuntimeError(msg) from error
+    await ctx.log_csv(row, filename, delete_oldest=FILE_PREFIX)
+
+
+async def _start_file(ctx: Context, names: list[str], now: float) -> None:
+    """Begin a new recording with its header."""
+    started = datetime.now(UTC)
+    # Milliseconds keep a quick restart from appending to the previous file.
+    recorder.filename = (
+        f"{FILE_PREFIX}{started:%Y%m%d-%H%M%S}-{started.microsecond // 1000:03d}.csv"
+    )
+    recorder.file_started = now
+    await _append(ctx, ["time (UTC)", "elapsed (s)", *names])
+    await recording_file.publish(recorder.filename)
 
 
 async def write_row(ctx: Context) -> None:
@@ -117,17 +126,15 @@ async def write_row(ctx: Context) -> None:
         recorder.filename is None
         or now - recorder.file_started >= FILE_DURATION_SECONDS
     ):
-        started = datetime.now(UTC)
-        # Milliseconds keep a quick restart from appending to the previous file.
-        recorder.filename = (
-            f"blackbox_{started:%Y%m%d-%H%M%S}-{started.microsecond // 1000:03d}.csv"
-        )
-        recorder.file_started = now
-        await _append(ctx, ["time (UTC)", "elapsed (s)", *names])
-        await recording_file.publish(recorder.filename)
+        await _start_file(ctx, names, now)
     timestamp = datetime.now(UTC).isoformat(timespec="milliseconds")
     elapsed = round(now - recorder.file_started, 3)
-    await _append(ctx, [timestamp, elapsed, *cells])
+    try:
+        await _append(ctx, [timestamp, elapsed, *cells])
+    except CsvQuotaError:
+        # The file is full, or room remains only once it is deleted: start anew.
+        await _start_file(ctx, names, now)
+        await _append(ctx, [timestamp, 0.0, *cells])
 
 
 @script.action(name="Toggle logging")
@@ -151,5 +158,16 @@ async def record(ctx: Context) -> None:
     while True:
         async with recorder_lock:
             if recorder.recording:
-                await write_row(ctx)
+                try:
+                    await write_row(ctx)
+                except ValueError as error:
+                    # Storage failures stop the recording visibly, never silently.
+                    await ctx.notify(
+                        "Blackbox logging stopped",
+                        level=NotificationLevel.ERROR,
+                        description=str(error),
+                        key="status",
+                    )
+                    msg = f"Failed to write {recorder.filename}: {error}"
+                    raise RuntimeError(msg) from error
         await asyncio.sleep(LOG_INTERVAL_SECONDS)

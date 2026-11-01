@@ -14,7 +14,7 @@ import pytest
 
 from manafish_sdk import RovState
 from rov_firmware.custom_actions.api import dispatch
-from rov_firmware.custom_actions.csv_store import CsvStore
+from rov_firmware.custom_actions.csv_store import CsvQuotaError, CsvStore
 from rov_firmware.custom_actions.runtime import CustomActionRuntime
 from rov_firmware.custom_actions.validation import validate_source
 from rov_firmware.custom_actions.values import normalize_value
@@ -290,6 +290,44 @@ def test_csv_rejects_inconsistent_width_and_quota(tmp_path, monkeypatch):
     monkeypatch.setattr("rov_firmware.custom_actions.csv_store.MAX_FILE_BYTES", 1)
     with pytest.raises(ValueError, match="quota"):
         store.append([3, 4], "file.csv")
+
+
+def test_csv_delete_oldest_frees_only_older_prefixed_files(tmp_path, monkeypatch):
+    store = CsvStore(tmp_path)
+    # Each row is 12 bytes with CRLF.
+    for name in ("log_1.csv", "log_2.csv", "log_3.csv", "other.csv"):
+        store.append(["x" * 10], name)
+    monkeypatch.setattr("rov_firmware.custom_actions.csv_store.MAX_TOTAL_BYTES", 48)
+    snapshot = store.open("log_1.csv")
+
+    with pytest.raises(CsvQuotaError):
+        store.append(["x" * 10], "log_3.csv")
+    store.append(["x" * 10], "log_3.csv", "log_")
+    assert sorted(path.name for path in tmp_path.glob("*.csv")) == [
+        "log_2.csv",
+        "log_3.csv",
+        "other.csv",
+    ]
+    # Downloads already opened keep their snapshot after the file is deleted.
+    assert isinstance(snapshot["token"], str)
+    read = store.read(snapshot["token"], 0)
+    assert isinstance(read["data"], str)
+    assert base64.b64decode(read["data"]) == b"xxxxxxxxxx\r\n"
+
+    # Nothing is deleted unless that frees enough room, and never the target.
+    with pytest.raises(CsvQuotaError):
+        store.append(["x" * 30], "log_3.csv", "log_")
+    with pytest.raises(CsvQuotaError):
+        store.append(["x" * 10], "log_2.csv", "nothing_")
+    monkeypatch.setattr("rov_firmware.custom_actions.csv_store.MAX_FILE_BYTES", 12)
+    with pytest.raises(CsvQuotaError):
+        store.append(["x" * 10], "log_3.csv", "log_")
+    assert sorted(path.name for path in tmp_path.glob("*.csv")) == [
+        "log_2.csv",
+        "log_3.csv",
+        "other.csv",
+    ]
+    assert (tmp_path / "other.csv").read_bytes() == b"xxxxxxxxxx\r\n"
 
 
 def test_uncancelled_task_prevents_replacement_and_keeps_ownership(
@@ -629,10 +667,10 @@ def test_csv_write_finishes_before_repeated_cancellation_returns(runtime, monkey
     release = threading.Event()
     original = runtime.csv.append
 
-    def slow_append(values, filename):
+    def slow_append(*args):
         started.set()
         assert release.wait(timeout=3)
-        original(values, filename)
+        original(*args)
 
     monkeypatch.setattr(runtime.csv, "append", slow_append)
 
