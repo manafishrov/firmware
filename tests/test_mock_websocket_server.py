@@ -46,8 +46,8 @@ class _MockConnection:
         parsed = cast(dict[str, Any], json.loads(message))
         self.events.append(("send", parsed))
 
-    async def close(self, *, reason: str) -> None:
-        self.events.append(("close", reason))
+    async def close(self, *, code: int = 1000, reason: str) -> None:
+        self.events.append(("close", f"{code} {reason}"))
 
     def sent(self, message_type: str) -> list[dict[str, Any]]:
         return [
@@ -165,3 +165,20 @@ def test_builtin_actions_drive_the_simulation():
         if sample["id"] == "rov.depthHold"
     ]
     assert depth_hold_samples[-1] is True
+
+
+def test_second_operator_is_rejected_without_taking_over_controls():
+    capabilities = mock_websocket_server._capabilities()
+
+    async def operator(_identifier: str, _value: object) -> None:
+        return None
+
+    capabilities.control = operator
+    connection = _MockConnection([_invoke("direction", "rov.direction", [0] * 8)])
+
+    asyncio.run(
+        mock_websocket_server._handle_client(cast(ServerConnection, connection))
+    )
+
+    assert connection.events == [("close", "1008 Another operator is connected")]
+    assert capabilities.control is operator

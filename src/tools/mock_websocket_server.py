@@ -294,6 +294,11 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
     )
 
     capabilities = _capabilities()
+    # Like the firmware, serve one operator at a time; a second client would
+    # otherwise take over the simulated controls.
+    if capabilities.control is not None:
+        await websocket.close(code=1008, reason="Another operator is connected")
+        return
 
     async def send_capabilities() -> None:
         """Stream catalog changes and samples like the firmware does."""
