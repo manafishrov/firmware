@@ -24,8 +24,11 @@ disabled, the first time the firmware starts with them:
 - `blackbox`: records the built-in readings to CSV, also while disconnected,
   with a bindable logging toggle. CSV files are limited to 64 MiB each and
   256 MiB in total; when storage is full, the blackbox permanently deletes its
-  oldest `blackbox_*.csv` recordings to keep recording. It never deletes other
-  CSV files, and stops with an error if they alone leave no room.
+  oldest `blackbox_*.csv` recordings in filename order to keep recording. New
+  filenames start with `blackbox_recording_` and a sequence continued from disk,
+  so clock changes cannot reorder them. Earlier timestamp-only recordings sort
+  first. It never deletes other CSV files, and stops with an error if they alone
+  leave no room.
 - `extended_telemetry`: Pi CPU, memory, storage, network and firmware load, plus
   raw IMU, pressure and per-ESC readings for diagnostics.
 

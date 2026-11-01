@@ -52,9 +52,9 @@ class CsvStore:
     ) -> None:
         """Append one consistent-width row; reject quotas and invalid cells.
 
-        With delete_oldest, a full total quota first deletes the oldest files
-        whose names start with that prefix, never name itself, when that frees
-        enough space for the row.
+        With delete_oldest, a full total quota first deletes files in filename
+        order whose names start with that prefix, never name itself, when that
+        frees enough space for the row.
         """
         if not values or any(isinstance(v, (dict, list)) for v in values):
             msg = "CSV rows require a nonempty list of scalar values"
@@ -98,6 +98,15 @@ class CsvStore:
             path.unlink()
             freed += size
         return freed
+
+    def filenames(self) -> list[str]:
+        """List CSV filenames without reading their contents."""
+        with self._lock:
+            return sorted(
+                path.name
+                for path in self.directory.glob("*.csv")
+                if not path.is_symlink()
+            )
 
     def list(self) -> list[dict[str, JsonValue]]:
         """Count logical rows, including quoted multiline CSV cells."""

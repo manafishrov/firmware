@@ -63,8 +63,8 @@ class Context:
         """Append a list or one-dimensional numpy array as one CSV row.
 
         When the total CSV quota is full, delete_oldest="prefix_" permanently
-        deletes the oldest other CSV files whose names start with that prefix,
-        if that makes room for the row.
+        deletes other CSV files in filename order whose names start with that
+        prefix, if that makes room for the row.
         """
         self._require_active()
         if isinstance(values, np.ndarray):
@@ -91,6 +91,11 @@ class Context:
         write.result()
         if cancelled:
             raise asyncio.CancelledError
+
+    async def csv_filenames(self) -> list[str]:
+        """List stored CSV filenames in order, without reading their contents."""
+        self._require_active()
+        return await asyncio.to_thread(self._csv.filenames)
 
     async def notify(
         self,

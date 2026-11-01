@@ -7,18 +7,23 @@ pause/resume, and add "Logging" in Appearance to see whether it is recording.
 Pausing is temporary: recording resumes after an app disconnect, script reload,
 or ROV restart while enabled. Disable the custom action to stop recording.
 
-Each start writes a new blackbox_<UTC time>.csv, including the restart after an
-app disconnects, and a new file begins every FILE_DURATION_SECONDS or when the
-current file reaches the per-file CSV limit. Download or delete recordings in
-CSV logging. Edit COLUMNS to choose the logged readings.
+Each start writes a new blackbox_recording_<sequence>_<UTC time>.csv, including
+the restart after an app disconnects. The sequence continues from the highest
+number on disk, so a wrong Pi clock cannot reorder recordings. A new file begins
+every FILE_DURATION_SECONDS or when the current file reaches the per-file CSV
+limit. Download or delete recordings in CSV logging. Edit COLUMNS to choose the
+logged readings.
 
 When CSV storage is full, the oldest blackbox_*.csv recordings are permanently
-deleted to make room, so download recordings you want to keep. Other CSV files
-are never deleted; if they alone leave no room, logging stops with an error.
+deleted in filename order to make room, so download recordings you want to keep.
+Timestamp-only recordings from earlier versions sort before numbered recordings.
+Other CSV files are never deleted; if they alone leave no room, logging stops
+with an error.
 """
 
 import asyncio
 from datetime import UTC, datetime
+import re
 import time
 from typing import ClassVar
 
@@ -32,6 +37,8 @@ from rov_firmware.custom_actions.csv_store import CsvQuotaError
 LOG_INTERVAL_SECONDS = 0.1
 FILE_DURATION_SECONDS = 3600
 FILE_PREFIX = "blackbox_"
+# Sort after the timestamp-only names used by earlier versions.
+RECORDING_PREFIX = f"{FILE_PREFIX}recording_"
 # Built-in reading IDs without the "rov." prefix; arrays get one column per item.
 COLUMNS = (
     "depth",
@@ -72,6 +79,7 @@ class RecorderState(BaseModel):
     recording: bool = True
     filename: str | None = None
     file_started: float = 0.0
+    sequence: int | None = None
 
 
 recorder = RecorderState()
@@ -108,10 +116,20 @@ async def _append(ctx: Context, row: list[object]) -> None:
 
 async def _start_file(ctx: Context, names: list[str], now: float) -> None:
     """Begin a new recording with its header."""
+    if recorder.sequence is None:
+        recorder.sequence = max(
+            (
+                int(match[1])
+                for name in await ctx.csv_filenames()
+                if (match := re.fullmatch(rf"{RECORDING_PREFIX}(\d+)_.*\.csv", name))
+            ),
+            default=0,
+        )
+    recorder.sequence += 1
     started = datetime.now(UTC)
-    # Milliseconds keep a quick restart from appending to the previous file.
     recorder.filename = (
-        f"{FILE_PREFIX}{started:%Y%m%d-%H%M%S}-{started.microsecond // 1000:03d}.csv"
+        f"{RECORDING_PREFIX}{recorder.sequence:012d}_"
+        f"{started:%Y%m%d-%H%M%S}-{started.microsecond // 1000:03d}.csv"
     )
     recorder.file_started = now
     await _append(ctx, ["time (UTC)", "elapsed (s)", *names])
