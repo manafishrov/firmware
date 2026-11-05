@@ -1,41 +1,42 @@
 import asyncio
+import json
 from pathlib import Path
+import time
+import urllib.error
 import urllib.request
 
 import pytest
 
 from rov_firmware import photo
-from rov_firmware.custom_actions.runtime import CustomActionRuntime
-
-
-EXAMPLE = Path(__file__).parents[1] / "examples/custom_actions/take_photo.py"
+from rov_firmware.custom_actions import builtins
+from rov_firmware.custom_actions.csv_store import CsvStore
+from rov_firmware.custom_actions.sdk import Context
 
 
 @pytest.fixture(autouse=True)
 def data_dir(monkeypatch, tmp_path):
     monkeypatch.setenv("MANAFISH_DATA_DIR", str(tmp_path))
+    monkeypatch.setattr(photo, "_outbox", photo._Outbox())
     return tmp_path
 
 
 class FakeCamera:
     """Speaks manafish-camerad's photo protocol over TCP instead of a Unix socket."""
 
-    def __init__(self, replies=None):
+    def __init__(self, replies=None, save_delay=0.0):
         self.replies = replies
+        self.save_delay = save_delay
         self.requests = []
         self.server = None
 
     async def handle(self, reader, writer):
-        base = (await reader.readline()).decode().strip()
+        base = Path((await reader.readline()).decode().strip())
         self.requests.append(base)
-        replies = self.replies or [
-            "captured",
-            "saved " + str(Path(base).with_suffix(".jpg")),
-        ]
-        for reply in replies:
+        for reply in self.replies or ["captured", f"saved {base}.jpg"]:
             if reply.startswith("saved "):
-                Path(base).with_suffix(".jpg").write_bytes(b"jpeg")
-                Path(base).with_suffix(".dng").write_bytes(b"raw")
+                await asyncio.sleep(self.save_delay)
+                base.with_suffix(".dng").write_bytes(b"raw")
+                base.with_suffix(".jpg").write_bytes(b"jpeg")
             writer.write(f"{reply}\n".encode())
             await writer.drain()
         writer.close()
@@ -64,47 +65,61 @@ def run_with_camera(monkeypatch, camera, scenario):
     return asyncio.run(main())
 
 
-def test_capture_saves_jpeg_and_raw(monkeypatch, data_dir):
-    camera = FakeCamera()
-    captured = []
+async def settle():
+    """Let the background save watchers finish."""
+    async with asyncio.timeout(2):
+        while photo._outbox.status()[0]:
+            await asyncio.sleep(0.01)
 
-    jpeg = run_with_camera(
-        monkeypatch,
-        camera,
-        lambda: photo.capture_photo(on_captured=lambda: captured.append(True)),
-    )
 
-    assert captured == [True]
-    assert jpeg.parent == data_dir / "photos"
-    assert jpeg.name.startswith("photo_")
-    assert jpeg.read_bytes() == b"jpeg"
-    assert jpeg.with_suffix(".dng").exists()
-    assert camera.requests == [str(jpeg.with_suffix(""))]
+def test_capture_returns_once_taken_and_saves_into_the_outbox(monkeypatch, data_dir):
+    camera = FakeCamera(save_delay=0.2)
+
+    async def scenario():
+        photo_id = await photo.capture_photo()
+        saving, _ = photo._outbox.status()
+        await settle()
+        return photo_id, saving
+
+    photo_id, saving_after_capture = run_with_camera(monkeypatch, camera, scenario)
+
+    assert saving_after_capture == [photo_id]
+    outbox = data_dir / "photo_outbox"
+    assert camera.requests == [outbox / photo_id]
+    assert (outbox / f"{photo_id}.jpg").read_bytes() == b"jpeg"
+    assert photo._outbox.status() == ([], {})
 
 
 def test_photos_taken_in_the_same_second_get_unique_names(monkeypatch):
-    camera = FakeCamera()
-
     async def two_photos():
-        return [await photo.capture_photo(), await photo.capture_photo()]
+        first = await photo.capture_photo()
+        await settle()
+        return first, await photo.capture_photo()
 
-    first, second = run_with_camera(monkeypatch, camera, two_photos)
+    first, second = run_with_camera(monkeypatch, FakeCamera(), two_photos)
 
     assert first != second
 
 
-def test_camera_error_is_reported(monkeypatch):
-    camera = FakeCamera(replies=["error failed to allocate buffers"])
+def test_camera_error_before_capture_is_raised(monkeypatch):
+    camera = FakeCamera(replies=["error a photo is already being taken"])
 
-    with pytest.raises(photo.PhotoError, match=r"^Failed to allocate buffers$"):
+    with pytest.raises(photo.PhotoError, match=r"^A photo is already being taken$"):
         run_with_camera(monkeypatch, camera, photo.capture_photo)
+    assert photo._outbox.status() == ([], {})
 
 
-def test_camera_closing_early_is_reported(monkeypatch):
-    camera = FakeCamera(replies=["captured"])
+def test_save_failure_is_reported_in_the_outbox(monkeypatch):
+    camera = FakeCamera(replies=["captured", "error failed to write photo"])
 
-    with pytest.raises(photo.PhotoError, match="stopped before"):
-        run_with_camera(monkeypatch, camera, photo.capture_photo)
+    async def scenario():
+        photo_id = await photo.capture_photo()
+        await settle()
+        return photo_id
+
+    photo_id = run_with_camera(monkeypatch, camera, scenario)
+
+    assert photo._outbox.status() == ([], {photo_id: "Failed to write photo"})
 
 
 def test_missing_stream_is_reported(monkeypatch):
@@ -129,96 +144,104 @@ def test_full_sd_card_is_refused_before_contacting_the_camera(monkeypatch):
 
 
 @pytest.fixture
-def toasts(monkeypatch):
-    sent = []
-    for variant in ("loading", "success", "error"):
-        monkeypatch.setattr(
-            photo,
-            f"toast_{variant}",
-            lambda identifier, content, _action, variant=variant: sent.append(
-                (variant, identifier, content.message)
-            ),
-        )
-    return sent
-
-
-def test_take_photo_updates_one_toast(monkeypatch, toasts):
-    run_with_camera(
-        monkeypatch, FakeCamera(), lambda: photo.take_photo("http://10.10.10.10:8080")
-    )
-
-    assert toasts == [
-        ("loading", "photo", "Taking photo..."),
-        ("loading", "photo", "Saving photo..."),
-        ("success", "photo", "Photo saved"),
-    ]
-
-
-def test_take_photo_shows_failures(monkeypatch, toasts):
-    camera = FakeCamera(replies=["error busy"])
-
-    with pytest.raises(photo.PhotoError):
-        run_with_camera(monkeypatch, camera, lambda: photo.take_photo("url"))
-    assert toasts[-1] == ("error", "photo", "Could not take photo")
-
-
-def test_photo_page_lists_and_serves_photos(data_dir):
-    photos = data_dir / "photos"
-    photos.mkdir()
-    (photos / "photo_1.jpg").write_bytes(b"jpeg")
-    (photos / "photo_1.dng").write_bytes(b"raw")
-    (photos / "photo_2.jpg.part").write_bytes(b"half")
-    server = photo.start_photo_page(port=0)
+def transfer(data_dir):
+    outbox = data_dir / "photo_outbox"
+    outbox.mkdir()
+    (outbox / "photo_1.jpg").write_bytes(b"jpeg")
+    (outbox / "photo_1.dng").write_bytes(b"raw-data")
+    (outbox / "photo_2.dng.part").write_bytes(b"half")
+    server = photo.start_photo_transfer(port=0)
     assert server is not None
-
-    def get(path):
-        url = f"http://127.0.0.1:{server.server_address[1]}/{path}"
-        with urllib.request.urlopen(url, timeout=5) as response:  # noqa: S310
-            return response.read()
-
-    try:
-        page = get("").decode()
-        assert "photo_1" in page
-        assert "photo_1.dng" in page
-        assert "photo_2" not in page
-        assert get("photo_1.jpg") == b"jpeg"
-        assert get("photo_1.dng") == b"raw"
-    finally:
-        server.shutdown()
-        server.server_close()
+    yield server, outbox
+    server.shutdown()
+    server.server_close()
 
 
-def test_photo_page_failure_does_not_stop_firmware(monkeypatch):
-    def unavailable(*_args):
-        msg = "address in use"
-        raise OSError(msg)
-
-    monkeypatch.setattr(photo, "ThreadingHTTPServer", unavailable)
-
-    assert photo.start_photo_page() is None
+def http(server, method, path):
+    url = f"http://127.0.0.1:{server.server_address[1]}{path}"
+    request = urllib.request.Request(url, method=method)  # noqa: S310
+    with urllib.request.urlopen(request, timeout=5) as response:  # noqa: S310
+        return response.status, response.read()
 
 
-def test_example_action_takes_a_photo(rov_state, tmp_path, monkeypatch):
-    pages = []
+def test_transfer_lists_downloads_and_deletes_photos(transfer):
+    server, outbox = transfer
+    photo._outbox._saving.add("photo_3")
+    photo._outbox.finish("photo_4", "Failed to write photo")
 
-    async def fake_take_photo(page_url):
-        pages.append(page_url)
-        return tmp_path / "photo.jpg"
+    status, body = http(server, "GET", "/photos")
+    assert status == 200
+    assert json.loads(body) == {
+        "ready": [
+            {
+                "id": "photo_1",
+                "files": [
+                    {"name": "photo_1.jpg", "size": 4},
+                    {"name": "photo_1.dng", "size": 8},
+                ],
+            }
+        ],
+        "saving": ["photo_3"],
+        "failed": [{"id": "photo_4", "error": "Failed to write photo"}],
+    }
+    # A camera killed mid-save leaves partial files; startup removes them.
+    assert not (outbox / "photo_2.dng.part").exists()
 
-    monkeypatch.setattr("rov_firmware.custom_actions.sdk.take_photo", fake_take_photo)
-    runtime = CustomActionRuntime(rov_state, tmp_path)
+    assert http(server, "GET", "/photos/photo_1.dng") == (200, b"raw-data")
+    assert http(server, "DELETE", "/photos/photo_1")[0] == 204
+    assert http(server, "DELETE", "/photos/photo_4")[0] == 204
+    assert not list(outbox.iterdir())
+    assert json.loads(http(server, "GET", "/photos")[1])["failed"] == []
 
-    async def scenario():
-        try:
-            await runtime.install(EXAMPLE.read_text())
-            await runtime.enable("photo", True)
-            await runtime.invoke("photo.take_photo")
-            async with asyncio.timeout(2):
-                while "photo.take_photo" in runtime.running or not pages:
-                    await asyncio.sleep(0.01)
-        finally:
-            await runtime.shutdown()
 
-    asyncio.run(scenario())
+@pytest.mark.parametrize(
+    "path", ["/photos/../secret.jpg", "/photos/photo_1.txt", "/photos/other.jpg", "/"]
+)
+def test_transfer_only_serves_outbox_photos(transfer, path):
+    server, _ = transfer
+    with pytest.raises(urllib.error.HTTPError, match="404"):
+        http(server, "GET", path)
 
-    assert pages == ["http://10.10.10.10:8080"]
+
+def test_downloads_are_paced(transfer):
+    server, outbox = transfer
+    size = 4 * photo.TRANSFER_CHUNK_BYTES
+    (outbox / "photo_5.jpg").write_bytes(bytes(size))
+    # Pace this server at 1 MB/s so the 256 KiB download takes ~0.25 s.
+    server.pacer = photo._Pacer(1_000_000)
+
+    start = time.monotonic()
+    status, body = http(server, "GET", "/photos/photo_5.jpg")
+
+    assert (status, len(body)) == (200, size)
+    assert time.monotonic() - start >= 0.18
+
+
+def test_builtin_action_takes_a_photo(monkeypatch, rov_state):
+    calls = []
+
+    async def capture():
+        calls.append(True)
+        return "photo_1"
+
+    monkeypatch.setattr(builtins, "capture_photo", capture)
+    assert "rov.photo.capture" in {action.id for action in builtins.actions()}
+
+    asyncio.run(builtins.invoke(rov_state, "rov.photo.capture", None))
+
+    assert calls == [True]
+
+
+def test_custom_actions_can_take_photos(monkeypatch, rov_state, tmp_path):
+    calls = []
+
+    async def capture():
+        calls.append(True)
+        return "photo_1"
+
+    monkeypatch.setattr("rov_firmware.custom_actions.sdk.capture_photo", capture)
+    context = Context(rov_state, lambda *_: None, CsvStore(tmp_path / "csv"), "camera")
+
+    asyncio.run(context.take_photo())
+
+    assert calls == [True]

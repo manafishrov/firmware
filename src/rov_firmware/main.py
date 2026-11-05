@@ -9,7 +9,7 @@ from serial import SerialException
 from .diagnostics import FieldDiagnostics
 from .log import log_error
 from .models.log import LogLevel
-from .photo import start_photo_page
+from .photo import start_photo_transfer
 from .pico_control import PicoControl
 from .rov_state import RovState
 from .sensors.mcu import McuSensor
@@ -55,7 +55,7 @@ async def main() -> None:
     state.pico = control
 
     tasks: list[asyncio.Task[None]] = []
-    photo_page = start_photo_page()
+    photo_transfer = start_photo_transfer()
     try:
         await ws_server.initialize()
         _ = await serial_manager.initialize()
@@ -84,8 +84,8 @@ async def main() -> None:
             _ = task.cancel()
         if tasks:
             _ = await asyncio.gather(*tasks, return_exceptions=True)
-        if photo_page is not None:
-            await asyncio.to_thread(photo_page.shutdown)
+        if photo_transfer is not None:
+            await asyncio.to_thread(photo_transfer.shutdown)
         try:
             await ws_server.capabilities.shutdown()
         finally:

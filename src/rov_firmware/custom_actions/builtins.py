@@ -6,6 +6,7 @@ from typing import Any, cast
 from ..models.actions import DirectionVector
 from ..models.config import ThrusterTest
 from ..motor_safety import motor_firmware_operation_blocker
+from ..photo import capture_photo
 from ..rov_state import RovState
 from ..websocket.receive.actions import (
     handle_cancel_thruster_test,
@@ -70,6 +71,7 @@ ACTION_DEFINITIONS = [
     ("thrusterTest.cancel", "Cancel thruster test", "number"),
     ("regulatorAutoTuning.start", "Start regulator tuning", "none"),
     ("regulatorAutoTuning.cancel", "Cancel regulator tuning", "none"),
+    ("photo.capture", "Take photo", "none"),
 ]
 
 
@@ -152,3 +154,6 @@ async def _invoke_special(state: RovState, identifier: str, value: object) -> No
         await handle_start_thruster_test(state, ThrusterTest(cast(int, value)))
     elif identifier == "rov.thrusterTest.cancel":
         await handle_cancel_thruster_test(state, ThrusterTest(cast(int, value)))
+    elif identifier == "rov.photo.capture":
+        # Resolves once the frame is taken; the app then downloads the files.
+        await capture_photo()

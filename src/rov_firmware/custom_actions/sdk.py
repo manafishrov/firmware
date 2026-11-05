@@ -3,13 +3,12 @@
 import asyncio
 from collections.abc import Callable
 from enum import StrEnum
-from pathlib import Path
 
 import numpy as np
 from pydantic import JsonValue, TypeAdapter
 
 from ..log import log_info
-from ..photo import photo_page_url, take_photo
+from ..photo import capture_photo
 from ..rov_state import RovState
 from ..toast import ToastContent, ToastVariant, toast_content
 from .csv_store import CsvStore
@@ -122,15 +121,16 @@ class Context:
         )
         await asyncio.sleep(0)
 
-    async def take_photo(self) -> Path:
+    async def take_photo(self) -> None:
         """Take a full-resolution 4056x3040 photo (JPEG + RAW .dng) with the video camera.
 
-        The video freezes for about a second while the camera switches mode. The
-        firmware shows progress and errors as notifications and serves the photos
-        at http://<ROV IP>:8080. Returns the JPEG path; raises PhotoError on failure.
+        Returns once the frame is taken; the video freezes for the mode switch,
+        about 1.5 seconds. The app downloads the photo into its photo folder.
+        Raises PhotoError when the video is not open, a photo is already being
+        taken, or the camera fails.
         """
         self._require_active()
-        return await take_photo(photo_page_url(self.rov.rov_config.ip_address))
+        await capture_photo()
 
     async def log(self, message: str) -> None:
         """Send an custom action-labelled message to the app's firmware debug log."""
