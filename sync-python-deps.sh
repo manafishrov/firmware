@@ -18,6 +18,9 @@ PACKAGES=(
 	"gpiozero"
 	"lgpio"
 	"psutil"
+	"spidev"
+	"pynmea2"
+	"pymodbus"
 	"ruff"
 )
 

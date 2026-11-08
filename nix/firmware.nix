@@ -16,6 +16,10 @@
         gpiozero
         lgpio
         psutil
+        # Custom-action peripherals: SPI, GPS (NMEA) and Modbus/RS-485 instruments.
+        spidev
+        pynmea2
+        pymodbus
       ]
       ++ [
         (pkgs.python313Packages.buildPythonPackage {

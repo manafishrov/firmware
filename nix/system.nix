@@ -23,7 +23,9 @@ in {
 
   users.users.${username} = {
     isNormalUser = true;
-    extraGroups = ["wheel" "networkmanager" "video" "i2c" "gpio" "plugdev"];
+    # Hardware access for the firmware and custom actions: `spi` opens
+    # /dev/spidev*, `dialout` opens USB-serial adapters (/dev/ttyUSB*, /dev/ttyACM*).
+    extraGroups = ["wheel" "networkmanager" "video" "i2c" "gpio" "plugdev" "spi" "dialout"];
     password = "manafish";
     home = homeDir;
   };
