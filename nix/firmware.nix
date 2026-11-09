@@ -20,7 +20,7 @@
       ++ [
         (pkgs.python313Packages.buildPythonPackage {
           pname = "numpydantic";
-          version = "1.10.0";
+          version = "2.0.0";
           format = "pyproject";
           src = inputs.numpydantic-src;
           nativeBuildInputs = with pkgs.python313Packages; [pdm-backend];
