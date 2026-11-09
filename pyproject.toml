@@ -86,7 +86,7 @@ rules.possibly-unresolved-reference = "warn"
 testpaths = ["tests"]
 # BEGIN generated Nix Python sources
 [tool.uv.sources]
-numpydantic = { git = "https://github.com/p2p-ld/numpydantic.git", rev = "b4e33faadd7963c319ff487293d180390adf1f29" }
+numpydantic = { git = "https://github.com/p2p-ld/numpydantic.git", rev = "86d4d810bec4b5b9fc91b67feff4247e75079bca" }
 
 [tool.uv.extra-build-variables.numpydantic]
 PDM_BUILD_SCM_VERSION = "1.10.0"
