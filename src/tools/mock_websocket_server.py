@@ -51,7 +51,7 @@ MOCK_CONFIG: dict[str, Any] = {
         "pitch": {"kp": 2, "ki": 0, "kd": 0.1, "rate": 5.0},
         "roll": {"kp": 1, "ki": 0, "kd": 0.1, "rate": 5.0},
         "yaw": {"kp": 3, "ki": 0, "kd": 0, "rate": 5.0},
-        "depth": {"kp": 0.5, "ki": 0, "kd": 0.1, "rate": 5.0},
+        "depth": {"kp": 0.5, "ki": 0, "kd": 0.1, "rate": 0.5},
         "fpvMode": False,
     },
     "directionCoefficients": {
