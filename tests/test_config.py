@@ -1,4 +1,6 @@
 import json
+from pathlib import Path
+import re
 
 import numpy as np
 from pydantic import ValidationError
@@ -310,15 +312,36 @@ def test_rov_config_round_trip_nullspace_vectors_populated():
 def test_camera_defaults_match_stream_baseline():
     camera = Camera()
 
-    assert camera.width == 1024
-    assert camera.height == 768
+    assert camera.width == 1440
+    assert camera.height == 1080
     assert camera.framerate == 30
     assert camera.crop_fov is False
-    assert camera.bitrate == 3_538_944
+    assert camera.bitrate == 13_996_800
     assert camera.keyframe_interval == 30
     assert camera.profile == "baseline"
     assert camera.level == "4.2"
     assert camera.denoise == "off"
+
+
+def test_camera_launcher_fallbacks_match_defaults():
+    """The launcher reads config.json itself, so a missing camera section must
+    start the stream the firmware reports instead of an older default."""
+    launcher = (Path(__file__).resolve().parents[1] / "nix/camera.nix").read_text()
+    fallbacks = {
+        field: int(value)
+        for field, value in re.findall(
+            r'clamp_int "\$\(get \.camera\.(\w+)\)" \d+ \S+ (\d+)\)', launcher
+        )
+    }
+    camera = Camera()
+
+    assert fallbacks == {
+        "width": camera.width,
+        "height": camera.height,
+        "framerate": camera.framerate,
+        "bitrate": camera.bitrate,
+        "keyframeInterval": camera.keyframe_interval,
+    }
 
 
 @pytest.mark.parametrize(

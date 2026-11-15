@@ -120,9 +120,12 @@ dependencies = [
     { name = "numpydantic" },
     { name = "psutil" },
     { name = "pydantic" },
+    { name = "pymodbus" },
+    { name = "pynmea2" },
     { name = "pyserial-asyncio-fast" },
     { name = "scipy" },
     { name = "smbus2" },
+    { name = "spidev", marker = "sys_platform == 'linux'" },
     { name = "websockets" },
 ]
 
@@ -144,9 +147,12 @@ requires-dist = [
     { name = "numpydantic", git = "https://github.com/p2p-ld/numpydantic.git?rev=b4e33faadd7963c319ff487293d180390adf1f29" },
     { name = "psutil", specifier = "==7.2.2" },
     { name = "pydantic", specifier = "==2.12.5" },
+    { name = "pymodbus", specifier = "==3.12.1" },
+    { name = "pynmea2", specifier = "==1.19.0" },
     { name = "pyserial-asyncio-fast", specifier = "==0.16" },
     { name = "scipy", specifier = "==1.17.1" },
     { name = "smbus2", specifier = "==0.6.1" },
+    { name = "spidev", marker = "sys_platform == 'linux'", specifier = "==3.8" },
     { name = "websockets", specifier = "==16.0" },
 ]
 
@@ -328,6 +334,24 @@ wheels = [
 ]
 
 [[package]]
+name = "pymodbus"
+version = "3.12.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c8/cf/9ace571421e4ed8bc870e79caca7fe04b7e2529764494f1fb406053640ef/pymodbus-3.12.1.tar.gz", hash = "sha256:bcb483381747b3e3aec2c8e01d5df885e5ea43f85b7145dc1907af06aca93a2c", size = 167673, upload-time = "2026-02-19T21:02:57.035Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a5/05/fd7f09ab026be0c5d8433661bbf2181e2802883baadce51955a936286e51/pymodbus-3.12.1-py3-none-any.whl", hash = "sha256:cb4785bdee8870ee593ea1f338f859f50581e3a615261ffbd464602e21d03b85", size = 169517, upload-time = "2026-02-19T21:02:55.009Z" },
+]
+
+[[package]]
+name = "pynmea2"
+version = "1.19.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/c0/d7/5d0e36d00cd8aa19a6e717bcd1216ca805d86865501dfebdd18667c9edbd/pynmea2-1.19.0.tar.gz", hash = "sha256:1daa79b93279f887d1c235e5cc5c79e32644564138ce46989ab0f4a2fc970d7c", size = 36240, upload-time = "2023-01-19T20:52:56.289Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/75/24/1f575eb17a8135e54b3c243ff87e2f4d6b2389942836021d0628ed837559/pynmea2-1.19.0-py3-none-any.whl", hash = "sha256:5138558b4fb5daa587b2c17de99eb43df0297039de1c98010c996624abfb00eb", size = 30016, upload-time = "2023-01-19T20:52:54.38Z" },
+]
+
+[[package]]
 name = "pyserial"
 version = "3.5"
 source = { registry = "https://pypi.org/simple" }
@@ -467,6 +491,12 @@ sdist = { url = "https://files.pythonhosted.org/packages/87/37/b3f7b501502c4915b
 wheels = [
     { url = "https://files.pythonhosted.org/packages/96/f2/c78a68bd739ac8fc608747cff73a4db3b19f3135658ed4e64374f6425cbf/smbus2-0.6.1-py2.py3-none-any.whl", hash = "sha256:650feeb27ca0ed58b07db4c10201c2a662c41305b7bf6e5fab9d888056f48180", size = 11767, upload-time = "2026-04-09T20:37:53.728Z" },
 ]
+
+[[package]]
+name = "spidev"
+version = "3.8"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/67/87/039b6eeea781598015b538691bc174cc0bf77df9d4d2d3b8bf9245c0de8c/spidev-3.8.tar.gz", hash = "sha256:2bc02fb8c6312d519ebf1f4331067427c0921d3f77b8bcaf05189a2e8b8382c0", size = 13893, upload-time = "2025-09-15T18:56:20.672Z" }
 
 [[package]]
 name = "ty"
