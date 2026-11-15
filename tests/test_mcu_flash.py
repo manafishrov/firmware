@@ -186,17 +186,3 @@ def test_mcu_flash_refuses_firmware_for_a_different_board(
     )
     assert not rov_state.mcu_flashing
     assert not popen_calls
-
-
-def test_mcu_flash_is_blocked_during_regulator_auto_tuning(rov_state, monkeypatch):
-    rov_state.regulator.auto_tuning_active = True
-
-    def unexpected_resolve(_board):
-        msg = "firmware resolution must not run while auto-tuning"
-        raise AssertionError(msg)
-
-    monkeypatch.setattr(mcu, "resolve_mcu_firmware", unexpected_resolve)
-
-    assert not asyncio.run(
-        mcu.flash_mcu_firmware(rov_state, McuBoard.PICO, show_toasts=False)
-    )

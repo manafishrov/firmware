@@ -17,6 +17,8 @@ def test_obsolete_runtime_messages_are_not_a_second_control_interface():
         ("setDepthHold", True),
         ("directionVector", [0] * 8),
         ("telemetry", {}),
+        ("startRegulatorAutoTuning", None),
+        ("cancelRegulatorAutoTuning", None),
     ]:
         with pytest.raises(ValidationError):
             adapter.validate_python({"type": kind, "payload": payload})
@@ -50,6 +52,12 @@ def test_real_websocket_catalog_and_correlated_errors(rov_state):
                 assert frame["payload"]["requestId"] == "catalog"
                 assert frame["payload"]["ok"]
                 assert frame["payload"]["result"]["samples"]
+                # Older apps may still send removed auto-tuning messages.
+                for removed in (
+                    "startRegulatorAutoTuning",
+                    "cancelRegulatorAutoTuning",
+                ):
+                    await client.send(json.dumps({"type": removed}))
                 await client.send(
                     json.dumps(
                         {

@@ -100,20 +100,12 @@ SYSTEM_STATUS: dict[str, Any] = {
         "thrusterIndex": None,
         "startTime": None,
     },
-    "autoTuning": {
-        "active": False,
-        "phase": None,
-        "step": None,
-        "startTime": None,
-    },
 }
 
 THRUSTER_TEST_TOAST_ID = "thruster-test"
-AUTO_TUNING_TOAST_ID = "regulator-auto-tuning"
 FLASH_TOAST_ID = "flash-mcu-firmware"
 ESC_FLASH_TOAST_ID = "flash-esc-firmware"
 THRUSTER_TEST_DURATION_SECONDS = 10
-AUTO_TUNING_OSCILLATION_DURATION_SECONDS = 10
 FLASH_DURATION_SECONDS = 3
 PERCENT_COMPLETE = 100
 MOCK_ESC_FIRMWARE = MockEscFirmware(flash_duration_seconds=FLASH_DURATION_SECONDS)
@@ -346,7 +338,6 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
     capability_task: asyncio.Task[None] | None = None
     capability_requests: set[asyncio.Task[None]] = set()
     thruster_test_task: asyncio.Task[None] | None = None
-    auto_tuning_task: asyncio.Task[None] | None = None
 
     async def run_thruster_test(thruster_index: int) -> None:
         """Simulate thruster test with progress toast updates."""
@@ -431,141 +422,6 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
         finally:
             SYSTEM_STATUS["thrusterTest"]["active"] = False
             SYSTEM_STATUS["thrusterTest"]["thrusterIndex"] = None
-
-    async def run_auto_tuning() -> None:
-        """Simulate regulator auto tuning with progress toast updates."""
-        try:
-            SYSTEM_STATUS["autoTuning"]["active"] = True
-            SYSTEM_STATUS["autoTuning"]["startTime"] = time.time()
-
-            toast_msg = {
-                "type": "showToast",
-                "payload": {
-                    "identifier": AUTO_TUNING_TOAST_ID,
-                    "variant": "loading",
-                    "content": {
-                        "messageKey": "toasts_auto_tuning_starting",
-                        "descriptionKey": "toasts_auto_tuning_finding_zero",
-                    },
-                    "action": {
-                        "labelKey": "common_cancel",
-                        "messageType": "cancelRegulatorAutoTuning",
-                    },
-                },
-            }
-            await websocket.send(json.dumps(toast_msg))
-
-            for phase in ("pitch", "roll", "depth"):
-                if not SYSTEM_STATUS["autoTuning"]["active"]:
-                    break
-                await _run_tuning_phase(phase)
-
-            if SYSTEM_STATUS["autoTuning"]["active"]:
-                toast_msg = {
-                    "type": "showToast",
-                    "payload": {
-                        "identifier": AUTO_TUNING_TOAST_ID,
-                        "variant": "success",
-                        "content": {
-                            "messageKey": "toasts_auto_tuning_completed",
-                            "descriptionKey": None,
-                            "descriptionArgs": None,
-                        },
-                        "action": None,
-                    },
-                }
-                await websocket.send(json.dumps(toast_msg))
-
-        except asyncio.CancelledError:
-            logger.debug("Auto tuning cancelled")
-        except Exception:
-            logger.exception("Error in auto tuning")
-        finally:
-            SYSTEM_STATUS["autoTuning"]["active"] = False
-            SYSTEM_STATUS["autoTuning"]["phase"] = None
-            SYSTEM_STATUS["autoTuning"]["step"] = None
-
-    async def _run_tuning_phase(phase: str) -> None:
-        SYSTEM_STATUS["autoTuning"]["phase"] = phase
-        SYSTEM_STATUS["autoTuning"]["step"] = "find_zero"
-
-        toast_msg = {
-            "type": "showToast",
-            "payload": {
-                "identifier": AUTO_TUNING_TOAST_ID,
-                "variant": "loading",
-                "content": {
-                    "messageKey": "toasts_auto_tuning_tuning_phase",
-                    "messageArgs": {"phase": phase},
-                    "descriptionKey": "toasts_auto_tuning_finding_zero",
-                },
-                "action": {
-                    "labelKey": "common_cancel",
-                    "messageType": "cancelRegulatorAutoTuning",
-                },
-            },
-        }
-        await websocket.send(json.dumps(toast_msg))
-        await asyncio.sleep(2)
-
-        if not SYSTEM_STATUS["autoTuning"]["active"]:
-            return
-
-        SYSTEM_STATUS["autoTuning"]["step"] = "find_amplitude"
-        toast_msg = {
-            "type": "showToast",
-            "payload": {
-                "identifier": AUTO_TUNING_TOAST_ID,
-                "variant": "loading",
-                "content": {
-                    "messageKey": "toasts_auto_tuning_tuning_phase",
-                    "messageArgs": {"phase": phase},
-                    "descriptionKey": "toasts_auto_tuning_finding_oscillation",
-                },
-                "action": {
-                    "labelKey": "common_cancel",
-                    "messageType": "cancelRegulatorAutoTuning",
-                },
-            },
-        }
-        await websocket.send(json.dumps(toast_msg))
-        await asyncio.sleep(2)
-
-        if not SYSTEM_STATUS["autoTuning"]["active"]:
-            return
-
-        SYSTEM_STATUS["autoTuning"]["step"] = "oscillate"
-        oscillation_start = time.time()
-        last_elapsed = -1
-
-        while SYSTEM_STATUS["autoTuning"]["active"]:
-            elapsed = time.time() - oscillation_start
-            if elapsed >= AUTO_TUNING_OSCILLATION_DURATION_SECONDS:
-                break
-
-            elapsed_int = int(elapsed)
-            if elapsed_int != last_elapsed:
-                last_elapsed = elapsed_int
-                toast_msg = {
-                    "type": "showToast",
-                    "payload": {
-                        "identifier": AUTO_TUNING_TOAST_ID,
-                        "variant": "loading",
-                        "content": {
-                            "messageKey": "toasts_auto_tuning_tuning_phase",
-                            "messageArgs": {"phase": phase},
-                            "descriptionKey": "toasts_auto_tuning_oscillating",
-                            "descriptionArgs": {"seconds": elapsed_int},
-                        },
-                        "action": {
-                            "labelKey": "common_cancel",
-                            "messageType": "cancelRegulatorAutoTuning",
-                        },
-                    },
-                }
-                await websocket.send(json.dumps(toast_msg))
-
-            await asyncio.sleep(0.1)
 
     async def run_flash_firmware(variant: str) -> None:
         """Simulate firmware flashing with progress toast updates."""
@@ -668,28 +524,6 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             }
         )
 
-    async def start_auto_tuning() -> None:
-        nonlocal auto_tuning_task
-        if auto_tuning_task is not None and not auto_tuning_task.done():
-            _ = auto_tuning_task.cancel()
-        auto_tuning_task = asyncio.create_task(run_auto_tuning())
-
-    async def cancel_auto_tuning() -> None:
-        SYSTEM_STATUS["autoTuning"]["active"] = False
-        if auto_tuning_task is not None and not auto_tuning_task.done():
-            _ = auto_tuning_task.cancel()
-        await send_mock_message(
-            {
-                "type": "showToast",
-                "payload": {
-                    "identifier": AUTO_TUNING_TOAST_ID,
-                    "variant": "info",
-                    "content": {"messageKey": "toasts_auto_tuning_cancelled"},
-                    "action": None,
-                },
-            }
-        )
-
     def set_depth_hold(enabled: bool) -> None:
         if enabled and not SYSTEM_STATUS["depthHold"]:
             pending = SYSTEM_STATUS["pendingDesiredDepth"]
@@ -744,10 +578,6 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             await start_thruster_test(cast(int, value))
         elif identifier == "rov.thrusterTest.cancel":
             await cancel_thruster_test()
-        elif identifier == "rov.regulatorAutoTuning.start":
-            await start_auto_tuning()
-        elif identifier == "rov.regulatorAutoTuning.cancel":
-            await cancel_auto_tuning()
 
     try:
         await websocket.send(json.dumps(_config_message()))
@@ -856,10 +686,6 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
                     await start_thruster_test(cast(int, payload))
                 elif msg_type == "cancelThrusterTest":
                     await cancel_thruster_test()
-                elif msg_type == "startRegulatorAutoTuning":
-                    await start_auto_tuning()
-                elif msg_type == "cancelRegulatorAutoTuning":
-                    await cancel_auto_tuning()
                 else:
                     logger.warning(f"Unhandled message type: {msg_type}")
                     logger.info(payload)
@@ -875,7 +701,6 @@ async def _handle_client(websocket: ServerConnection) -> None:  # noqa: C901,PLR
             for task in (
                 capability_task,
                 thruster_test_task,
-                auto_tuning_task,
                 *capability_requests,
             )
             if task is not None

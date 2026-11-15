@@ -28,7 +28,6 @@ def disruptive_motor_operation_blocker(
             == EscFirmwareUpdateStage.AWAITING_TELEMETRY,
             "ESC firmware version confirmation is still running",
         ),
-        (state.regulator.auto_tuning_active, "regulator auto-tuning is active"),
         (state.thrusters.test_thruster is not None, "a thruster test is active"),
         (state.system_status.auto_stabilization, "auto-stabilization is active"),
         (state.system_status.depth_hold, "depth hold is active"),

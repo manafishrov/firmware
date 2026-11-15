@@ -621,12 +621,3 @@ class PartialRovConfig(CamelCaseModel):
 
 
 ThrusterTest = int
-
-
-class RegulatorSuggestions(CamelCaseModel):
-    """Suggestions for regulator tuning."""
-
-    pitch: AxisConfig
-    roll: AxisConfig
-    yaw: AxisConfig
-    depth: AxisConfig

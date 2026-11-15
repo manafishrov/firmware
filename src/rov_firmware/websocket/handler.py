@@ -22,10 +22,6 @@ from .receive.config import (
     handle_set_config,
 )
 from .receive.mcu import handle_flash_mcu_firmware
-from .receive.regulator import (
-    handle_cancel_regulator_auto_tuning,
-    handle_start_regulator_auto_tuning,
-)
 from .types import MessageType
 
 
@@ -71,10 +67,6 @@ async def handle_message(
             await handle_get_config(state)
         case MessageType.CONFIRM_CONFIG:
             handle_confirm_config(state, cast(str, payload))
-        case MessageType.START_REGULATOR_AUTO_TUNING:
-            await handle_start_regulator_auto_tuning(state)
-        case MessageType.CANCEL_REGULATOR_AUTO_TUNING:
-            await handle_cancel_regulator_auto_tuning(state)
         case MessageType.FLASH_ESC_FIRMWARE:
             _ = await flash_esc_firmware(state, serial_manager, show_toasts=True)
         case _:

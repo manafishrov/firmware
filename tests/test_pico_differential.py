@@ -14,7 +14,9 @@ import numpy as np
 import pytest
 from scipy.spatial.transform import Rotation
 
+from rov_firmware.models import config as config_models
 from rov_firmware.serial import SerialManager
+from rov_firmware.websocket import message as websocket_message
 
 
 REFERENCE = Path(__file__).parent / "reference"
@@ -88,7 +90,12 @@ def test_tampered_reference_is_rejected_before_execution(name, tmp_path, monkeyp
 @pytest.fixture
 def originals():
     constants = load_original("constants")
-    with patch.dict(sys.modules, {"rov_firmware.constants": constants}):
+    # The baseline regulator imports auto-tuning message models that were removed later.
+    with (
+        patch.dict(sys.modules, {"rov_firmware.constants": constants}),
+        patch.object(config_models, "RegulatorSuggestions", object, create=True),
+        patch.object(websocket_message, "RegulatorSuggestions", object, create=True),
+    ):
         regulator = load_original("regulator")
         with patch.dict(sys.modules, {"rov_firmware.regulator": regulator}):
             thrusters = load_original("thrusters")

@@ -168,10 +168,8 @@ class FieldDiagnostics:
         last_input = state.thrusters.last_direction_time
         input_age = max(0.0, time.time() - last_input) if last_input > 0 else None
         watchdog_neutral = (
-            (input_age is None or input_age >= THRUSTER_TIMEOUT_MS / 1000)
-            and state.thrusters.test_thruster is None
-            and not state.regulator.auto_tuning_active
-        )
+            input_age is None or input_age >= THRUSTER_TIMEOUT_MS / 1000
+        ) and state.thrusters.test_thruster is None
         vector = state.thrusters.direction_vector
         snapshot: dict[str, object] = {
             "mono_s": round(now, 3),

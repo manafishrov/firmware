@@ -31,14 +31,6 @@ def cancel_thruster_test_action(thruster_index: int) -> ToastAction:
     )
 
 
-def cancel_regulator_auto_tuning_action() -> ToastAction:
-    """Create action metadata for cancelling regulator auto tuning."""
-    return toast_action(
-        "cancelRegulatorAutoTuning",
-        label_key="common_cancel",
-    )
-
-
 async def _toast_message_async(payload: Toast) -> None:
     message_model = ShowToast(payload=payload)
     await get_message_queue().put(message_model)

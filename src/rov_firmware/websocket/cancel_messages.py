@@ -12,11 +12,3 @@ class CancelThrusterTest(CamelCaseModel):
 
     type: Literal[MessageType.CANCEL_THRUSTER_TEST] = MessageType.CANCEL_THRUSTER_TEST
     payload: ThrusterTest
-
-
-class CancelRegulatorAutoTuning(CamelCaseModel):
-    """WebSocket message for canceling regulator auto tuning."""
-
-    type: Literal[MessageType.CANCEL_REGULATOR_AUTO_TUNING] = (
-        MessageType.CANCEL_REGULATOR_AUTO_TUNING
-    )

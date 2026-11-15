@@ -588,7 +588,6 @@ class Thrusters:
             "write_failures": self._diagnostic_send_failures,
             "last_regulator_contribution": self.regulator.diagnostic_output(),
             "test_channel_index": self.state.thrusters.test_thruster,
-            "auto_tuning": self.state.regulator.auto_tuning_active,
         }
         self._diagnostic_max_send_gap = 0.0
         self._diagnostic_late_sends = 0
@@ -821,19 +820,6 @@ class Thrusters:
     def _determine_thrust_vector(
         self, current_time: float, last_send_time: float
     ) -> tuple[NDArray[np.float32] | None, float, int | None]:
-        if self.state.regulator.auto_tuning_active:
-            tuning_vector = self.regulator.handle_auto_tuning(current_time)
-            if tuning_vector is not None:
-                direction_vector = tuning_vector
-                thrust_vector = self._create_thrust_vector_from_direction_vector(
-                    direction_vector
-                )
-                self._correct_thrust_vector_spin_directions(thrust_vector)
-                self._reorder_thrust_vector(thrust_vector)
-                self._clip_thrust_vector(thrust_vector)
-                self.state.thrusters.work_indicator_percentage = 0
-                return thrust_vector, last_send_time, None
-
         if self.state.thrusters.test_thruster is not None:
             test_request_id = self.state.thrusters.test_request_id
             test_vector = self._handle_thruster_test(

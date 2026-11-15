@@ -14,7 +14,6 @@ from ..models.base import CamelCaseModel
 from ..models.config import (
     McuBoard,
     PartialRovConfig,
-    RegulatorSuggestions as RegulatorSuggestionsPayload,
     RovConfig,
     ThrusterTest,
 )
@@ -22,7 +21,7 @@ from ..models.log import LogEntry
 from ..models.rov_status import RovStatus
 from ..models.rov_telemetry import RovTelemetry
 from ..models.toast import Toast
-from .cancel_messages import CancelRegulatorAutoTuning, CancelThrusterTest
+from .cancel_messages import CancelThrusterTest
 from .types import MessageType
 
 
@@ -89,21 +88,6 @@ class StartThrusterTest(CamelCaseModel):
     payload: ThrusterTest
 
 
-class StartRegulatorAutoTuning(CamelCaseModel):
-    """WebSocket message for starting regulator auto tuning."""
-
-    type: Literal[MessageType.START_REGULATOR_AUTO_TUNING] = (
-        MessageType.START_REGULATOR_AUTO_TUNING
-    )
-
-
-class RegulatorSuggestions(CamelCaseModel):
-    """WebSocket message for regulator suggestions."""
-
-    type: Literal[MessageType.REGULATOR_SUGGESTIONS] = MessageType.REGULATOR_SUGGESTIONS
-    payload: RegulatorSuggestionsPayload
-
-
 class ShowToast(CamelCaseModel):
     """WebSocket message for showing toast."""
 
@@ -157,9 +141,6 @@ WebsocketMessage = Annotated[
     | ConfirmConfig
     | StartThrusterTest
     | CancelThrusterTest
-    | StartRegulatorAutoTuning
-    | CancelRegulatorAutoTuning
-    | RegulatorSuggestions
     | ShowToast
     | LogMessage
     | FlashMcuFirmware

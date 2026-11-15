@@ -13,11 +13,7 @@ from ..websocket.receive.actions import (
     handle_direction_vector,
     handle_start_thruster_test,
 )
-from ..websocket.receive.regulator import (
-    handle_cancel_regulator_auto_tuning,
-    handle_set_desired_depth,
-    handle_start_regulator_auto_tuning,
-)
+from ..websocket.receive.regulator import handle_set_desired_depth
 from ..websocket.receive.state import (
     handle_set_auto_stabilization,
     handle_set_depth_hold,
@@ -69,8 +65,6 @@ ACTION_DEFINITIONS = [
     ("attitude.set", "Set desired attitude", "numberArray"),
     ("thrusterTest.start", "Start thruster test", "number"),
     ("thrusterTest.cancel", "Cancel thruster test", "number"),
-    ("regulatorAutoTuning.start", "Start regulator tuning", "none"),
-    ("regulatorAutoTuning.cancel", "Cancel regulator tuning", "none"),
     ("photo.capture", "Take photo", "none"),
 ]
 
@@ -120,8 +114,6 @@ async def invoke(state: RovState, identifier: str, value: object) -> None:
     toggles = {
         "rov.autoStabilization.toggle": handle_toggle_auto_stabilization,
         "rov.depthHold.toggle": handle_toggle_depth_hold,
-        "rov.regulatorAutoTuning.start": handle_start_regulator_auto_tuning,
-        "rov.regulatorAutoTuning.cancel": handle_cancel_regulator_auto_tuning,
     }
     if identifier in controls:
         blocker = motor_firmware_operation_blocker(state)
