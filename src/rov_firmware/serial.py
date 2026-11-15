@@ -2,9 +2,12 @@
 
 import asyncio
 import contextlib
+from functools import partial
+import os
 from pathlib import Path
 
-from serial_asyncio_fast import open_serial_connection
+import serial
+from serial_asyncio_fast import connection_for_serial
 
 from .constants import (
     MCU_FIRST_BOOT_RETRY_LIMIT,
@@ -17,6 +20,46 @@ from .log import log_error, log_info, log_warn
 from .models.toast import ToastContent
 from .rov_state import RovState
 from .toast import toast_error
+
+
+class _NonBlockingSerial(serial.Serial):
+    """Serial port whose writes never retry inside the event loop.
+
+    pyserial retries EAGAIN forever when ``write_timeout`` is 0, which the
+    asyncio transport always sets. A Pico that stops reading fills the TTY
+    queue and that retry loop then starves the whole firmware. Raising
+    ``BlockingIOError`` lets the transport buffer the data and wait until the
+    port is writable again.
+    """
+
+    def write(self, data: bytes | bytearray | memoryview) -> int:
+        if not self.is_open:
+            raise serial.PortNotOpenError
+        try:
+            return os.write(self.fd, data)
+        except BlockingIOError:
+            raise
+        except OSError as error:
+            msg = f"write failed: {error}"
+            raise serial.SerialException(msg) from error
+
+
+async def open_mcu_serial(
+    port: str,
+) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+    """Open the MCU serial port as a non-blocking asyncio stream pair."""
+    loop = asyncio.get_running_loop()
+    serial_instance = await loop.run_in_executor(
+        None, partial(_NonBlockingSerial, port, baudrate=115200)
+    )
+    reader = asyncio.StreamReader(loop=loop)
+    protocol = asyncio.StreamReaderProtocol(reader, loop=loop)
+    transport, _ = await connection_for_serial(loop, lambda: protocol, serial_instance)
+    # drain() then waits until the kernel accepted every byte, so callers'
+    # write timeouts fire instead of stale motor commands piling up.
+    transport.set_write_buffer_limits(high=0)
+    writer = asyncio.StreamWriter(transport, protocol, reader, loop)
+    return reader, writer
 
 
 class SerialManager:
@@ -99,9 +142,7 @@ class SerialManager:
                             action=None,
                         )
                     return False
-                self.reader, self.writer = await open_serial_connection(
-                    url=serial_port, baudrate=115200
-                )
+                self.reader, self.writer = await open_mcu_serial(serial_port)
                 self._connection_generation += 1
                 self._mcu_protocol_config = None
                 self._mcu_protocol_request_id = None
