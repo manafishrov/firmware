@@ -10,6 +10,7 @@ import serial
 from serial_asyncio_fast import connection_for_serial
 
 from .constants import (
+    MCU_FIRST_BOOT_FLASH_ATTEMPTS,
     MCU_FIRST_BOOT_RETRY_LIMIT,
     MCU_RUNTIME_CONFIG_STATE_APPLIED,
     MCU_RUNTIME_CONFIG_STATE_APPLYING,
@@ -79,6 +80,7 @@ class SerialManager:
         self.write_lock: asyncio.Lock = asyncio.Lock()
         self._first_boot_retries: int = 0
         self._first_boot_flashed: bool = False
+        self._first_boot_flash_attempts: int = 0
         self._connection_generation: int = 0
         self._mcu_protocol_config: tuple[str, int] | None = None
         self._mcu_protocol_request_id: int | None = None
@@ -128,6 +130,8 @@ class SerialManager:
                     self._first_boot_retries += 1
                     if (
                         not self._first_boot_flashed
+                        and self._first_boot_flash_attempts
+                        < MCU_FIRST_BOOT_FLASH_ATTEMPTS
                         and self._first_boot_retries >= MCU_FIRST_BOOT_RETRY_LIMIT
                     ):
                         await self._auto_flash_first_boot()
@@ -175,12 +179,17 @@ class SerialManager:
         if self.state.esc_firmware_recovery_required:
             log_warn("Skipping automatic MCU flash while ESC recovery is required.")
             return
-        self._first_boot_flashed = True
+        # A Pico entering BOOTSEL is visible before udev grants access to it,
+        # so a failed flash gets retried after another round of lookups.
+        self._first_boot_flash_attempts += 1
+        self._first_boot_retries = 0
         board = self.state.rov_config.mcu_board
         log_warn(
             f"MCU not found after {MCU_FIRST_BOOT_RETRY_LIMIT} attempts. Auto-flashing {board.value} firmware..."
         )
-        await flash_mcu_firmware(self.state, board, show_toasts=True)
+        self._first_boot_flashed = await flash_mcu_firmware(
+            self.state, board, show_toasts=True
+        )
 
     async def ensure_connection(self) -> bool:
         """Return whether the MCU serial connection is ready for use."""
