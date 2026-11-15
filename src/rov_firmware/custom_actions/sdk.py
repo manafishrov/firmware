@@ -8,6 +8,7 @@ import numpy as np
 from pydantic import JsonValue, TypeAdapter
 
 from ..log import log_info
+from ..photo import capture_photo
 from ..rov_state import RovState
 from ..toast import ToastContent, ToastVariant, toast_content
 from .csv_store import CsvStore
@@ -119,6 +120,17 @@ class Context:
             action=None,
         )
         await asyncio.sleep(0)
+
+    async def take_photo(self) -> None:
+        """Take a full-resolution 4056x3040 photo (JPEG + RAW .dng) with the video camera.
+
+        Returns once the frame is taken; the video freezes for the mode switch,
+        about 1.5 seconds. The app downloads the photo into its photo folder.
+        Raises PhotoError when the video is not open, a photo is already being
+        taken, or the camera fails.
+        """
+        self._require_active()
+        await capture_photo()
 
     async def log(self, message: str) -> None:
         """Send an custom action-labelled message to the app's firmware debug log."""

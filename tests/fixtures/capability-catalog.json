@@ -377,6 +377,17 @@
       "intervalMs": 250
     },
     {
+      "id": "rov.photo.capture",
+      "name": "Take photo",
+      "inputType": "none",
+      "customActionId": null,
+      "modes": [
+        "once"
+      ],
+      "mode": "once",
+      "intervalMs": 250
+    },
+    {
       "id": "dispenser.dispense",
       "name": "Dispense",
       "inputType": "none",
