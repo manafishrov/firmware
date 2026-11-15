@@ -186,3 +186,39 @@ def test_mcu_flash_refuses_firmware_for_a_different_board(
     )
     assert not rov_state.mcu_flashing
     assert not popen_calls
+
+
+def test_mcu_flash_reports_picotool_failure_with_non_utf8_output(
+    rov_state, monkeypatch, tmp_path
+):
+    firmware_path = tmp_path / "pico-v1.0.4.uf2"
+    picotool = tmp_path / "picotool"
+    picotool.write_text(
+        "#!/bin/sh\nprintf 'Tracking device serial number \\327 for reboot\\n'\nexit 249\n"
+    )
+    picotool.chmod(0o755)
+    monkeypatch.setattr(
+        mcu, "resolve_mcu_firmware", lambda _board: (firmware_path, "1.0.4")
+    )
+    monkeypatch.setattr(mcu, "detect_connected_mcu_boards", lambda: {McuBoard.PICO})
+    monkeypatch.setattr(mcu, "_resolve_picotool_path", lambda: str(picotool))
+    errors: list[tuple[str, bool]] = []
+    monkeypatch.setattr(
+        mcu,
+        "_report_flash_error",
+        lambda message, *, unexpected=False, **_kwargs: errors.append(
+            (message, unexpected)
+        ),
+    )
+
+    assert not asyncio.run(
+        mcu.flash_mcu_firmware(rov_state, McuBoard.PICO, show_toasts=False)
+    )
+    assert errors == [
+        (
+            "Firmware flash failed (rc=249):\n"
+            "Tracking device serial number � for reboot",
+            False,
+        )
+    ]
+    assert not rov_state.mcu_flashing

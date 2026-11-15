@@ -284,6 +284,8 @@ async def flash_mcu_firmware(  # noqa: PLR0911 - each flash phase has a fail-clo
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                # picotool echoes device strings, which are not always UTF-8.
+                errors="replace",
             )
             loop = asyncio.get_running_loop()
             rc, output, verification_succeeded = await loop.run_in_executor(
