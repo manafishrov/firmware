@@ -35,16 +35,20 @@ def _hex_record(record_type: int, address: int, data: bytes) -> str:
     return f":{record.hex().upper()}"
 
 
-def _status_packet(
+def _status_packet(  # noqa: PLR0913 - mirrors the status packet fields
     status: esc_firmware._Status,
     value: int = 0,
     *,
     transaction_id: int = 1,
     sequence: int = 0,
+    motor: int = 0,
+    error: int = 0,
 ) -> bytes:
     packet = bytearray(ESC_FIRMWARE_USB_STATUS_PACKET_SIZE)
     packet[0] = esc_firmware.ESC_FIRMWARE_USB_STATUS_START_BYTE
     packet[1] = status
+    packet[2] = motor
+    packet[3] = error
     struct.pack_into("<I", packet, 4, value)
     packet[8] = transaction_id
     struct.pack_into("<H", packet, 9, sequence)
@@ -411,16 +415,19 @@ def test_flash_status_reports_monotonic_per_esc_progress():
         (esc_firmware._Status.ENTERING_BOOTLOADER, 0xFF, 0, 0, 1, 0),
         ESC_FIRMWARE_IMAGE_SIZE,
         callback,
+        set(),
     )
     assert not esc_firmware._handle_flash_status(
         (esc_firmware._Status.MOTOR_BEGIN, 3, 0, ESC_FIRMWARE_IMAGE_SIZE // 2, 1, 0),
         ESC_FIRMWARE_IMAGE_SIZE,
         callback,
+        set(),
     )
     assert esc_firmware._handle_flash_status(
         (esc_firmware._Status.COMPLETE, 0xFF, 0, 0, 1, 0),
         ESC_FIRMWARE_IMAGE_SIZE,
         callback,
+        set(),
     )
 
     assert progress[0] == (10, None)
@@ -438,7 +445,79 @@ def test_flash_status_reports_friendly_one_based_failure():
             (esc_firmware._Status.FAILED, 3, esc_firmware._Error.VERIFY, 0, 1, 0),
             ESC_FIRMWARE_IMAGE_SIZE,
             None,
+            set(),
         )
+
+
+def _run_committed_update(statuses: bytes, progress=None) -> frozenset[int]:
+    image = b"x"
+
+    class NullWriter:
+        def write(self, _packet):
+            return None
+
+        async def drain(self):
+            return None
+
+    async def run_update() -> frozenset[int]:
+        reader = asyncio.StreamReader()
+        reader.feed_data(
+            _status_packet(esc_firmware._Status.READY, len(image))
+            + _status_packet(esc_firmware._Status.RECEIVED, len(image), sequence=1)
+            + statuses
+        )
+        reader.feed_eof()
+        return await esc_firmware._run_update(
+            reader,
+            cast(asyncio.StreamWriter, NullWriter()),
+            image,
+            progress,
+            transaction_id=1,
+        )
+
+    return asyncio.run(run_update())
+
+
+def test_flash_skips_absent_escs_and_scales_progress_to_present_escs():
+    progress: list[tuple[int, int | None]] = []
+    statuses = _status_packet(esc_firmware._Status.ENTERING_BOOTLOADER)
+    for motor in range(7):
+        statuses += _status_packet(
+            esc_firmware._Status.MOTOR_SKIPPED,
+            motor=motor,
+            error=esc_firmware._Error.BOOTLOADER_CONNECT,
+        )
+    statuses += (
+        _status_packet(esc_firmware._Status.MOTOR_BEGIN, 0, motor=7)
+        + _status_packet(esc_firmware._Status.MOTOR_DONE, 1, motor=7)
+        + _status_packet(esc_firmware._Status.COMPLETE, 1)
+    )
+
+    skipped = _run_committed_update(
+        statuses, lambda percent, motor: progress.append((percent, motor))
+    )
+
+    assert skipped == frozenset(range(7))
+    programming = [entry for entry in progress if entry[1] is not None]
+    assert programming == [(10, 7), (100, 7), (100, 7)]
+
+
+def test_no_responding_esc_bootloader_fails_without_recovery():
+    with pytest.raises(
+        esc_firmware.EscFirmwareUpdateError,
+        match=r"^No ESC bootloader responded, so there was no ESC to flash$",
+    ) as raised:
+        _run_committed_update(
+            _status_packet(
+                esc_firmware._Status.FAILED,
+                0,
+                motor=0xFF,
+                error=esc_firmware._Error.BOOTLOADER_CONNECT,
+            )
+        )
+
+    assert isinstance(raised.value, esc_firmware._PostCommitFailureError)
+    assert not raised.value.recovery_required
 
 
 def test_preflight_requires_live_dshot_acknowledgement(rov_state):
@@ -522,6 +601,7 @@ def test_concurrent_flash_request_is_rejected_and_success_updates_live_state(
     ):
         assert firmware == image
         on_commit_started()
+        return frozenset()
 
     async def run_test():
         fake_manager = FakeSerialManager()
@@ -752,4 +832,72 @@ def test_live_version_confirmation_has_a_bounded_timeout(rov_state):
     assert rov_state.esc_firmware_update.stage == "unconfirmed"
     assert rov_state.esc_firmware_update.error == (
         "Live firmware version was not reported by ESCs 8."
+    )
+
+
+def test_successful_update_with_skipped_escs_confirms_only_flashed_escs(
+    rov_state, monkeypatch
+):
+    toasts: list[esc_firmware.ToastContent] = []
+
+    def record_toast(*, identifier, content, action):
+        assert identifier == esc_firmware.ESC_FIRMWARE_FLASH_TOAST_ID
+        assert action is None
+        toasts.append(content)
+
+    monkeypatch.setattr(esc_firmware, "toast_loading", record_toast)
+    monkeypatch.setattr(esc_firmware, "toast_success", record_toast)
+    rov_state.esc_firmware_update.target_version = "2.20.0"
+
+    esc_firmware._finish_successful_update(
+        rov_state, "2.20.0", frozenset(range(7)), show_toasts=True
+    )
+    assert rov_state.esc_firmware_confirmation_escs == (7,)
+    rov_state.device_info.esc_firmware_versions = [None] * 7 + ["2.20.0"]
+    esc_firmware.check_esc_firmware_confirmation(rov_state, now=1.0)
+
+    assert rov_state.esc_firmware_update.stage == "succeeded"
+    assert not rov_state.esc_firmware_recovery_required
+    assert [toast.message_key for toast in toasts] == [
+        "toasts_esc_flash_confirming",
+        "toasts_esc_flash_success",
+    ]
+    for toast in toasts:
+        assert toast.description_key == "toasts_esc_flash_skipped_description"
+        assert toast.description_args == {"escs": "1, 2, 3, 4, 5, 6, 7"}
+
+
+def test_full_bank_success_toast_has_no_skipped_description(rov_state, monkeypatch):
+    toasts: list[esc_firmware.ToastContent] = []
+    monkeypatch.setattr(
+        esc_firmware,
+        "toast_success",
+        lambda **kwargs: toasts.append(kwargs["content"]),
+    )
+    rov_state.esc_firmware_update.stage = (
+        esc_firmware.EscFirmwareUpdateStage.AWAITING_TELEMETRY
+    )
+    rov_state.esc_firmware_update.target_version = "2.20.0"
+    rov_state.esc_firmware_confirmation_toasts = True
+    rov_state.device_info.esc_firmware_versions = ["2.20.0"] * 8
+
+    esc_firmware.check_esc_firmware_confirmation(rov_state, now=1.0)
+
+    assert [toast.description_key for toast in toasts] == [None]
+
+
+def test_live_version_confirmation_timeout_reports_only_flashed_escs(rov_state):
+    rov_state.esc_firmware_update.stage = (
+        esc_firmware.EscFirmwareUpdateStage.AWAITING_TELEMETRY
+    )
+    rov_state.esc_firmware_update.target_version = "2.20.0"
+    rov_state.esc_firmware_confirmation_deadline = 10.0
+    rov_state.esc_firmware_confirmation_escs = (6, 7)
+    rov_state.device_info.esc_firmware_versions = [None] * 7 + ["2.20.0"]
+
+    esc_firmware.check_esc_firmware_confirmation(rov_state, now=10.0)
+
+    assert rov_state.esc_firmware_update.stage == "unconfirmed"
+    assert rov_state.esc_firmware_update.error == (
+        "Live firmware version was not reported by ESCs 7."
     )

@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     from .pico_control import PicoControl
 
+from .constants import NUM_MOTORS
 from .esc_recovery import recovery_journal_exists
 from .models.config import RovConfig
 from .models.regulator import RegulatorData
@@ -37,6 +38,7 @@ class RovState:
         self.esc_firmware_recovery_required: bool = recovery_required
         self.esc_firmware_confirmation_deadline: float | None = None
         self.esc_firmware_confirmation_toasts: bool = False
+        self.esc_firmware_confirmation_escs: tuple[int, ...] = tuple(range(NUM_MOTORS))
         self.config_ack_waiters: dict[str, asyncio.Future[None]] = {}
         self.connection_change_task: asyncio.Task[None] | None = None
         self.config_confirmation_tasks: set[asyncio.Task[None]] = set()

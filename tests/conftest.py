@@ -40,6 +40,7 @@ def rov_state(monkeypatch, tmp_path):
     state.esc_firmware_recovery_required = False
     state.esc_firmware_confirmation_deadline = None
     state.esc_firmware_confirmation_toasts = False
+    state.esc_firmware_confirmation_escs = tuple(range(8))
     state.config_ack_waiters = {}
     state.connection_change_task = None
     state.config_confirmation_tasks = set()

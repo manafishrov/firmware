@@ -78,6 +78,7 @@ def test_started_esc_update_always_releases_its_maintenance(
             raise esc_firmware.EscFirmwareUpdateError(msg)
         if outcome == "cancel":
             raise asyncio.CancelledError
+        return frozenset()
 
     monkeypatch.setattr(esc_firmware, "_run_update", upload)
 

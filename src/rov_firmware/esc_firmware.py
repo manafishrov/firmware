@@ -1,7 +1,7 @@
 """Manual ESC firmware updates through the thruster MCU."""
 
 import asyncio
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 import contextlib
 from enum import IntEnum
 from pathlib import Path
@@ -74,6 +74,7 @@ class _Status(IntEnum):
     FAILED = 7
     ABORTED = 8
     RECOVERY_REQUIRED = 9
+    MOTOR_SKIPPED = 10
 
 
 class _Error(IntEnum):
@@ -214,16 +215,9 @@ def _notify_esc_flash_error(show_toasts: bool, error: str) -> None:
         _toast_esc_flash_error(error)
 
 
-def _notify_esc_flash_success(show_toasts: bool) -> None:
-    if show_toasts:
-        toast_success(
-            identifier=ESC_FIRMWARE_FLASH_TOAST_ID,
-            content=ToastContent(message_key="toasts_esc_flash_success"),
-            action=None,
-        )
-
-
 def _format_updater_failure(motor: int, error: int) -> str:
+    if motor == _ALL_ESCS and error == _Error.BOOTLOADER_CONNECT:
+        return "No ESC bootloader responded, so there was no ESC to flash"
     scope = "ESC firmware updater" if motor == _ALL_ESCS else f"ESC {motor + 1}"
     try:
         updater_error = _Error(error)
@@ -741,13 +735,15 @@ async def _flash_all_escs(
     progress: Callable[[int, int | None], None] | None = None,
     *,
     transaction_id: int,
-) -> None:
+) -> frozenset[int]:
+    """Program the bank and return the zero-based slots the Pico skipped."""
+    skipped: set[int] = set()
     while True:
         status_packet = await _read_status(reader, read_buffer)
         if status_packet[4] != transaction_id:
             continue
-        if _handle_flash_status(status_packet, image_size, progress):
-            return
+        if _handle_flash_status(status_packet, image_size, progress, skipped):
+            return frozenset(skipped)
 
 
 def _log_flash_status(status_packet: tuple[_Status, int, int, int, int, int]) -> None:
@@ -765,10 +761,29 @@ def _log_flash_status(status_packet: tuple[_Status, int, int, int, int, int]) ->
         )
 
 
+def _flash_progress(
+    status: _Status, motor: int, written: int, image_size: int, skipped: set[int]
+) -> tuple[int, int | None] | None:
+    if status == _Status.ENTERING_BOOTLOADER:
+        return 10, None
+    # The Pico reports every skipped slot before its first write, so progress
+    # covers only the ESCs that are actually being programmed.
+    present = [index for index in range(NUM_MOTORS) if index not in skipped]
+    if status == _Status.COMPLETE:
+        return 100, max(present, default=NUM_MOTORS - 1)
+    if status == _Status.MOTOR_DONE:
+        written = image_size
+    elif status != _Status.MOTOR_BEGIN:
+        return None
+    completed = sum(index < motor for index in present) * image_size + written
+    return 10 + completed * 90 // (max(1, len(present)) * image_size), motor
+
+
 def _handle_flash_status(
     status_packet: tuple[_Status, int, int, int, int, int],
     image_size: int,
     progress: Callable[[int, int | None], None] | None,
+    skipped: set[int],
 ) -> bool:
     status, motor, error, value, _, _ = status_packet
     _log_flash_status(status_packet)
@@ -777,24 +792,17 @@ def _handle_flash_status(
             _format_updater_failure(motor, error),
             recovery_required=value != 0,
         )
-    if status == _Status.ENTERING_BOOTLOADER and progress is not None:
-        progress(10, None)
-    elif status == _Status.MOTOR_BEGIN:
-        if value == 0:
-            log_info(f"Flashing ESC firmware on ESC {motor + 1}/8...")
-        if progress is not None:
-            completed = motor * image_size + value
-            progress(10 + completed * 90 // (NUM_MOTORS * image_size), motor)
+    if status == _Status.MOTOR_SKIPPED:
+        skipped.add(motor)
+        log_warn(f"Skipping ESC {motor + 1}/8 because its bootloader did not respond.")
+    elif status == _Status.MOTOR_BEGIN and value == 0:
+        log_info(f"Flashing ESC firmware on ESC {motor + 1}/8...")
     elif status == _Status.MOTOR_DONE:
         log_info(f"Verified ESC firmware on ESC {motor + 1}/8.")
-        if progress is not None:
-            completed = (motor + 1) * image_size
-            progress(10 + completed * 90 // (NUM_MOTORS * image_size), motor)
-    elif status == _Status.COMPLETE:
-        if progress is not None:
-            progress(100, NUM_MOTORS - 1)
-        return True
-    return False
+    update = _flash_progress(status, motor, value, image_size, skipped)
+    if progress is not None and update is not None:
+        progress(*update)
+    return status == _Status.COMPLETE
 
 
 async def _run_update(  # noqa: PLR0913 - transaction hooks remain explicit for safety
@@ -806,7 +814,7 @@ async def _run_update(  # noqa: PLR0913 - transaction hooks remain explicit for 
     on_commit_started: Callable[[], None] | None = None,
     recovery: bool = False,
     transaction_id: int | None = None,
-) -> None:
+) -> frozenset[int]:
     read_buffer = bytearray()
     transaction_id = transaction_id or (time.monotonic_ns() & 0xFF) or 1
     try:
@@ -832,7 +840,7 @@ async def _run_update(  # noqa: PLR0913 - transaction hooks remain explicit for 
         except OSError as error:
             raise _precommit_error(error) from error
     await _write_packet(writer, _control_packet(_Command.COMMIT, transaction_id))
-    await _flash_all_escs(
+    return await _flash_all_escs(
         reader,
         read_buffer,
         len(image),
@@ -906,7 +914,8 @@ async def _perform_update(
     release: tuple[Path, str, bytes],
     *,
     show_toasts: bool,
-) -> None:
+) -> frozenset[int]:
+    """Flash the bank and return the zero-based slots the Pico skipped."""
     path, version, image = release
     recovery = state.esc_firmware_recovery_required
     if state.pico is not None:
@@ -923,13 +932,13 @@ async def _perform_update(
     async with serial_manager.write_lock, serial_manager.io_lock:
         reader = serial_manager.get_reader()
         writer = serial_manager.get_writer()
-        log_info(f"Flashing all ESCs with ESC firmware {version} from {path}")
+        log_info(f"Flashing present ESCs with ESC firmware {version} from {path}")
 
         def mark_commit_started() -> None:
             set_esc_firmware_recovery_required(state, version)
 
         if recovery:
-            await _run_update(
+            skipped = await _run_update(
                 reader,
                 writer,
                 image,
@@ -938,7 +947,7 @@ async def _perform_update(
                 recovery=True,
             )
         else:
-            await _run_update(
+            skipped = await _run_update(
                 reader,
                 writer,
                 image,
@@ -950,12 +959,42 @@ async def _perform_update(
         # after the updater has released exclusive ownership of the reader.
         serial_manager.invalidate_mcu_protocol_config()
         clear_esc_firmware_recovery_required(state)
+    return skipped
+
+
+def _format_escs(escs: Iterable[int]) -> str:
+    return ", ".join(str(index + 1) for index in sorted(escs))
+
+
+def _esc_flash_outcome_content(state: RovState, message_key: str) -> ToastContent:
+    flashed = state.esc_firmware_confirmation_escs
+    skipped = [index for index in range(NUM_MOTORS) if index not in flashed]
+    if not skipped:
+        return ToastContent(message_key=message_key)
+    return ToastContent(
+        message_key=message_key,
+        description_key="toasts_esc_flash_skipped_description",
+        description_args={"escs": _format_escs(skipped)},
+    )
 
 
 def _finish_successful_update(
-    state: RovState, version: str, *, show_toasts: bool
+    state: RovState,
+    version: str,
+    skipped: frozenset[int],
+    *,
+    show_toasts: bool,
 ) -> None:
-    log_info(f"ESC firmware {version} flashed and verified on all eight ESCs.")
+    flashed = tuple(index for index in range(NUM_MOTORS) if index not in skipped)
+    if skipped:
+        log_warn(
+            f"ESC firmware {version} flashed and verified on ESCs "
+            f"{_format_escs(flashed)}; skipped ESCs {_format_escs(skipped)} "
+            "because their bootloader did not respond."
+        )
+    else:
+        log_info(f"ESC firmware {version} flashed and verified on all eight ESCs.")
+    state.esc_firmware_confirmation_escs = flashed
     # Programming verification proves the bytes written correctly, but
     # installed identity remains live telemetry. Clear stale reports and let
     # the restarted ESCs repopulate them over DShot.
@@ -973,7 +1012,7 @@ def _finish_successful_update(
     if show_toasts:
         toast_loading(
             identifier=ESC_FIRMWARE_FLASH_TOAST_ID,
-            content=ToastContent(message_key="toasts_esc_flash_confirming"),
+            content=_esc_flash_outcome_content(state, "toasts_esc_flash_confirming"),
             action=None,
         )
 
@@ -987,21 +1026,27 @@ def check_esc_firmware_confirmation(
         return
 
     versions = state.device_info.esc_firmware_versions
+    flashed = state.esc_firmware_confirmation_escs
     target = update.target_version
-    complete = all(version is not None for version in versions)
+    complete = all(versions[index] is not None for index in flashed)
     show_toasts = state.esc_firmware_confirmation_toasts
     if complete and target is not None:
-        mismatched = [
-            index + 1 for index, version in enumerate(versions) if version != target
-        ]
+        mismatched = [index for index in flashed if versions[index] != target]
         state.esc_firmware_confirmation_deadline = None
         state.esc_firmware_confirmation_toasts = False
         if not mismatched:
             update.stage = EscFirmwareUpdateStage.SUCCEEDED
-            _notify_esc_flash_success(show_toasts)
+            if show_toasts:
+                toast_success(
+                    identifier=ESC_FIRMWARE_FLASH_TOAST_ID,
+                    content=_esc_flash_outcome_content(
+                        state, "toasts_esc_flash_success"
+                    ),
+                    action=None,
+                )
             return
 
-        joined = ", ".join(str(index) for index in mismatched)
+        joined = _format_escs(mismatched)
         update.stage = EscFirmwareUpdateStage.VERSION_MISMATCH
         update.error = f"Live firmware version did not match on ESCs {joined}."
         if show_toasts:
@@ -1021,10 +1066,7 @@ def check_esc_firmware_confirmation(
     if deadline is None or current_time < deadline:
         return
 
-    missing = [
-        str(index + 1) for index, version in enumerate(versions) if version is None
-    ]
-    joined = ", ".join(missing)
+    joined = _format_escs(index for index in flashed if versions[index] is None)
     update.stage = EscFirmwareUpdateStage.UNCONFIRMED
     update.error = f"Live firmware version was not reported by ESCs {joined}."
     state.esc_firmware_confirmation_deadline = None
@@ -1062,7 +1104,7 @@ async def flash_esc_firmware(
     *,
     show_toasts: bool = True,
 ) -> bool:
-    """Validate and flash the bundled ESC firmware image to all eight ESCs."""
+    """Validate and flash the bundled ESC firmware image to every present ESC."""
     if state.mcu_flash_lock.locked():
         update = state.esc_firmware_update
         if update.active:
@@ -1084,13 +1126,13 @@ async def flash_esc_firmware(
             release = await _preflight_update(state, serial_manager)
             _, version, _ = release
             update.target_version = version
-            await _perform_update(
+            skipped = await _perform_update(
                 state,
                 serial_manager,
                 release,
                 show_toasts=show_toasts,
             )
-            _finish_successful_update(state, version, show_toasts=show_toasts)
+            _finish_successful_update(state, version, skipped, show_toasts=show_toasts)
             return True
         except asyncio.CancelledError:
             update.active = False
