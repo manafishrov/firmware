@@ -261,7 +261,8 @@ in {
         origin = "*";
       };
       webrtc.listen = ":8555";
-      rtsp.listen = "";
+      # The app's object detection reads the camera from rtsp://<rov>:8554/cam.
+      rtsp.listen = ":8554";
       rtmp.listen = "";
     };
   };
