@@ -97,7 +97,7 @@ class NoFlashMcu(McuSensor):
     """Real parser/state projection; disable ONLY the automatic release installer."""
 
     def _auto_update_mcu_if_needed(
-        self, current_version: str, expected_version: str | None
+        self, current_version: str | None, expected_version: str | None
     ) -> None:
         del current_version, expected_version
         # No override of packet validation, ACKs, telemetry or control behavior.

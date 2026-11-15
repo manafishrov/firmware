@@ -79,6 +79,8 @@ _RELEASE_VERSION_PACKET_START_TOKEN = bytes((MCU_RELEASE_VERSION_START_BYTE,))
 _ESC_FIRMWARE_STATUS_START_TOKEN = bytes((ESC_FIRMWARE_USB_STATUS_START_BYTE,))
 _TELEMETRY_FIELDS = ("erpm", "voltage", "temperature", "current", "signal_quality")
 _INVALID_PACKET_LOG_INTERVAL_S = 5.0
+# Pico firmware older than v1.0.3 never answers GET_INFO with a release version.
+_VERSION_REPORT_TIMEOUT_S = 3.0
 _ESC_VERSION_TYPES = (
     MCU_TELEMETRY_TYPE_ESC_VERSION_LENGTH,
     MCU_TELEMETRY_TYPE_ESC_VERSION_CHUNK,
@@ -147,7 +149,9 @@ class McuSensor:
         self._invalid_release_warning_generation = -1
         self._warned_invalid_release_versions: set[str] = set()
         self._extended_since: float | None = None
-        self._deferred_release: tuple[str, str | None] | None = None
+        self._deferred_release: tuple[str | None, str | None] | None = None
+        self._version_generation = -1
+        self._version_deadline: float | None = None
 
     async def read_loop(self) -> None:
         """Read telemetry data from the MCU in a loop."""
@@ -166,6 +170,7 @@ class McuSensor:
                 await asyncio.sleep(1)
                 continue
             self._consume_read_buffer(read_buffer, data)
+            self._handle_unreported_version()
 
     async def _read_chunk(self) -> bytes | None:
         if not await self.serial_manager.ensure_connection():
@@ -631,6 +636,26 @@ class McuSensor:
         if packet[2] == MCU_RUNTIME_CONFIG_STATE_APPLIED and protocol_changed:
             self._reset_telemetry()
 
+    def _handle_unreported_version(self) -> None:
+        """Treat a connected Pico that never reports its version as outdated."""
+        generation = self.serial_manager.connection_generation
+        if generation != self._version_generation:
+            self._version_generation = generation
+            self._version_deadline = time.monotonic() + _VERSION_REPORT_TIMEOUT_S
+        if (
+            self._version_deadline is None
+            or self.state.device_info.mcu_firmware_version
+            or time.monotonic() < self._version_deadline
+        ):
+            return
+        pico = self.state.pico
+        if pico is not None and not pico.capability_checked:
+            return
+        self._version_deadline = None
+        self.state.device_info.mcu_firmware_version_status = "notReported"
+        log_warn("MCU did not report its firmware version")
+        self._auto_update_mcu_if_needed(None, self._get_expected_version())
+
     def _auto_update_window_open(self) -> bool:
         return time.monotonic() - self._startup_time <= MCU_AUTO_UPDATE_WINDOW_S
 
@@ -641,7 +666,7 @@ class McuSensor:
         return resolved[1]
 
     def _auto_update_mcu_if_needed(  # noqa: PLR0911 - explicit capability and flash safety gates
-        self, current_version: str, expected_version: str | None
+        self, current_version: str | None, expected_version: str | None
     ) -> None:
         pico = self.state.pico
         if pico is not None:
@@ -656,7 +681,9 @@ class McuSensor:
         if expected_version is None:
             return
 
-        if not mcu_update_required(current_version, expected_version):
+        if current_version is not None and not mcu_update_required(
+            current_version, expected_version
+        ):
             return
 
         if self.state.mcu_flashing or self.state.esc_firmware_recovery_required:
@@ -668,6 +695,7 @@ class McuSensor:
         if self._mcu_auto_flash_attempted:
             return
 
+        current_version = current_version or "not reported"
         if not self._auto_update_window_open():
             log_warn(
                 f"MCU firmware mismatch ({current_version} != {expected_version}) detected, "

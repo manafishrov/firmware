@@ -1,8 +1,10 @@
 import asyncio
+from types import SimpleNamespace
 
 from rov_firmware.constants import (
     ESC_FIRMWARE_UPDATE_STATUS_RECOVERY_REQUIRED,
     ESC_FIRMWARE_USB_STATUS_START_BYTE,
+    MCU_AUTO_UPDATE_WINDOW_S,
     MCU_PROTOCOL_DSHOT,
     MCU_RELEASE_VERSION_MAX_LENGTH,
     MCU_RELEASE_VERSION_START_BYTE,
@@ -307,6 +309,67 @@ def test_version_mismatch_auto_flashes_only_once_per_service_start(
 
     assert loop.created == 1
     assert sensor._mcu_auto_flash_attempted is True
+
+
+def _silent_pico_sensor(rov_state, monkeypatch, loop, *, capability_checked=True):
+    sensor = McuSensor(rov_state, SerialManager(rov_state))
+    rov_state.pico = SimpleNamespace(
+        capability_checked=capability_checked, suppress_bundled_reconciliation=False
+    )
+    monkeypatch.setattr(mcu_module.asyncio, "get_running_loop", lambda: loop)
+    monkeypatch.setattr(mcu_module, "_VERSION_REPORT_TIMEOUT_S", 0.0)
+    monkeypatch.setattr(sensor, "_get_expected_version", lambda: "1.2.0")
+    return sensor
+
+
+def test_pico_without_version_report_auto_flashes_once(rov_state, monkeypatch):
+    loop = _RecordingLoop()
+    sensor = _silent_pico_sensor(rov_state, monkeypatch, loop)
+
+    sensor._handle_unreported_version()
+    sensor._handle_unreported_version()
+    sensor.serial_manager._connection_generation += 1
+    sensor._handle_unreported_version()
+
+    assert rov_state.device_info.mcu_firmware_version_status == "notReported"
+    assert loop.created == 1
+
+
+def test_pico_without_version_report_waits_for_capability_check(rov_state, monkeypatch):
+    loop = _RecordingLoop()
+    sensor = _silent_pico_sensor(rov_state, monkeypatch, loop, capability_checked=False)
+
+    sensor._handle_unreported_version()
+    assert loop.created == 0
+    assert rov_state.device_info.mcu_firmware_version_status == "querying"
+
+    rov_state.pico.capability_checked = True
+    sensor._handle_unreported_version()
+    assert loop.created == 1
+
+
+def test_pico_without_version_report_respects_auto_update_window(
+    rov_state, monkeypatch
+):
+    loop = _RecordingLoop()
+    sensor = _silent_pico_sensor(rov_state, monkeypatch, loop)
+    sensor._startup_time -= MCU_AUTO_UPDATE_WINDOW_S + 1
+
+    sensor._handle_unreported_version()
+
+    assert rov_state.device_info.mcu_firmware_version_status == "notReported"
+    assert loop.created == 0
+
+
+def test_pico_reporting_matching_version_is_not_flashed(rov_state, monkeypatch):
+    loop = _RecordingLoop()
+    sensor = _silent_pico_sensor(rov_state, monkeypatch, loop)
+
+    sensor._handle_release_version_packet(_release_version_packet("1.2.0"))
+    sensor._handle_unreported_version()
+
+    assert rov_state.device_info.mcu_firmware_version_status == "reported"
+    assert loop.created == 0
 
 
 def test_signal_quality_updates_do_not_keep_stale_current_alive(rov_state, monkeypatch):
