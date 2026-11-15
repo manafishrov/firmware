@@ -1,4 +1,4 @@
-"""A Pico waiting in BOOTSEL is flashed even if the first attempt fails."""
+"""A Pico waiting in BOOTSEL is flashed; an unplugged one is not."""
 
 import asyncio
 
@@ -10,13 +10,16 @@ from rov_firmware.serial import SerialManager
 from rov_firmware.websocket.receive import mcu
 
 
-def _missing_mcu(rov_state, monkeypatch, results: list[bool]) -> list[int]:
+def _missing_mcu(
+    rov_state, monkeypatch, results: list[bool], *, bootsel: bool = True
+) -> list[int]:
     manager = SerialManager(rov_state)
 
     async def no_port(*, log_missing: bool = True) -> None:
         del log_missing
 
     monkeypatch.setattr(manager, "_find_mcu_port", no_port)
+    monkeypatch.setattr(mcu, "bootsel_mcu_attached", lambda: bootsel)
     flashes: list[int] = []
 
     async def flash(_state, _board, *, show_toasts: bool) -> bool:
@@ -47,3 +50,7 @@ def test_first_boot_flash_attempts_are_capped(rov_state, monkeypatch):
     flashes = _missing_mcu(rov_state, monkeypatch, [False] * 10)
 
     assert len(flashes) == MCU_FIRST_BOOT_FLASH_ATTEMPTS
+
+
+def test_unplugged_pico_is_not_flashed(rov_state, monkeypatch):
+    assert _missing_mcu(rov_state, monkeypatch, [], bootsel=False) == []

@@ -36,23 +36,39 @@ _USB_PRODUCT_BOARDS: dict[str, McuBoard] = {
 }
 
 
-def detect_connected_mcu_boards(
-    devices_path: Path = _USB_DEVICES_PATH,
-) -> set[McuBoard]:
-    """Identify attached Pico boards from their USB vendor/product IDs."""
-    boards: set[McuBoard] = set()
+_BOOTSEL_PRODUCT_IDS = frozenset({"0003", "000f"})
+
+
+def _raspberry_pi_product_ids(devices_path: Path) -> list[str]:
+    product_ids: list[str] = []
     for device in devices_path.glob("*"):
         try:
             vendor_id = (device / "idVendor").read_text().strip().lower()
             product_id = (device / "idProduct").read_text().strip().lower()
         except OSError:
             continue
-        if vendor_id != _RASPBERRY_PI_USB_VENDOR_ID:
-            continue
-        board = _USB_PRODUCT_BOARDS.get(product_id)
-        if board is not None:
-            boards.add(board)
-    return boards
+        if vendor_id == _RASPBERRY_PI_USB_VENDOR_ID:
+            product_ids.append(product_id)
+    return product_ids
+
+
+def detect_connected_mcu_boards(
+    devices_path: Path = _USB_DEVICES_PATH,
+) -> set[McuBoard]:
+    """Identify attached Pico boards from their USB vendor/product IDs."""
+    return {
+        _USB_PRODUCT_BOARDS[product_id]
+        for product_id in _raspberry_pi_product_ids(devices_path)
+        if product_id in _USB_PRODUCT_BOARDS
+    }
+
+
+def bootsel_mcu_attached(devices_path: Path = _USB_DEVICES_PATH) -> bool:
+    """Return whether a Pico is waiting in BOOTSEL mode for firmware."""
+    return any(
+        product_id in _BOOTSEL_PRODUCT_IDS
+        for product_id in _raspberry_pi_product_ids(devices_path)
+    )
 
 
 def mcu_board_mismatch(board: McuBoard) -> McuBoard | None:

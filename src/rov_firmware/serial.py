@@ -174,10 +174,16 @@ class SerialManager:
                 return False
 
     async def _auto_flash_first_boot(self) -> None:
-        from .websocket.receive.mcu import flash_mcu_firmware  # noqa: PLC0415
+        from .websocket.receive.mcu import (  # noqa: PLC0415
+            bootsel_mcu_attached,
+            flash_mcu_firmware,
+        )
 
         if self.state.esc_firmware_recovery_required:
             log_warn("Skipping automatic MCU flash while ESC recovery is required.")
+            return
+        # An unplugged Pico is missing too; only a board in BOOTSEL needs firmware.
+        if not bootsel_mcu_attached():
             return
         # A Pico entering BOOTSEL is visible before udev grants access to it,
         # so a failed flash gets retried after another round of lookups.

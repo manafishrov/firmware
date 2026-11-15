@@ -222,3 +222,12 @@ def test_mcu_flash_reports_picotool_failure_with_non_utf8_output(
         )
     ]
     assert not rov_state.mcu_flashing
+
+
+def test_bootsel_detection_ignores_a_running_pico(tmp_path):
+    _add_usb_device(tmp_path, "usb1", "1d6b", "0002")
+    _add_usb_device(tmp_path, "1-1.3", "2e8a", "000a")
+    assert not mcu.bootsel_mcu_attached(tmp_path)
+
+    _add_usb_device(tmp_path, "1-1.4", "2E8A", "0003")
+    assert mcu.bootsel_mcu_attached(tmp_path)
