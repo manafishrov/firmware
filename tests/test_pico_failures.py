@@ -321,7 +321,7 @@ def test_clock_rollback_ends_calibration_with_neutral_and_error(endpoint, monkey
 
 @pytest.mark.parametrize(
     ("protocol", "command"),
-    [(ThrusterProtocol.DSHOT, 1100), (ThrusterProtocol.PWM, 1170)],
+    [(ThrusterProtocol.DSHOT, 1005), (ThrusterProtocol.PWM, 1075)],
 )
 def test_thruster_test_step_clears_pwm_dead_band(
     endpoint, monkeypatch, protocol, command

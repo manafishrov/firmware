@@ -26,6 +26,7 @@ from .constants import (
     THRUSTER_REVERSE_PULSE_RANGE,
     THRUSTER_SEND_FREQUENCY,
     THRUSTER_TEST_DURATION_SECONDS,
+    THRUSTER_TEST_THRUST,
     THRUSTER_TEST_TOAST_ID,
     THRUSTER_TIMEOUT_MS,
 )
@@ -493,7 +494,7 @@ class Thrusters:
         if start_time is None:
             thrust_vector = self._test_thrust_vector
             thrust_vector.fill(0.0)
-            thrust_vector[test_thruster] = 0.1
+            thrust_vector[test_thruster] = THRUSTER_TEST_THRUST
             return thrust_vector
 
         elapsed = current_time - start_time
@@ -512,7 +513,7 @@ class Thrusters:
         else:
             thrust_vector = self._test_thrust_vector
             thrust_vector.fill(0.0)
-            thrust_vector[test_thruster] = 0.1
+            thrust_vector[test_thruster] = THRUSTER_TEST_THRUST
             remaining = math.ceil(THRUSTER_TEST_DURATION_SECONDS - elapsed)
             if remaining != self.state.thrusters.last_remaining:
                 self.state.thrusters.last_remaining = remaining

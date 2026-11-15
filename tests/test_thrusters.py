@@ -484,7 +484,7 @@ def test_thruster_test_countdown_starts_after_first_command_write(
     vector = thrusters._handle_thruster_test(100.0, 3)
 
     assert vector is not None
-    assert vector[3] == pytest.approx(0.1)
+    assert vector[3] == pytest.approx(0.005)
     assert thrusters.state.thrusters.test_start_time is None
     assert toasts == []
 

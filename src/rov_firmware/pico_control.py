@@ -39,11 +39,12 @@ CONTROL_INTERVAL = 1 / 60
 HOST_TIMEOUT = 0.2
 TELEMETRY_TIMEOUT = 0.2
 PRESSURE_TIMEOUT = 0.5
-# RAW_MOTORS uses 1000 as neutral and 0.5 us per step in PWM. The PWM step
-# also clears the AM32 product dead band (+/-35 us, 70 steps) so both
-# protocols run a thruster test at roughly the same throttle.
-DSHOT_TEST_COMMAND = 1100
-PWM_TEST_COMMAND = 1170
+# RAW_MOTORS uses 1000 as neutral and 0.5 us per step in PWM. A thruster test
+# only identifies the motor and its direction, so it runs at the lowest command
+# that still starts it (~0.5%). The PWM step also clears the AM32 product dead
+# band (+/-35 us, 70 steps) so both protocols test at roughly the same throttle.
+DSHOT_TEST_COMMAND = 1005
+PWM_TEST_COMMAND = 1075
 ATTITUDE_STALL_TIMEOUT = 2.0
 ATTITUDE_STALL_MAX_TIMEOUT = 60.0
 MAX_SEQUENCE = 0xFFFFFFFE
