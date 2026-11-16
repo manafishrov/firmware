@@ -911,6 +911,9 @@ class McuSensor:
         if versions[global_id] != version:
             versions[global_id] = version
             self.state.device_info.esc_firmware_versions = versions
+        # Discovery runs once at Pico start; an ESC flashed afterwards reports
+        # its version only now.
+        self.state.device_info.esc_firmware_version_status = "reported"
         self._reset_esc_version_assembly(global_id)
         check_esc_firmware_confirmation(self.state)
 

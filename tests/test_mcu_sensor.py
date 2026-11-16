@@ -441,6 +441,7 @@ def test_esc_firmware_version_is_assembled_from_live_telemetry(rov_state):
     reported_versions: list[str | None] = [version.decode()] * 8
     rov_state.device_info.esc_firmware_versions = reported_versions
     rov_state.device_info.esc_firmware_versions[3] = None
+    rov_state.device_info.esc_firmware_version_status = "notReported"
 
     def report_version(motor: int, checksum: int) -> None:
         sensor._update_telemetry_item(
@@ -464,3 +465,4 @@ def test_esc_firmware_version_is_assembled_from_live_telemetry(rov_state):
 
     assert rov_state.device_info.esc_firmware_versions[3] == "2.20.1-rc.3"
     assert rov_state.device_info.esc_firmware_versions[4] is None
+    assert rov_state.device_info.esc_firmware_version_status == "reported"
