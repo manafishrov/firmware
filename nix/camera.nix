@@ -47,13 +47,14 @@
       withWaylandPreview = false;
       withOpenCVPostProc = false;
     }).overrideAttrs (_: {
-      # nixos-raspberrypi's v1.13.0 hash no longer matches upstream's v1.13.0
-      # tag, so pin the published v1.13.0 release by commit.
+      # Upstream moved the v1.13.0 tag in October to code that needs a newer
+      # libcamera. Pin the original v1.13.0 commit that nixos-raspberrypi's
+      # hash was taken from, so a fresh download still matches it.
       src = pkgs.fetchFromGitHub {
         owner = "raspberrypi";
         repo = "rpicam-apps";
-        rev = "1cab82025230d77b1a715d30631b101923cc7a4d";
-        hash = "sha256-v0wNbQ63H5UExzxGDxgyC0CFlwJau4M8qz0sawsR7YM=";
+        rev = "6fcb0a3810715d05f01e06acb5f8e18e7d3a29cd";
+        hash = "sha256-JX/hPyDQ7SwhmDxb3PlzzaKaa2z4MBfwlxbIL5UrHwE=";
       };
     });
 
