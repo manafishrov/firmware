@@ -39,14 +39,23 @@
     meta.mainProgram = "manafish-camerad";
   };
   headlessRpicamApps = package:
-    package.override {
+    (package.override {
       withLibavEncoder = false;
       withDrmPreview = false;
       withQtPreview = false;
       withEglPreview = false;
       withWaylandPreview = false;
       withOpenCVPostProc = false;
-    };
+    }).overrideAttrs (_: {
+      # nixos-raspberrypi's v1.13.0 hash no longer matches upstream's v1.13.0
+      # tag, so pin the published v1.13.0 release by commit.
+      src = pkgs.fetchFromGitHub {
+        owner = "raspberrypi";
+        repo = "rpicam-apps";
+        rev = "1cab82025230d77b1a715d30631b101923cc7a4d";
+        hash = "sha256-v0wNbQ63H5UExzxGDxgyC0CFlwJau4M8qz0sawsR7YM=";
+      };
+    });
 
   # The camera settings live in the ROV config, which the firmware persists as
   # user `pi` with mode 0600. go2rtc therefore runs as `pi` (see below) so this
