@@ -40,15 +40,15 @@
       flake = false;
     };
     mcu-firmware-pico = {
-      url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.4-rc.4/pico-v1.0.4-rc.4.uf2";
+      url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.4/pico-v1.0.4.uf2";
       flake = false;
     };
     mcu-firmware-pico2 = {
-      url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.4-rc.4/pico2-v1.0.4-rc.4.uf2";
+      url = "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.4/pico2-v1.0.4.uf2";
       flake = false;
     };
     esc-firmware = {
-      url = "https://github.com/manafishrov/esc-firmware/releases/download/v2.21.1-rc.1/AM32_SKYSTARS_AM60_V2_F421_2.21.1.bin";
+      url = "https://github.com/manafishrov/esc-firmware/releases/download/v2.21.1/AM32_SKYSTARS_AM60_V2_F421_2.21.1.bin";
       flake = false;
     };
   };
