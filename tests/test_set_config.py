@@ -125,6 +125,46 @@ def test_set_config_preserves_unspecified_camera_fields(rov_state, monkeypatch):
     assert rov_state.rov_config.camera.bitrate == 8_000_000
 
 
+def test_set_config_stores_overlay_verbatim_without_applying_hardware(
+    rov_state, monkeypatch
+):
+    apply_calls: list[None] = []
+    monkeypatch.setattr(
+        config_handlers, "_apply_camera", lambda: apply_calls.append(None)
+    )
+    overlay = {
+        "activeLayoutId": "default",
+        "layouts": [
+            {
+                "id": "default",
+                "name": "Dive",
+                "columns": 64,
+                "rows": 48,
+                "widgets": [
+                    {
+                        "id": "battery",
+                        "type": "batteryLevel",
+                        "column": 55,
+                        "row": 47,
+                        "columnSpan": 10,
+                        "rowSpan": 2,
+                        "anchor": "right",
+                        "options": {},
+                    }
+                ],
+            }
+        ],
+    }
+
+    payload = PartialRovConfig.model_validate({"overlay": overlay})
+    asyncio.run(handle_set_config(rov_state, payload))
+
+    assert rov_state.rov_config.overlay == overlay
+    assert RovConfig.load().overlay == overlay
+    assert apply_calls == []
+    rov_state.pico.apply_config.assert_not_awaited()
+
+
 def test_apply_command_has_a_timeout(monkeypatch):
     calls: list[dict] = []
     warnings: list[str] = []

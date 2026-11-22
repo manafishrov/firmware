@@ -88,6 +88,7 @@ MOCK_CONFIG: dict[str, Any] = {
     },
     "ipAddress": "10.10.10.10",
     "websocketPort": 9000,
+    "overlay": None,
 }
 
 SYSTEM_STATUS: dict[str, Any] = {

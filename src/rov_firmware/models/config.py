@@ -455,6 +455,9 @@ class RovConfig(CamelCaseModel):
     camera: Camera = Camera()
     ip_address: str = "10.10.10.10"
     websocket_port: int = 9000
+    # The app's camera overlay layout for this ROV. The app owns its schema and
+    # defaults, so it is stored as-is; None means the app's default layout.
+    overlay: dict[str, Any] | None = None
 
     @field_validator("ip_address", mode="after")
     @classmethod
@@ -584,6 +587,7 @@ class PartialRovConfig(CamelCaseModel):
     camera: PartialCamera | None = None
     ip_address: str | None = None
     websocket_port: int | None = None
+    overlay: dict[str, Any] | None = None
 
     @field_validator("thruster_allocation", mode="before")
     @classmethod

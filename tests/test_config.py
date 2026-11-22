@@ -239,6 +239,8 @@ def test_rov_config_defaults_are_sensible():
     assert config.regulator.depth.kp == pytest.approx(2.0)
     assert config.regulator.depth.ki == pytest.approx(0.0)
     assert config.regulator.depth.kd == pytest.approx(0.5)
+    # The app substitutes its own default layout.
+    assert config.overlay is None
 
 
 _NULLSPACE_VECTORS = [
