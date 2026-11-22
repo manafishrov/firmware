@@ -125,22 +125,6 @@
         "url": "https://github.com/manafishrov/mcu-firmware/releases/download/v1.0.4-rc.4/pico2-v1.0.4-rc.4.uf2"
       }
     },
-    "ms5837-src": {
-      "flake": false,
-      "locked": {
-        "lastModified": 1751318302,
-        "narHash": "sha256-LBwM9sTvr7IaBcY8PcsPZcAbNRWBa4hj7tUC4oOr4eM=",
-        "owner": "bluerobotics",
-        "repo": "ms5837-python",
-        "rev": "02996d71d2f08339b3d317b3f4da0a83781c706e",
-        "type": "github"
-      },
-      "original": {
-        "owner": "bluerobotics",
-        "repo": "ms5837-python",
-        "type": "github"
-      }
-    },
     "nixos-images": {
       "inputs": {
         "nixos-stable": [
@@ -228,7 +212,6 @@
         "impermanence": "impermanence",
         "mcu-firmware-pico": "mcu-firmware-pico",
         "mcu-firmware-pico2": "mcu-firmware-pico2",
-        "ms5837-src": "ms5837-src",
         "nixos-raspberrypi": "nixos-raspberrypi",
         "nixpkgs": [
           "nixos-raspberrypi",

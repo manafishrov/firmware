@@ -4,12 +4,23 @@ import asyncio
 import math
 import time
 
-from ms5837 import DENSITY_FRESHWATER, DENSITY_SALTWATER, MS5837_30BA
-
 from ..constants import (
+    DENSITY_FRESHWATER,
+    DENSITY_SALTWATER,
     DEPTH_DERIVATIVE_EMA_TAU,
+    GRAVITY,
+    MBAR_PER_KILOPASCAL,
+    PASCAL_PER_KILOPASCAL,
     PRESSURE_SENSOR_READ_FREQUENCY,
     PRESSURE_SENSOR_RECONNECT_INTERVAL_S,
+    SMP2000_PRESSURE_MAX_KPA,
+    SMP2000_PRESSURE_MIN_KPA,
+    SMP2000_SPAN_MAX_COUNTS,
+    SMP2000_SPAN_MIN_COUNTS,
+    SURFACE_PRESSURE_CAPTURE_SAMPLES,
+    SURFACE_PRESSURE_MAX_ABOVE_PA,
+    SURFACE_PRESSURE_MAX_BELOW_PA,
+    SURFACE_PRESSURE_PA,
     SYSTEM_FAILURE_THRESHOLD,
 )
 from ..log import log_error, log_info, log_warn
@@ -17,6 +28,7 @@ from ..models.config import FluidType
 from ..models.sensors import PressureData
 from ..rov_state import RovState
 from ..toast import ToastContent, toast_error
+from .smp2000 import Smp2000, Smp2000Calibration
 
 
 class PressureSensor:
@@ -29,22 +41,32 @@ class PressureSensor:
             state: The ROV state.
         """
         self.state: RovState = state
-        self.sensor: MS5837_30BA | None = None
+        self.sensor: Smp2000 | None = None
         self.current_fluid_type: FluidType | None = None
+        self.fluid_density: float = DENSITY_FRESHWATER
+        self.surface_pressure_pa: float = SURFACE_PRESSURE_PA
         self._next_reconnect_time: float = 0.0
         self._reconnect_failure_logged: bool = False
 
     async def initialize(self) -> None:
         """Asynchronously initialize the pressure sensor."""
         try:
-            log_info("Attempting to initialize MS5837 pressure sensor...")
+            log_info("Attempting to initialize SMP2000 pressure sensor...")
             await asyncio.to_thread(self._open_sensor)
+            sensor = self.sensor
+            if sensor is None:
+                message = "SMP2000 pressure sensor was not opened"
+                raise RuntimeError(message)
+            self.surface_pressure_pa = await asyncio.to_thread(
+                self._capture_surface_pressure, sensor
+            )
             self.state.system_health.pressure_sensor_healthy = True
-            log_info("MS5837 pressure sensor initialized successfully.")
+            log_info("SMP2000 pressure sensor initialized successfully.")
+            await asyncio.to_thread(self._check_achievable_read_rate, sensor)
         except Exception as e:
             self.state.system_health.pressure_sensor_healthy = False
             log_error(
-                f"Failed to initialize MS5837 pressure sensor. Is it connected? Error: {e}"
+                f"Failed to initialize SMP2000 pressure sensor. Is it connected? Error: {e}"
             )
             toast_error(
                 identifier=None,
@@ -56,17 +78,97 @@ class PressureSensor:
             )
 
     def _open_sensor(self) -> None:
-        """Reset the sensor and reload its calibration PROM.
+        """Open the sensor and confirm it completes a conversion.
 
-        Reuses the open I2C bus when one exists, so reconnecting after the
-        sensor was unplugged does not leak bus handles.
+        Reuses the existing driver instance when one exists, so reconnecting
+        after the sensor was unplugged does not leak bus handles.
         """
         if self.sensor is None:
-            self.sensor = MS5837_30BA()
-        if not self.sensor.init():
-            msg = "sensor did not respond with valid calibration data"
-            raise OSError(msg)
+            self.sensor = Smp2000(
+                Smp2000Calibration(
+                    pressure_min_kpa=SMP2000_PRESSURE_MIN_KPA,
+                    pressure_max_kpa=SMP2000_PRESSURE_MAX_KPA,
+                    span_min_counts=SMP2000_SPAN_MIN_COUNTS,
+                    span_max_counts=SMP2000_SPAN_MAX_COUNTS,
+                )
+            )
+        self.sensor.open()
         self._update_fluid_density()
+
+    def _capture_surface_pressure(self, sensor: Smp2000) -> float:
+        """Measure the pressure to treat as zero depth.
+
+        Runs once at startup, before the read loop, so depth is relative to the
+        actual surface pressure at this place and time. A capture outside the
+        plausible band around standard atmospheric pressure falls back to the
+        standard value, which keeps a Pi that boots underwater from silently
+        zeroing depth at the wrong level.
+
+        Deliberately not repeated when the sensor reconnects: an outage that
+        ends underwater would otherwise re-zero depth at that depth.
+
+        Args:
+            sensor: The opened sensor to read.
+
+        Returns:
+            The surface reference pressure in pascal.
+        """
+        standard_kpa = SURFACE_PRESSURE_PA / PASCAL_PER_KILOPASCAL
+        try:
+            pressure_kpa = sensor.measure_average(SURFACE_PRESSURE_CAPTURE_SAMPLES)
+        except Exception as e:
+            log_error(
+                f"Could not capture surface pressure, using {standard_kpa:.3f} kPa: {e}"
+            )
+            return SURFACE_PRESSURE_PA
+        if pressure_kpa is None:
+            log_warn(
+                f"No surface pressure reading, using {standard_kpa:.3f} kPa. "
+                "Depth will drift with the weather until the next restart."
+            )
+            return SURFACE_PRESSURE_PA
+        pressure_pa = pressure_kpa * PASCAL_PER_KILOPASCAL
+        lowest = SURFACE_PRESSURE_PA - SURFACE_PRESSURE_MAX_BELOW_PA
+        highest = SURFACE_PRESSURE_PA + SURFACE_PRESSURE_MAX_ABOVE_PA
+        if not lowest <= pressure_pa <= highest:
+            log_warn(
+                f"Captured surface pressure {pressure_kpa:.3f} kPa is outside the "
+                f"plausible {lowest / PASCAL_PER_KILOPASCAL:.0f}-"
+                f"{highest / PASCAL_PER_KILOPASCAL:.0f} kPa range, so depth is "
+                f"measured against {standard_kpa:.3f} kPa instead. If the ROV was "
+                "powered on underwater, restart it at the surface to zero depth."
+            )
+            return SURFACE_PRESSURE_PA
+        log_info(f"Surface pressure captured: {pressure_kpa:.3f} kPa.")
+        return pressure_pa
+
+    def _check_achievable_read_rate(self, sensor: Smp2000) -> None:
+        """Warn if the sensor cannot keep up with the configured read frequency.
+
+        The SMP2000 conversion time depends on the oversampling its start
+        command selects. A sensor slower than the configured interval makes the
+        loop run late and the depth derivative filter mistuned, which the depth
+        hold D-term is sensitive to.
+
+        Args:
+            sensor: The initialized sensor to time.
+        """
+        try:
+            slowest = sensor.measure_conversion_time()
+        except Exception as e:
+            log_error(f"Could not time SMP2000 conversions: {e}")
+            return
+        interval = 1.0 / PRESSURE_SENSOR_READ_FREQUENCY
+        log_info(
+            f"SMP2000 slowest measurement took {slowest * 1000:.1f} ms "
+            f"({PRESSURE_SENSOR_READ_FREQUENCY} Hz needs {interval * 1000:.1f} ms)."
+        )
+        if slowest > interval:
+            log_warn(
+                f"SMP2000 cannot sustain {PRESSURE_SENSOR_READ_FREQUENCY} Hz. "
+                "Depth hold will run slower than DEPTH_DERIVATIVE_EMA_TAU was "
+                "tuned for."
+            )
 
     def _schedule_reconnect(self) -> None:
         self._next_reconnect_time = (
@@ -87,48 +189,51 @@ class PressureSensor:
         except Exception as e:
             if not self._reconnect_failure_logged:
                 log_warn(
-                    "MS5837 pressure sensor is unavailable; retrying every "
+                    "SMP2000 pressure sensor is unavailable; retrying every "
                     f"{PRESSURE_SENSOR_RECONNECT_INTERVAL_S:.0f} s. Error: {e}"
                 )
                 self._reconnect_failure_logged = True
             return False
         self._reconnect_failure_logged = False
         self.state.system_health.pressure_sensor_healthy = True
-        log_info("MS5837 pressure sensor reconnected.")
+        log_info("SMP2000 pressure sensor reconnected.")
         return True
 
     def _update_fluid_density(self) -> None:
-        """Update the fluid density on the sensor based on current config."""
-        if self.sensor is None:
-            return
+        """Update the fluid density used for the depth calculation from config."""
         if self.state.rov_config.fluid_type == FluidType.SALTWATER:
-            self.sensor.setFluidDensity(DENSITY_SALTWATER)
+            self.fluid_density = DENSITY_SALTWATER
         else:
-            self.sensor.setFluidDensity(DENSITY_FRESHWATER)
+            self.fluid_density = DENSITY_FRESHWATER
         self.current_fluid_type = self.state.rov_config.fluid_type
 
     def read_data(self) -> PressureData | None:
         """Read pressure data from the sensor.
 
-        Reads pressure, temperature, and depth from the MS5837 sensor. Units are pressure
-        in mbar, temperature in °C, and depth in meters (calculated using configured fluid
-        density).
+        Reads absolute pressure and temperature from the SMP2000 and derives
+        depth from the configured fluid density, relative to the surface
+        pressure captured at startup. Units are pressure in mbar, temperature
+        in °C, and depth in meters.
 
         Returns:
-            PressureData if successful (containing pressure in mbar, temperature in °C,
-            depth in m), None otherwise.
+            PressureData if successful (containing pressure in mbar, temperature
+            in °C, depth in m), None otherwise.
         """
         if self.sensor is None:
             return None
         try:
-            if self.sensor.read():
-                return PressureData(
-                    pressure=self.sensor.pressure(),
-                    temperature=self.sensor.temperature(),
-                    depth=self.sensor.depth(),
-                )
-            else:
+            measurement = self.sensor.measure()
+            if measurement is None:
                 return None
+            pressure_pa = measurement.pressure_kpa * PASCAL_PER_KILOPASCAL
+            depth = (pressure_pa - self.surface_pressure_pa) / (
+                self.fluid_density * GRAVITY
+            )
+            return PressureData(
+                pressure=measurement.pressure_kpa * MBAR_PER_KILOPASCAL,
+                temperature=measurement.temperature_c,
+                depth=depth,
+            )
         except Exception as e:
             log_error(f"Error reading pressure sensor data: {e}")
             return None

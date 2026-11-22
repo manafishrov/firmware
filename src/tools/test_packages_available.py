@@ -18,7 +18,6 @@ def main() -> None:
         "scipy",
         "serial_asyncio_fast",
         "bmi270",
-        "ms5837",
     ]
 
     for pkg in packages:

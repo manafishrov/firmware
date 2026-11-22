@@ -50,9 +50,38 @@ NV_DECAY_RATE: Final = 0.001
 # IMU
 IMU_READ_FREQUENCY: Final = 60
 # Pressure sensor
-PRESSURE_SENSOR_READ_FREQUENCY: Final = 15
+# The SMP2000's 0xB3 start command converts in ~41 ms measured on hardware, so
+# 20 Hz leaves ~9 ms of headroom per sample. At that rate its ~1.2 mm of depth
+# noise makes the raw depth derivative noisy (~33 mm/s); a 0.1 s time constant
+# filters that to ~16 mm/s while adding only ~0.1 s of lag, where the 0.03 s
+# used for the 15 Hz MS5837 would barely filter at all.
+PRESSURE_SENSOR_READ_FREQUENCY: Final = 20
 PRESSURE_SENSOR_RECONNECT_INTERVAL_S: Final = 10.0
-DEPTH_DERIVATIVE_EMA_TAU: Final = 0.03
+DEPTH_DERIVATIVE_EMA_TAU: Final = 0.1
+# Calibrated span of the fitted SMP2000, per the vendor communication
+# instruction: the 24-bit bridge value maps the 0-1000 kPa range onto 15%-85%
+# of full scale. With the documented start commands this reads absolute
+# pressure directly, so no per-sensor offset is needed.
+SMP2000_PRESSURE_MIN_KPA: Final = 0.0
+SMP2000_PRESSURE_MAX_KPA: Final = 1000.0
+SMP2000_SPAN_MIN_COUNTS: Final = 2516582
+SMP2000_SPAN_MAX_COUNTS: Final = 14260633
+# Depth is zero at the pressure captured when the sensor initializes, so weather
+# and any fixed error in the absolute reading cancel out. A capture outside the
+# band around standard atmospheric pressure is rejected in favour of the
+# standard value: well above it means the Pi most likely booted with the ROV
+# already underwater, and zeroing there would offset depth hold. Below it is
+# allowed further, to cover low weather and moderate altitude. 25 samples is
+# about one second of readings.
+SURFACE_PRESSURE_PA: Final = 101325.0
+SURFACE_PRESSURE_CAPTURE_SAMPLES: Final = 25
+SURFACE_PRESSURE_MAX_ABOVE_PA: Final = 5000.0
+SURFACE_PRESSURE_MAX_BELOW_PA: Final = 20000.0
+GRAVITY: Final = 9.80665
+DENSITY_FRESHWATER: Final = 997.0
+DENSITY_SALTWATER: Final = 1029.0
+PASCAL_PER_KILOPASCAL: Final = 1000.0
+MBAR_PER_KILOPASCAL: Final = 10.0
 
 # MCU Telemetry
 MCU_TELEMETRY_START_BYTE: Final = 0xA5

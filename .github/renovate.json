@@ -73,8 +73,7 @@
       "matchPackageNames": [
         "numpydantic",
         "bmi270",
-        "CoRoLab-Berlin/bmi270_python",
-        "bluerobotics/ms5837-python"
+        "CoRoLab-Berlin/bmi270_python"
       ],
       "groupName": "custom python packages"
     },

@@ -1,37 +1,79 @@
-"""This script tests that the MS5837 pressure sensor is working correctly by reading and printing pressure, temperature, and depth data."""
+"""This script tests that the SMP2000 pressure sensor is working correctly by reading and printing pressure, temperature, and depth data."""
 
 import logging
 import time
 
-from ms5837 import DENSITY_FRESHWATER, MS5837_30BA
+from rov_firmware.constants import (
+    DENSITY_FRESHWATER,
+    GRAVITY,
+    PASCAL_PER_KILOPASCAL,
+    SMP2000_PRESSURE_MAX_KPA,
+    SMP2000_PRESSURE_MIN_KPA,
+    SMP2000_SPAN_MAX_COUNTS,
+    SMP2000_SPAN_MIN_COUNTS,
+    SURFACE_PRESSURE_CAPTURE_SAMPLES,
+)
+from rov_firmware.sensors.smp2000 import Smp2000, Smp2000Calibration
+
+
+READ_INTERVAL_SECONDS = 0.1
 
 
 def main() -> None:
     """Run the pressure sensor test script."""
     logger = logging.getLogger(__name__)
-    sensor = MS5837_30BA()
-    sensor.setFluidDensity(DENSITY_FRESHWATER)
+    sensor = Smp2000(
+        Smp2000Calibration(
+            pressure_min_kpa=SMP2000_PRESSURE_MIN_KPA,
+            pressure_max_kpa=SMP2000_PRESSURE_MAX_KPA,
+            span_min_counts=SMP2000_SPAN_MIN_COUNTS,
+            span_max_counts=SMP2000_SPAN_MAX_COUNTS,
+        )
+    )
 
-    if not sensor.init():
-        logger.error("Failed to initialize pressure sensor")
+    try:
+        sensor.open()
+    except Exception as e:
+        logger.error(f"Failed to initialize pressure sensor: {e}")
         return
 
-    if not sensor.read():
-        logger.error("Failed to read initial data from pressure sensor")
+    frame = sensor.read_frame()
+    logger.info(f"Status field: {frame.status} (0 = valid, 1 = stale, 3 = fault)")
+    logger.info(f"Raw pressure counts: {frame.pressure_counts}")
+    logger.info(f"Slowest cycle: {sensor.measure_conversion_time() * 1000:.1f} ms")
+    logger.info(
+        f"Calibrated for {SMP2000_PRESSURE_MIN_KPA:.0f}-{SMP2000_PRESSURE_MAX_KPA:.0f} kPa "
+        f"across counts {SMP2000_SPAN_MIN_COUNTS}-{SMP2000_SPAN_MAX_COUNTS}"
+    )
+
+    # Zero depth at the pressure where the tool starts, as the firmware does.
+    surface_kpa = sensor.measure_average(SURFACE_PRESSURE_CAPTURE_SAMPLES)
+    if surface_kpa is None:
+        logger.error("Could not capture a surface reference pressure")
+        sensor.close()
         return
+    logger.info(f"Surface reference: {surface_kpa:.3f} kPa")
 
     try:
         while True:
-            if sensor.read():
-                pressure = sensor.pressure()
-                temperature = sensor.temperature()
-                depth = sensor.depth()
-                logger.info(
-                    f"Pressure: {pressure} mbar, Temperature: {temperature} °C, Depth: {depth} m"
-                )
-            else:
-                logger.error("Failed to read data from pressure sensor")
+            measurement = sensor.measure()
+            if measurement is None:
+                logger.error("Sensor did not return a valid frame")
                 break
-            time.sleep(0.1)
+            # Repeated reads return the last completed conversion, so this is
+            # the frame behind the measurement above.
+            frame = sensor.read_frame()
+            depth = (
+                (measurement.pressure_kpa - surface_kpa) * PASCAL_PER_KILOPASCAL
+            ) / (DENSITY_FRESHWATER * GRAVITY)
+            logger.info(
+                f"Counts: {frame.pressure_counts:8d}  "
+                f"Pressure: {measurement.pressure_kpa:8.3f} kPa  "
+                f"Temperature: {measurement.temperature_c:6.2f} °C  "
+                f"Depth: {depth:7.3f} m (freshwater)"
+            )
+            time.sleep(READ_INTERVAL_SECONDS)
     except KeyboardInterrupt:
         pass
+    finally:
+        sensor.close()

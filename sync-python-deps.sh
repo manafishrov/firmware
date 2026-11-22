@@ -30,9 +30,9 @@ CUSTOM_VERSION_PACKAGES=(
 	"bmi270"
 )
 
-CUSTOM_GIT_PACKAGES=(
-	"ms5837:ms5837-src:https://github.com/bluerobotics/ms5837-python.git"
-)
+# No custom git packages at present; the loop below is a no-op until one is
+# added back. Format: "pyproject_name:flake_input:git_url".
+CUSTOM_GIT_PACKAGES=()
 
 echo "  python..."
 python_version=$(nix eval --raw --inputs-from . "nixpkgs#python313.version" 2>/dev/null)
