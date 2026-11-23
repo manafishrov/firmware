@@ -115,7 +115,6 @@ dependencies = [
     { name = "bmi270" },
     { name = "gpiozero" },
     { name = "lgpio", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'" },
-    { name = "ms5837" },
     { name = "numpy" },
     { name = "numpydantic" },
     { name = "psutil" },
@@ -142,7 +141,6 @@ requires-dist = [
     { name = "bmi270", specifier = "==0.4.3" },
     { name = "gpiozero", specifier = "==2.0.1" },
     { name = "lgpio", marker = "platform_machine == 'aarch64' and sys_platform == 'linux'", specifier = "==0.2.2" },
-    { name = "ms5837", git = "https://github.com/bluerobotics/ms5837-python.git?rev=02996d71d2f08339b3d317b3f4da0a83781c706e" },
     { name = "numpy", specifier = "==2.4.4" },
     { name = "numpydantic", git = "https://github.com/p2p-ld/numpydantic.git?rev=b4e33faadd7963c319ff487293d180390adf1f29" },
     { name = "psutil", specifier = "==7.2.2" },
@@ -162,14 +160,6 @@ dev = [
     { name = "pytest", specifier = "==9.1.1" },
     { name = "ruff", specifier = "==0.15.14" },
     { name = "ty", specifier = "==0.0.38" },
-]
-
-[[package]]
-name = "ms5837"
-version = "1.0"
-source = { git = "https://github.com/bluerobotics/ms5837-python.git?rev=02996d71d2f08339b3d317b3f4da0a83781c706e#02996d71d2f08339b3d317b3f4da0a83781c706e" }
-dependencies = [
-    { name = "smbus2" },
 ]
 
 [[package]]

@@ -3,42 +3,34 @@ from typing import Any, cast
 
 import pytest
 
-from rov_firmware.constants import PRESSURE_SENSOR_RECONNECT_INTERVAL_S
+from rov_firmware.constants import (
+    DENSITY_SALTWATER,
+    GRAVITY,
+    PRESSURE_SENSOR_RECONNECT_INTERVAL_S,
+)
 from rov_firmware.sensors import pressure as pressure_module
 from rov_firmware.sensors.pressure import PressureSensor
+from rov_firmware.sensors.smp2000 import Smp2000Measurement
 
 
 class StopLoopError(Exception):
     pass
 
 
-class FakeMs5837:
+class FakeSmp2000:
     def __init__(self):
         self.connected = True
-        self.init_calls = 0
+        self.open_calls = 0
 
-    def init(self):
-        self.init_calls += 1
+    def open(self):
+        self.open_calls += 1
         if not self.connected:
             raise OSError(121, "Remote I/O error")
-        return True
 
-    def read(self):
+    def measure(self):
         if not self.connected:
             raise OSError(5, "Input/output error")
-        return True
-
-    def pressure(self):
-        return 1063.0
-
-    def temperature(self):
-        return 18.0
-
-    def depth(self):
-        return 0.5
-
-    def setFluidDensity(self, _density):  # noqa: N802 - ms5837 API name
-        pass
+        return Smp2000Measurement(pressure_kpa=106.325, temperature_c=18.0)
 
 
 def run_read_loop(sensor, rov_state, monkeypatch, script, stop_at):
@@ -65,13 +57,18 @@ def run_read_loop(sensor, rov_state, monkeypatch, script, stop_at):
 
 
 def test_pressure_sensor_reconnects_after_being_unplugged(rov_state, monkeypatch):
-    ms5837 = FakeMs5837()
+    smp2000 = FakeSmp2000()
     sensor = PressureSensor(rov_state)
-    sensor.sensor = cast(Any, ms5837)
+    sensor.sensor = cast(Any, smp2000)
+    # The fake reads 5 kPa above this reference, so depth should stay put while
+    # the sensor drops out and comes back. The loop picks the density itself
+    # from the config, so derive the expected depth the same way.
+    sensor.surface_pressure_pa = 101_325.0
+    expected_depth = 5_000.0 / (DENSITY_SALTWATER * GRAVITY)
     rov_state.system_health.pressure_sensor_healthy = True
 
     def script(now):
-        ms5837.connected = not 1.0 <= now < 25.0
+        smp2000.connected = not 1.0 <= now < 25.0
 
     health = run_read_loop(sensor, rov_state, monkeypatch, script, stop_at=40.0)
 
@@ -80,17 +77,33 @@ def test_pressure_sensor_reconnects_after_being_unplugged(rov_state, monkeypatch
     assert lost < 2.0
     assert 25.0 <= restored <= 25.0 + PRESSURE_SENSOR_RECONNECT_INTERVAL_S + 1.5
     # One failed attempt per interval while unplugged, then the successful one.
-    assert ms5837.init_calls == 3
-    assert rov_state.pressure.depth == pytest.approx(0.5)
+    assert smp2000.open_calls == 3
+    assert rov_state.pressure.depth == pytest.approx(expected_depth)
 
 
 def test_pressure_sensor_missing_at_boot_is_retried(rov_state, monkeypatch):
-    ms5837 = FakeMs5837()
+    smp2000 = FakeSmp2000()
     sensor = PressureSensor(rov_state)
-    monkeypatch.setattr(pressure_module, "MS5837_30BA", lambda: ms5837)
+    monkeypatch.setattr(pressure_module, "Smp2000", lambda _calibration: smp2000)
     rov_state.system_health.pressure_sensor_healthy = False
 
     run_read_loop(sensor, rov_state, monkeypatch, lambda _now: None, stop_at=12.0)
 
-    assert sensor.sensor is ms5837
+    assert sensor.sensor is smp2000
     assert rov_state.system_health.pressure_sensor_healthy
+
+
+def test_reconnect_does_not_rezero_the_surface_reference(rov_state, monkeypatch):
+    # An outage that ends underwater must not re-zero depth at that depth.
+    smp2000 = FakeSmp2000()
+    sensor = PressureSensor(rov_state)
+    sensor.sensor = cast(Any, smp2000)
+    sensor.surface_pressure_pa = 99_000.0
+    rov_state.system_health.pressure_sensor_healthy = True
+
+    def script(now):
+        smp2000.connected = not 1.0 <= now < 15.0
+
+    run_read_loop(sensor, rov_state, monkeypatch, script, stop_at=30.0)
+
+    assert sensor.surface_pressure_pa == pytest.approx(99_000.0)

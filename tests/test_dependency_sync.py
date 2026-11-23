@@ -20,12 +20,7 @@ def sync_project(tmp_path: Path) -> Path:
     (tmp_path / "pyproject.toml").write_text(project)
     (tmp_path / "nix").mkdir()
     (tmp_path / "nix/firmware.nix").write_text((ROOT / "nix/firmware.nix").read_text())
-    lock = {
-        "nodes": {
-            "numpydantic-src": {"locked": {"rev": "a" * 40}},
-            "ms5837-src": {"locked": {"rev": "b" * 40}},
-        }
-    }
+    lock = {"nodes": {"numpydantic-src": {"locked": {"rev": "a" * 40}}}}
     (tmp_path / "flake.lock").write_text(json.dumps(lock))
     (tmp_path / "bin").mkdir()
     nix = tmp_path / "bin/nix"
@@ -57,10 +52,6 @@ def test_sync_preserves_https_and_is_idempotent(sync_project: Path) -> None:
     path = sync_project / "pyproject.toml"
     first = path.read_text()
     project = tomllib.loads(first)
-    assert (
-        f"ms5837 @ git+https://github.com/bluerobotics/ms5837-python.git@{'b' * 40}"
-        in project["project"]["dependencies"]
-    )
     assert project["tool"]["uv"]["sources"]["numpydantic"]["rev"] == "a" * 40
     assert (
         project["tool"]["uv"]["extra-build-variables"]["numpydantic"][

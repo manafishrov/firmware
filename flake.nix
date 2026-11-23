@@ -27,10 +27,6 @@
       url = "github:numtide/treefmt-nix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    ms5837-src = {
-      url = "github:bluerobotics/ms5837-python";
-      flake = false;
-    };
     numpydantic-src = {
       url = "github:p2p-ld/numpydantic";
       flake = false;

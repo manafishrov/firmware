@@ -45,15 +45,6 @@
           '';
           doCheck = false;
         })
-        (pkgs.python313Packages.buildPythonPackage {
-          pname = "ms5837";
-          version = "0.1.0";
-          format = "pyproject";
-          src = inputs.ms5837-src;
-          nativeBuildInputs = with pkgs.python313Packages; [setuptools wheel];
-          propagatedBuildInputs = with pkgs.python313Packages; [smbus2];
-          doCheck = false;
-        })
       ]);
 
   startScript = pkgs.writeShellScriptBin "start" ''
